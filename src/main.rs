@@ -27,6 +27,7 @@ mod app_ui {
 mod handlers {
     pub mod get_public_key;
     pub mod get_version;
+    pub mod sign_message;
     pub mod sign_tx;
 }
 
@@ -38,6 +39,7 @@ use handlers::{
     get_version::handler_get_version,
     sign_tx::{handler_sign_tx, TxContext},
 };
+use ledger_device_sdk::ecc::CxError;
 use ledger_device_sdk::io::{ApduHeader, Comm, Reply, StatusWords};
 
 ledger_device_sdk::set_panic!(ledger_device_sdk::exiting_panic);
@@ -45,7 +47,11 @@ ledger_device_sdk::set_panic!(ledger_device_sdk::exiting_panic);
 // Required for using String, Vec, format!...
 extern crate alloc;
 
-use ledger_device_sdk::nbgl::{init_comm, NbglReviewStatus, StatusType};
+use ledger_device_sdk::nbgl::{init_comm, NbglHomeAndSettings, NbglReviewStatus, StatusType};
+
+use crate::handlers::sign_message::{handler_sign_message, SignMessageContext};
+
+use parity_scale_codec::{DecodeAll, Encode};
 
 // P2 for last APDU to receive.
 const P2_SIGN_TX_LAST: u8 = 0x00;
@@ -73,7 +79,55 @@ pub enum AppSW {
     KeyDeriveFail = 0xB009,
     VersionParsingFail = 0xB00A,
     WrongApduLength = StatusWords::BadLen as u16,
+    Foo1 = 0xFF01,
+    Foo2 = 0xFF02,
+    Foo4 = 0xFF04,
     Ok = 0x9000,
+
+    Carry = 0xFF05,
+    Locked,
+    Unlocked,
+    NotLocked,
+    NotUnlocked,
+    InternalError,
+    InvalidParameterSize,
+    InvalidParameterValue,
+    InvalidParameter,
+    NotInvertible,
+    Overflow,
+    MemoryFull,
+    NoResidue,
+    PointAtInfinity,
+    InvalidPoint,
+    InvalidCurve,
+    GenericError,
+}
+
+impl From<CxError> for AppSW {
+    fn from(value: CxError) -> Self {
+        match value {
+            CxError::Carry => Self::Carry,
+            CxError::Locked => Self::Locked,
+            CxError::Unlocked => Self::Unlocked,
+            CxError::NotLocked => Self::NotLocked,
+            CxError::NotUnlocked => Self::NotUnlocked,
+            CxError::InternalError => Self::InternalError,
+            CxError::InvalidParameterSize => Self::InvalidParameterSize,
+            CxError::InvalidParameterValue => Self::InvalidParameterValue,
+            CxError::InvalidParameter => Self::InvalidParameter,
+            CxError::NotInvertible => Self::NotInvertible,
+            CxError::Overflow => Self::Overflow,
+            CxError::MemoryFull => Self::MemoryFull,
+            CxError::NoResidue => Self::NoResidue,
+            CxError::PointAtInfinity => Self::PointAtInfinity,
+            CxError::InvalidPoint => Self::InvalidPoint,
+            CxError::InvalidCurve => Self::InvalidCurve,
+            CxError::GenericError => Self::GenericError,
+            // A catch-all arm to handle any other variants CxError might have.
+            // This makes the conversion robust.
+            //_ => Self::GenericError,
+        }
+    }
 }
 
 impl From<AppSW> for Reply {
@@ -87,7 +141,8 @@ pub enum Instruction {
     GetVersion,
     GetAppName,
     GetPubkey { display: bool },
-    SignTx { chunk: u8, more: bool },
+    SignTx { chunk: u8, more: u8 },
+    SignMessage { chunk: u8, more: bool },
 }
 
 impl TryFrom<ApduHeader> for Instruction {
@@ -112,25 +167,35 @@ impl TryFrom<ApduHeader> for Instruction {
                 display: value.p1 != 0,
             }),
             (6, P1_SIGN_TX_START, P2_SIGN_TX_MORE)
-            | (6, 1..=P1_SIGN_TX_MAX, P2_SIGN_TX_LAST | P2_SIGN_TX_MORE) => {
+            | (6, 1..=P1_SIGN_TX_MAX, 1 | 2 | P2_SIGN_TX_LAST | P2_SIGN_TX_MORE) => {
                 Ok(Instruction::SignTx {
+                    chunk: value.p1,
+                    more: value.p2,
+                })
+            }
+            (7, P1_SIGN_TX_START, P2_SIGN_TX_MORE)
+            | (7, 1..=P1_SIGN_TX_MAX, P2_SIGN_TX_LAST | P2_SIGN_TX_MORE) => {
+                Ok(Instruction::SignMessage {
                     chunk: value.p1,
                     more: value.p2 == P2_SIGN_TX_MORE,
                 })
             }
-            (3..=6, _, _) => Err(AppSW::WrongP1P2),
+            (3..=7, _, _) => Err(AppSW::WrongP1P2),
             (_, _, _) => Err(AppSW::InsNotSupported),
         }
     }
 }
 
-fn show_status_and_home_if_needed(ins: &Instruction, tx_ctx: &mut TxContext, status: &AppSW) {
+fn show_status_and_home_if_needed(ins: &Instruction, tx_ctx: &mut Context, status: &AppSW) {
     let (show_status, status_type) = match (ins, status) {
         (Instruction::GetPubkey { display: true }, AppSW::Deny | AppSW::Ok) => {
             (true, StatusType::Address)
         }
         (Instruction::SignTx { .. }, AppSW::Deny | AppSW::Ok) if tx_ctx.finished() => {
             (true, StatusType::Transaction)
+        }
+        (Instruction::SignMessage { .. }, AppSW::Deny | AppSW::Ok) if tx_ctx.finished() => {
+            (true, StatusType::Message)
         }
         (_, _) => (false, StatusType::Transaction),
     };
@@ -146,6 +211,34 @@ fn show_status_and_home_if_needed(ins: &Instruction, tx_ctx: &mut TxContext, sta
     }
 }
 
+pub enum DataContext {
+    Empty,
+    TxContext(TxContext),
+    SignMessageContext(SignMessageContext),
+}
+
+struct Context {
+    pub data: DataContext,
+    pub home: NbglHomeAndSettings,
+}
+
+impl Context {
+    fn new() -> Self {
+        Self {
+            data: DataContext::Empty,
+            home: Default::default(),
+        }
+    }
+
+    fn finished(&self) -> bool {
+        match &self.data {
+            DataContext::Empty => false,
+            DataContext::SignMessageContext(ctx) => ctx.finished(),
+            DataContext::TxContext(ctx) => ctx.finished(),
+        }
+    }
+}
+
 #[no_mangle]
 extern "C" fn sample_main() {
     // Create the communication manager, and configure it to accept only APDU from the 0xe0 class.
@@ -153,7 +246,7 @@ extern "C" fn sample_main() {
     // BadCla status word.
     let mut comm = Comm::new().set_expected_cla(0xe0);
 
-    let mut tx_ctx = TxContext::new();
+    let mut tx_ctx = Context::new();
 
     // Initialize reference to Comm instance for NBGL
     // API calls.
@@ -178,7 +271,7 @@ extern "C" fn sample_main() {
     }
 }
 
-fn handle_apdu(comm: &mut Comm, ins: &Instruction, ctx: &mut TxContext) -> Result<(), AppSW> {
+fn handle_apdu(comm: &mut Comm, ins: &Instruction, ctx: &mut Context) -> Result<(), AppSW> {
     match ins {
         Instruction::GetAppName => {
             comm.append(env!("CARGO_PKG_NAME").as_bytes());
@@ -186,6 +279,9 @@ fn handle_apdu(comm: &mut Comm, ins: &Instruction, ctx: &mut TxContext) -> Resul
         }
         Instruction::GetVersion => handler_get_version(comm),
         Instruction::GetPubkey { display } => handler_get_public_key(comm, *display),
-        Instruction::SignTx { chunk, more } => handler_sign_tx(comm, *chunk, *more, ctx),
+        Instruction::SignTx { chunk, more } => handler_sign_tx(comm, *chunk, *more, &mut ctx.data),
+        Instruction::SignMessage { chunk, more } => {
+            handler_sign_message(comm, *chunk, *more, &mut ctx.data)
+        }
     }
 }
