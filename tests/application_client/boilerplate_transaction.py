@@ -1,30 +1,36 @@
 import json
 from dataclasses import dataclass
 from .boilerplate_utils import UINT64_MAX
+from typing import List, Tuple
+from hashlib import blake2b
+from scalecodec.types import CompactU32
 
 class TransactionError(Exception):
     pass
 
 @dataclass
 class Transaction:
-    nonce: int
-    coin: str
-    value: str
-    to: str
-    memo: str
+    inputs: List[Tuple[bytes, bytes]]
+    input_commitements: List[bytes]
+    outputs: List[bytes]
 
-    def serialize(self) -> bytes:
-        if not 0 <= self.nonce <= UINT64_MAX:
-            raise TransactionError(f"Bad nonce: '{self.nonce}'!")
 
-        if len(self.to) != 40:
-            raise TransactionError(f"Bad address: '{self.to}'!")
+    def to_hash(self) -> bytes:
+        hasher = blake2b()
+        hasher.update(b"\x01\x01")
+        hasher.update(b"\x00"*16)
+        hasher.update(len(self.inputs).to_bytes(4, "little"))
+        for inp in self.inputs:
+            hasher.update(inp[1])
 
-        # Serialize the transaction data to a JSON-formatted string
-        return json.dumps({
-            "nonce": self.nonce,
-            "coin": self.coin,
-            "value": self.value,
-            "to": self.to,
-            "memo": self.memo
-        }).encode('utf-8')
+        hasher.update(len(self.inputs).to_bytes(4, "little"))
+        for inp in self.input_commitements:
+            hasher.update(inp)
+
+        
+        hasher.update(CompactU32().encode(len(self.outputs)).data)
+        for out in self.outputs:
+            hasher.update(out)
+
+        h = hasher.digest()[:32]
+        return blake2b(h).digest()[:32]

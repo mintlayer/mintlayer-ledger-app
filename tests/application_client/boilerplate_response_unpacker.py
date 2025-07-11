@@ -57,6 +57,16 @@ def unpack_get_public_key_response(response: bytes) -> Tuple[int, bytes, int, by
     return pub_key_len, pub_key, chain_code_len, chain_code
 
 # Unpack from response:
+# response = sig_len (1)
+#            sig (var)
+def unpack_sign_message_response(response: bytes) -> Tuple[int, bytes]:
+    response, sig_len, sig = pop_size_prefixed_buf_from_buf(response)
+
+    assert sig_len == 64
+    assert len(response) == 0
+    return sig_len, sig
+
+# Unpack from response:
 # response = der_sig_len (1)
 #            der_sig (var)
 #            v (1)

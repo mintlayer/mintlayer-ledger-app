@@ -5,6 +5,8 @@ from contextlib import contextmanager
 from ragger.backend.interface import BackendInterface, RAPDU
 from ragger.bip import pack_derivation_path
 
+from .boilerplate_transaction import Transaction
+
 
 MAX_APDU_LEN: int = 255
 
@@ -29,6 +31,7 @@ class InsType(IntEnum):
     GET_APP_NAME   = 0x04
     GET_PUBLIC_KEY = 0x05
     SIGN_TX        = 0x06
+    SIGN_MESSAGE   = 0x07
 
 class Errors(IntEnum):
     SW_DENY                    = 0x6985
@@ -97,9 +100,94 @@ class BoilerplateCommandSender:
                                          data=pack_derivation_path(path)) as response:
             yield response
 
+    @contextmanager
+    def sign_message(self, path: str, message: bytes) -> Generator[None, None, None]:
+        self.backend.exchange(cla=CLA,
+                              ins=InsType.SIGN_MESSAGE,
+                              p1=P1.P1_START,
+                              p2=P2.P2_MORE,
+                              data=pack_derivation_path(path))
+        messages = split_message(message, MAX_APDU_LEN)
+        idx: int = P1.P1_START + 1
+
+        for msg in messages[:-1]:
+            self.backend.exchange(cla=CLA,
+                                  ins=InsType.SIGN_MESSAGE,
+                                  p1=idx,
+                                  p2=P2.P2_MORE,
+                                  data=msg)
+            idx += 1
+
+        with self.backend.exchange_async(cla=CLA,
+                                         ins=InsType.SIGN_MESSAGE,
+                                         p1=idx,
+                                         p2=P2.P2_LAST,
+                                         data=messages[-1]) as response:
+            yield response
 
     @contextmanager
-    def sign_tx(self, path: str, transaction: bytes) -> Generator[None, None, None]:
+    def sign_tx(self, path: str, transaction: Transaction) -> Generator[None, None, None]:
+        metadata = bytes([
+            #1 + 1 + 4 + 4, # len
+            0, # mainnet
+            1, # version
+            ]) + len(transaction.inputs).to_bytes(byteorder="big", length=4) + len(transaction.outputs).to_bytes(byteorder="big", length=4)
+        print("metadata ", len(metadata))
+
+        res = self.backend.exchange(cla=CLA,
+                              ins=InsType.SIGN_TX,
+                              p1=P1.P1_START,
+                              p2=P2.P2_MORE,
+                              data=bytes(metadata))
+        print("metadata ", res)
+
+        for inp in transaction.inputs:
+            res = self.backend.exchange(cla=CLA,
+                                    ins=InsType.SIGN_TX,
+                                    p1=1,
+                                    p2=0,
+                                    data=inp[0])
+            print("inp M ", res)
+
+            res = self.backend.exchange(cla=CLA,
+                                    ins=InsType.SIGN_TX,
+                                    p1=1,
+                                    p2=2,
+                                    data=inp[1])
+            print("inp ", res)
+
+        for inpc in transaction.input_commitements:
+            res = self.backend.exchange(cla=CLA,
+                                    ins=InsType.SIGN_TX,
+                                    p1=2,
+                                    p2=2,
+                                    data=inpc)
+            print("inpC ", res)
+
+        for out in transaction.outputs[:-1]:
+            res = self.backend.exchange(cla=CLA,
+                                    ins=InsType.SIGN_TX,
+                                    p1=3,
+                                    p2=2,
+                                    data=out)
+            print("Out ", res)
+
+        print('sending final Out:')
+        with self.backend.exchange_async(cla=CLA,
+                                         ins=InsType.SIGN_TX,
+                                         p1=3,
+                                         p2=2,
+                                         data=transaction.outputs[-1]) as response:
+            print("got out response", response)
+            yield response
+            print("yielded")
+
+        print('out of context')
+
+        
+            
+
+        """
         self.backend.exchange(cla=CLA,
                               ins=InsType.SIGN_TX,
                               p1=P1.P1_START,
@@ -116,12 +204,19 @@ class BoilerplateCommandSender:
                                   data=msg)
             idx += 1
 
-        with self.backend.exchange_async(cla=CLA,
-                                         ins=InsType.SIGN_TX,
-                                         p1=idx,
-                                         p2=P2.P2_LAST,
-                                         data=messages[-1]) as response:
-            yield response
+        
+        """
 
     def get_async_response(self) -> Optional[RAPDU]:
         return self.backend.last_async_response
+    
+    def get_all_signatures(self, tx: Transaction) -> List[RAPDU]:
+        responses = [self.backend.last_async_response.data]
+        for _ in tx.inputs[1:]:
+            res = self.backend.exchange(cla=CLA,
+                                    ins=InsType.SIGN_TX,
+                                    p1=4,
+                                    p2=2,
+                                    data=bytes())
+            responses.append(res.data)
+        return responses

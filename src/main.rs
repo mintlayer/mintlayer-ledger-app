@@ -51,8 +51,6 @@ use ledger_device_sdk::nbgl::{init_comm, NbglHomeAndSettings, NbglReviewStatus, 
 
 use crate::handlers::sign_message::{handler_sign_message, SignMessageContext};
 
-use parity_scale_codec::{DecodeAll, Encode};
-
 // P2 for last APDU to receive.
 const P2_SIGN_TX_LAST: u8 = 0x00;
 // P2 for more APDU to receive.
@@ -60,7 +58,33 @@ const P2_SIGN_TX_MORE: u8 = 0x80;
 // P1 for first APDU number.
 const P1_SIGN_TX_START: u8 = 0x00;
 // P1 for maximum APDU number.
-const P1_SIGN_TX_MAX: u8 = 0x03;
+const P1_SIGN_TX_MAX: u8 = 0x04;
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum P1SignTx {
+    Metadata,
+    Input,
+    InputCommitement,
+    Output,
+    NextSignature,
+}
+
+impl TryFrom<u8> for P1SignTx {
+    type Error = AppSW;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        let x = match value {
+            0 => Self::Metadata,
+            1 => Self::Input,
+            2 => Self::InputCommitement,
+            3 => Self::Output,
+            4 => Self::NextSignature,
+            _ => return Err(AppSW::WrongP1P2)
+        };
+
+        Ok(x)
+    }
+}
 
 // Application status words.
 #[repr(u16)]
@@ -75,16 +99,21 @@ pub enum AppSW {
     TxWrongLength = 0xB004,
     TxParsingFail = 0xB005,
     TxHashFail = 0xB006,
+    TxAddressFail = 0xB007,
     TxSignFail = 0xB008,
     KeyDeriveFail = 0xB009,
     VersionParsingFail = 0xB00A,
+    WrongContext = 0xB00B,
+    TxDeserializeFail = 0xB00C,
+    TxInvalidInputUtxo = 0xB00D,
+    TxNumericOperationFail = 0xB00E,
+    TxUnsupportedInput = 0xB00F,
+    TxInvalidTokenV0 = 0xB010,
+
     WrongApduLength = StatusWords::BadLen as u16,
-    Foo1 = 0xFF01,
-    Foo2 = 0xFF02,
-    Foo4 = 0xFF04,
     Ok = 0x9000,
 
-    Carry = 0xFF05,
+    Carry = 0xFF15,
     Locked,
     Unlocked,
     NotLocked,
@@ -141,7 +170,7 @@ pub enum Instruction {
     GetVersion,
     GetAppName,
     GetPubkey { display: bool },
-    SignTx { chunk: u8, more: u8 },
+    SignTx { p1: P1SignTx, more: u8 },
     SignMessage { chunk: u8, more: bool },
 }
 
@@ -169,7 +198,7 @@ impl TryFrom<ApduHeader> for Instruction {
             (6, P1_SIGN_TX_START, P2_SIGN_TX_MORE)
             | (6, 1..=P1_SIGN_TX_MAX, 1 | 2 | P2_SIGN_TX_LAST | P2_SIGN_TX_MORE) => {
                 Ok(Instruction::SignTx {
-                    chunk: value.p1,
+                    p1: value.p1.try_into()?,
                     more: value.p2,
                 })
             }
@@ -186,15 +215,15 @@ impl TryFrom<ApduHeader> for Instruction {
     }
 }
 
-fn show_status_and_home_if_needed(ins: &Instruction, tx_ctx: &mut Context, status: &AppSW) {
+fn show_status_and_home_if_needed(ins: &Instruction, ctx: &mut Context, status: &AppSW) {
     let (show_status, status_type) = match (ins, status) {
         (Instruction::GetPubkey { display: true }, AppSW::Deny | AppSW::Ok) => {
             (true, StatusType::Address)
         }
-        (Instruction::SignTx { .. }, AppSW::Deny | AppSW::Ok) if tx_ctx.finished() => {
+        (Instruction::SignTx { .. }, AppSW::Deny | AppSW::Ok) if ctx.finished() => {
             (true, StatusType::Transaction)
         }
-        (Instruction::SignMessage { .. }, AppSW::Deny | AppSW::Ok) if tx_ctx.finished() => {
+        (Instruction::SignMessage { .. }, AppSW::Deny | AppSW::Ok) if ctx.finished() => {
             (true, StatusType::Message)
         }
         (_, _) => (false, StatusType::Transaction),
@@ -207,7 +236,7 @@ fn show_status_and_home_if_needed(ins: &Instruction, tx_ctx: &mut Context, statu
             .show(success);
 
         // call home.show_and_return() to show home and setting screen
-        tx_ctx.home.show_and_return();
+        ctx.home.show_and_return();
     }
 }
 
@@ -279,7 +308,7 @@ fn handle_apdu(comm: &mut Comm, ins: &Instruction, ctx: &mut Context) -> Result<
         }
         Instruction::GetVersion => handler_get_version(comm),
         Instruction::GetPubkey { display } => handler_get_public_key(comm, *display),
-        Instruction::SignTx { chunk, more } => handler_sign_tx(comm, *chunk, *more, &mut ctx.data),
+        Instruction::SignTx { p1, more } => handler_sign_tx(comm, *p1, *more, &mut ctx.data),
         Instruction::SignMessage { chunk, more } => {
             handler_sign_message(comm, *chunk, *more, &mut ctx.data)
         }
