@@ -23,6 +23,7 @@ mod app_ui {
     pub mod address;
     pub mod menu;
     pub mod sign;
+    pub mod utils;
 }
 mod handlers {
     pub mod get_public_key;
@@ -79,7 +80,7 @@ impl TryFrom<u8> for P1SignTx {
             2 => Self::InputCommitement,
             3 => Self::Output,
             4 => Self::NextSignature,
-            _ => return Err(AppSW::WrongP1P2)
+            _ => return Err(AppSW::WrongP1P2),
         };
 
         Ok(x)
@@ -104,11 +105,14 @@ pub enum AppSW {
     KeyDeriveFail = 0xB009,
     VersionParsingFail = 0xB00A,
     WrongContext = 0xB00B,
-    TxDeserializeFail = 0xB00C,
+    DeserializeFail = 0xB00C,
     TxInvalidInputUtxo = 0xB00D,
     TxNumericOperationFail = 0xB00E,
     TxUnsupportedInput = 0xB00F,
     TxInvalidTokenV0 = 0xB010,
+    NothingToSign = 0xB011,
+    TxFinished = 0xB012,
+    InvalidPath = 0xB013,
 
     WrongApduLength = StatusWords::BadLen as u16,
     Ok = 0x9000,
@@ -199,6 +203,7 @@ impl TryFrom<ApduHeader> for Instruction {
             | (6, 1..=P1_SIGN_TX_MAX, 1 | 2 | P2_SIGN_TX_LAST | P2_SIGN_TX_MORE) => {
                 Ok(Instruction::SignTx {
                     p1: value.p1.try_into()?,
+                    // FIXME: make bool
                     more: value.p2,
                 })
             }

@@ -11,6 +11,8 @@ use ledger_device_sdk::ecc::ECPrivateKey;
 
 use ledger_secure_sdk_sys::*;
 
+use parity_scale_codec::DecodeAll;
+
 const MAX_TRANSACTION_LEN: usize = 510;
 pub struct SignMessageContext {
     message: Vec<u8>,
@@ -46,7 +48,9 @@ pub fn handler_sign_message(
     // First chunk, try to parse the path
     if chunk == 0 {
         // Reset transaction context
-        let msg_ctx = SignMessageContext::new(data.try_into()?);
+        let chain_type = data.get(0).ok_or(AppSW::WrongApduLength)?;
+        let path = Bip32Path::decode_all(&mut &data[1..]).map_err(|_| AppSW::DeserializeFail)?;
+        let msg_ctx = SignMessageContext::new(path);
         *ctx = DataContext::SignMessageContext(msg_ctx);
         Ok(())
     // Next chunks, append data to raw_tx and return or parse
@@ -120,19 +124,18 @@ fn compute_signature_and_append(
     message_hash2_32.copy_from_slice(&message_hash2[0..32]);
 
     let hash_algorithm_id = CX_SHA256;
-    //let signing_mode = CX_RND_RFC6979 | CX_LAST;
-    let signing_mode = CX_ECSCHNORR_BIP0340 | CX_RND_TRNG | CX_LAST;
+    let signing_mode = CX_ECSCHNORR_BIP0340 | CX_RND_PROVIDED | CX_LAST;
 
     let private_key = Secp256k1::derive_from_path(ctx.path.as_ref());
-    let (sig, siglen) = schnorr_sign(
+    let sig = schnorr_sign(
         &private_key,
         &message_hash2_32,
         hash_algorithm_id,
         signing_mode,
     )?;
 
-    comm.append(&[siglen as u8]);
-    comm.append(&sig[..siglen as usize]);
+    comm.append(&[sig.len() as u8]);
+    comm.append(&sig);
     Ok(())
 }
 
@@ -141,17 +144,13 @@ pub fn schnorr_sign<const N: usize>(
     msg: &[u8],
     hash_id: u8,
     mode: u32,
-) -> Result<([u8; 500], u32), CxError> {
-    // A buffer on the stack to hold the resulting signature.
-    let mut sig = [0u8; 500];
-    // The C function takes a pointer to a `size_t` for the length.
-    // It's an in/out parameter: we provide the buffer size, and it returns the actual signature size.
-    let mut sig_len = 500;
+) -> Result<[u8; 64], CxError> {
+    let mut sig = [0u8; 64];
+    let mut sig_len = 64;
 
     // The `unsafe` block is required for FFI.
     let err_code = unsafe {
         cx_ecschnorr_sign_no_throw(
-            // The same "dodgy" but necessary cast as in the ECDSA function.
             private_key as *const ECPrivateKey<N, 'W'> as *const cx_ecfp_256_private_key_s,
             mode,
             hash_id,
@@ -162,13 +161,9 @@ pub fn schnorr_sign<const N: usize>(
         )
     };
 
-    // Standard Ledger SDK error handling.
     if err_code != CX_OK {
         Err(err_code.into())
     } else {
-        // On success, return the signature buffer and the actual length.
-        // Note that the `info` parameter is not present in the Schnorr C function,
-        // so we don't return it here either.
-        Ok((sig, sig_len as u32))
+        Ok(sig)
     }
 }

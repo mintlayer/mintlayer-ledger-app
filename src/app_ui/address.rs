@@ -15,20 +15,40 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use crate::AppSW;
-use alloc::format;
+use crate::{app_ui::utils::to_address, utils::CoinType, AppSW};
 
 use include_gif::include_gif;
 use ledger_device_sdk::nbgl::{NbglAddressReview, NbglGlyph};
 
-// Display only the last 20 bytes of the address
-const DISPLAY_ADDR_BYTES_LEN: usize = 20;
+pub fn compress_public_key(uncompressed_key: &[u8; 65]) -> Result<[u8; 33], AppSW> {
+    if uncompressed_key[0] != 0x04 {
+        return Err(AppSW::AddrDisplayFail);
+    }
 
-pub fn ui_display_pk(addr: &[u8]) -> Result<bool, AppSW> {
-    let addr_hex = format!(
-        "0x{}",
-        hex::encode(&addr[addr.len() - DISPLAY_ADDR_BYTES_LEN..]).to_uppercase()
-    );
+    let mut compressed_key = [0u8; 33];
+
+    let y_coordinate = &uncompressed_key[33..65];
+    let prefix = if y_coordinate[31] % 2 == 0 {
+        0x02
+    } else {
+        0x03
+    };
+
+    compressed_key[0] = prefix;
+
+    let x_coordinate = &uncompressed_key[1..33];
+    compressed_key[1..].copy_from_slice(x_coordinate);
+
+    Ok(compressed_key)
+}
+
+pub fn ui_display_pk(uncompressed_key: &[u8; 65], coin_type: CoinType) -> Result<bool, AppSW> {
+    let pk = compress_public_key(uncompressed_key)?;
+
+    let dest = ml_common::Destination::PublicKey(ml_common::PublicKeyHolder::Secp256k1Schnorr(
+        ml_common::PublicKey(pk),
+    ));
+    let addr = to_address(&dest, coin_type)?;
 
     // Load glyph from 64x64 4bpp gif file with include_gif macro. Creates an NBGL compatible glyph.
     #[cfg(any(target_os = "stax", target_os = "flex"))]
@@ -40,5 +60,5 @@ pub fn ui_display_pk(addr: &[u8]) -> Result<bool, AppSW> {
     Ok(NbglAddressReview::new()
         .glyph(&FERRIS)
         .verify_str("Verify CRAB address")
-        .show(&addr_hex))
+        .show(&addr))
 }

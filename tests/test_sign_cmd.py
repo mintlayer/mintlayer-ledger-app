@@ -4,6 +4,7 @@ import scalecodec
 from application_client.boilerplate_transaction import Transaction
 from application_client.boilerplate_command_sender import BoilerplateCommandSender, Errors
 from application_client.boilerplate_response_unpacker import unpack_get_public_key_response, unpack_sign_tx_response
+from application_client import MAINNET
 from ragger.error import ExceptionRAPDU
 from ragger.navigator import NavIns, NavInsID
 from utils import ROOT_SCREENSHOT_PATH, check_signature_validity
@@ -13,6 +14,8 @@ tx_input_obj = scalecodec.base.RuntimeConfiguration().create_scale_object('TxInp
 commitement_obj = scalecodec.base.RuntimeConfiguration().create_scale_object('SighashInputCommitment')
 output_obj = scalecodec.base.RuntimeConfiguration().create_scale_object('TxOutput')
 
+TX_RESPONSE_SIZE = 67
+
 def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = BoilerplateCommandSender(backend)
@@ -20,14 +23,19 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
     path: str = "m/44'/19788'/0'/0/0"
 
     # First we need to get the public key of the device in order to build the transaction
-    rapdu = client.get_public_key(path=path)
+    rapdu = client.get_public_key(coin=MAINNET, path=path)
     _, public_key, _, _ = unpack_get_public_key_response(rapdu.data)
 
     print("pk", len(public_key))
 
     h = 1<<31
     inp = (input_meta_obj.encode({
-        "path": [44+h, 19788+h, 0+h, 0, 0],
+        "addresses": [
+            {
+                "path": [44+h, 19788+h, 0+h, 0, 0],
+                "multisig_idx": None
+            }
+        ]
     }).data, tx_input_obj.encode({ 'Utxo' : {
            'id': { 'Transaction': '0x{}'.format(bytes([0]*32).hex()) },
            'index': 1,
@@ -43,6 +51,7 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
     }).data
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
+        coin=MAINNET,
         inputs=[inp],
         input_commitements=[commitement],
         outputs=[output]
@@ -59,14 +68,14 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
     # Send the sign device instruction.
     # As it requires on-screen validation, the function is asynchronous.
     # It will yield the result when the navigation is done
-    with client.sign_tx(path=path, transaction=transaction):
+    with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation appropriate for this device
         scenario_navigator.review_approve()
 
     # The device as yielded the result, parse it and ensure that the signature is correct
     response = client.get_async_response().data
 
-    assert len(response) == 65
+    assert len(response) == 67
     #_, der_sig, _ = unpack_sign_tx_response(response)
     
     #assert check_signature_validity(public_key, der_sig, transaction.to_hash())
@@ -79,7 +88,12 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
 
     h = 1<<31
     inp = (input_meta_obj.encode({
-        "path": [44+h, 19788+h, 0+h, 0, 0],
+        "addresses": [
+            {
+                "path": [44+h, 19788+h, 0+h, 0, 0],
+                "multisig_idx": None
+            }
+        ]
     }).data, tx_input_obj.encode({ 'Account' : {
             'nonce': 1,
             'account': {
@@ -95,6 +109,7 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
     }).data
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
+        coin=MAINNET,
         inputs=[inp],
         input_commitements=[commitement],
         outputs=[output]
@@ -111,14 +126,14 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
     # Send the sign device instruction.
     # As it requires on-screen validation, the function is asynchronous.
     # It will yield the result when the navigation is done
-    with client.sign_tx(path=path, transaction=transaction):
+    with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation appropriate for this device
         scenario_navigator.review_approve()
 
     # The device as yielded the result, parse it and ensure that the signature is correct
     response = client.get_async_response().data
 
-    assert len(response) == 65
+    assert len(response) == TX_RESPONSE_SIZE
 
 def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
@@ -128,7 +143,12 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
 
     h = 1<<31
     inp = (input_meta_obj.encode({
-        "path": [44+h, 19788+h, 0+h, 0, 0],
+        "addresses": [
+            {
+                "path": [44+h, 19788+h, 0+h, 0, 0],
+                "multisig_idx": None
+            }
+        ]
     }).data, tx_input_obj.encode({ 'Utxo' : {
            'id': { 'Transaction': '0x{}'.format(bytes([0]*32).hex()) },
            'index': 1,
@@ -144,6 +164,7 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
     }).data
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
+        coin=MAINNET,
         inputs=[inp],
         input_commitements=[commitement],
         outputs=[output]
@@ -161,14 +182,14 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
     # Send the sign device instruction.
     # As it requires on-screen validation, the function is asynchronous.
     # It will yield the result when the navigation is done
-    with client.sign_tx(path=path, transaction=transaction):
+    with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation appropriate for this device
         scenario_navigator.review_approve()
 
     # The device as yielded the result, parse it and ensure that the signature is correct
     response = client.get_async_response().data
 
-    assert len(response) == 65
+    assert len(response) == TX_RESPONSE_SIZE
 
 def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
@@ -178,7 +199,12 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
 
     h = 1<<31
     inp = (input_meta_obj.encode({
-        "path": [44+h, 19788+h, 0+h, 0, 0],
+        "addresses": [
+            {
+                "path": [44+h, 19788+h, 0+h, 0, 0],
+                "multisig_idx": None
+            }
+        ]
     }).data, tx_input_obj.encode({ 'Utxo' : {
            'id': { 'Transaction': '0x{}'.format(bytes([0]*32).hex()) },
            'index': 1,
@@ -194,6 +220,7 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
     }).data
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
+        coin=MAINNET,
         inputs=[inp],
         input_commitements=[commitement],
         outputs=[output]
@@ -210,14 +237,14 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
     # Send the sign device instruction.
     # As it requires on-screen validation, the function is asynchronous.
     # It will yield the result when the navigation is done
-    with client.sign_tx(path=path, transaction=transaction):
+    with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation appropriate for this device
         scenario_navigator.review_approve()
 
     # The device as yielded the result, parse it and ensure that the signature is correct
     response = client.get_async_response().data
 
-    assert len(response) == 65
+    assert len(response) == TX_RESPONSE_SIZE
 
 def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
@@ -227,7 +254,12 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
 
     h = 1<<31
     inp = (input_meta_obj.encode({
-        "path": [44+h, 19788+h, 0+h, 0, 0],
+        "addresses": [
+            {
+                "path": [44+h, 19788+h, 0+h, 0, 0],
+                "multisig_idx": None
+            }
+        ]
     }).data, tx_input_obj.encode({ 'Utxo' : {
            'id': { 'Transaction': '0x{}'.format(bytes([0]*32).hex()) },
            'index': 1,
@@ -250,6 +282,7 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
     }).data
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
+        coin=MAINNET,
         inputs=[inp],
         input_commitements=[commitement],
         outputs=[output]
@@ -266,14 +299,14 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
     # Send the sign device instruction.
     # As it requires on-screen validation, the function is asynchronous.
     # It will yield the result when the navigation is done
-    with client.sign_tx(path=path, transaction=transaction):
+    with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation appropriate for this device
         scenario_navigator.review_approve()
 
     # The device as yielded the result, parse it and ensure that the signature is correct
     response = client.get_async_response().data
 
-    assert len(response) == 65
+    assert len(response) == TX_RESPONSE_SIZE
 
 def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
@@ -284,7 +317,12 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
     
     h = 1 << 31
     inp = (input_meta_obj.encode({
-        "path": [44 + h, 19788 + h, 0 + h, 0, 0],
+        "addresses": [
+            {
+                "path": [44+h, 19788+h, 0+h, 0, 0],
+                "multisig_idx": None
+            }
+        ]
     }).data, tx_input_obj.encode({'Utxo': {
         'id': {'Transaction': '0x{}'.format(bytes([0] * 32).hex())},
         'index': 1,
@@ -310,19 +348,20 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
+        coin=MAINNET,
         inputs=[inp],
         input_commitements=[commitement],
         outputs=[output]
     )
 
     # Send the sign device instruction
-    with client.sign_tx(path=path, transaction=transaction):
+    with client.sign_tx(transaction=transaction):
         # Validate the on-screen request
         scenario_navigator.review_approve()
 
     # The device has yielded the result, parse it and ensure that the signature is correct
     response = client.get_async_response().data
-    assert len(response) == 65
+    assert len(response) == TX_RESPONSE_SIZE
 
 def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
@@ -332,7 +371,12 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
 
     h = 1 << 31
     inp = (input_meta_obj.encode({
-        "path": [44 + h, 19788 + h, 0 + h, 0, 0],
+        "addresses": [
+            {
+                "path": [44+h, 19788+h, 0+h, 0, 0],
+                "multisig_idx": None
+            }
+        ]
     }).data, tx_input_obj.encode({'Utxo': {
         'id': {'Transaction': '0x{}'.format(bytes([0] * 32).hex())},
         'index': 1,
@@ -368,19 +412,20 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
+        coin=MAINNET,
         inputs=[inp],
         input_commitements=[commitement],
         outputs=[output]
     )
 
     # Send the sign device instruction
-    with client.sign_tx(path=path, transaction=transaction):
+    with client.sign_tx(transaction=transaction):
         # Validate the on-screen request
         scenario_navigator.review_approve()
 
     # The device has yielded the result, parse it and ensure that the signature is correct
     response = client.get_async_response().data
-    assert len(response) == 65
+    assert len(response) == TX_RESPONSE_SIZE
 
 def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
     """
@@ -413,7 +458,14 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
 
     # The complete UTXO input tuple (meta, data)
     utxo_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         utxo_input_data
     )
 
@@ -431,7 +483,14 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
     }).data
 
     account_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         account_input_data
     )
 
@@ -443,6 +502,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
     }).data
 
     transaction = Transaction(
+        coin=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitements=[utxo_commitment, commitement_obj.encode({'None': None}).data],
         outputs=[mint_output]
@@ -450,7 +510,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
 
     # Send the sign transaction instruction.
     # It will yield the result when the user validates on-screen.
-    with client.sign_tx(path=path, transaction=transaction):
+    with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
         scenario_navigator.review_approve()
     # The device has yielded the result, parse it and ensure the signatures are correct
@@ -458,10 +518,10 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
 
     # The device should have returned two signatures, one for each input that
     # required signing (the Utxo and the AccountCommand).
-    # Each signature is 64 bytes + 1 sighash byte = 65 bytes.
+    # Each signature is 64 bytes + 3 sighash byte = 67 bytes.
     assert len(responses) == 2
     for resp in responses:
-        assert len(resp) == 65
+        assert len(resp) == TX_RESPONSE_SIZE
 
 def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     """
@@ -509,11 +569,25 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
 
     # The complete UTXO input tuple (meta, data)
     utxo_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         utxo_input_data
     )
     utxo_input2 = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         utxo_input_data2
     )
     
@@ -527,7 +601,14 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     }).data
 
     account_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         account_input_data
     )
 
@@ -539,6 +620,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     }).data
 
     transaction = Transaction(
+        coin=MAINNET,
         inputs=[utxo_input, account_input, utxo_input2],
         input_commitements=[utxo_commitment, commitement_obj.encode({'None': None}).data, utxo_commitment2],
         outputs=[change_output]
@@ -546,7 +628,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
 
     # Send the sign transaction instruction.
     # It will yield the result when the user validates on-screen.
-    with client.sign_tx(path=path, transaction=transaction):
+    with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
         scenario_navigator.review_approve()
     # The device has yielded the result, parse it and ensure the signatures are correct
@@ -554,10 +636,10 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
 
     # The device should have returned two signatures, one for each input that
     # required signing (the Utxo and the AccountCommand).
-    # Each signature is 64 bytes + 1 sighash byte = 65 bytes.
+    # Each signature is 64 bytes + 3 sighash byte = 67 bytes.
     assert len(responses) == 3
     for resp in responses:
-        assert len(resp) == 65
+        assert len(resp) == TX_RESPONSE_SIZE
 
 def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
     """
@@ -590,7 +672,14 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
 
     # The complete UTXO input tuple (meta, data)
     utxo_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         utxo_input_data
     )
 
@@ -608,7 +697,14 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
     }).data
 
     account_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         account_input_data
     )
 
@@ -620,6 +716,7 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
     }).data
 
     transaction = Transaction(
+        coin=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitements=[utxo_commitment, commitement_obj.encode({'None': None}).data],
         outputs=[change_output]
@@ -627,7 +724,7 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
 
     # Send the sign transaction instruction.
     # It will yield the result when the user validates on-screen.
-    with client.sign_tx(path=path, transaction=transaction):
+    with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
         scenario_navigator.review_approve()
     # The device has yielded the result, parse it and ensure the signatures are correct
@@ -635,10 +732,10 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
 
     # The device should have returned two signatures, one for each input that
     # required signing (the Utxo and the AccountCommand).
-    # Each signature is 64 bytes + 1 sighash byte = 65 bytes.
+    # Each signature is 64 bytes + 3 sighash byte = 67 bytes.
     assert len(responses) == 2
     for resp in responses:
-        assert len(resp) == 65
+        assert len(resp) == TX_RESPONSE_SIZE
 
 def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator):
     """
@@ -671,7 +768,14 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
 
     # The complete UTXO input tuple (meta, data)
     utxo_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         utxo_input_data
     )
 
@@ -686,7 +790,14 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
     }).data
 
     account_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         account_input_data
     )
 
@@ -698,6 +809,7 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
     }).data
 
     transaction = Transaction(
+        coin=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitements=[utxo_commitment, commitement_obj.encode({'None': None}).data],
         outputs=[change_output]
@@ -705,7 +817,7 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
 
     # Send the sign transaction instruction.
     # It will yield the result when the user validates on-screen.
-    with client.sign_tx(path=path, transaction=transaction):
+    with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
         scenario_navigator.review_approve()
     # The device has yielded the result, parse it and ensure the signatures are correct
@@ -713,10 +825,10 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
 
     # The device should have returned two signatures, one for each input that
     # required signing (the Utxo and the AccountCommand).
-    # Each signature is 64 bytes + 1 sighash byte = 65 bytes.
+    # Each signature is 64 bytes + 3 sighash byte = 67 bytes.
     assert len(responses) == 2
     for resp in responses:
-        assert len(resp) == 65
+        assert len(resp) == TX_RESPONSE_SIZE
 
 def test_sign_tx_change_token_authority(backend, scenario_navigator, device, navigator):
     """
@@ -749,7 +861,14 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
 
     # The complete UTXO input tuple (meta, data)
     utxo_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         utxo_input_data
     )
 
@@ -767,7 +886,14 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
     }).data
 
     account_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         account_input_data
     )
 
@@ -779,6 +905,7 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
     }).data
 
     transaction = Transaction(
+        coin=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitements=[utxo_commitment, commitement_obj.encode({'None': None}).data],
         outputs=[change_output]
@@ -786,7 +913,7 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
 
     # Send the sign transaction instruction.
     # It will yield the result when the user validates on-screen.
-    with client.sign_tx(path=path, transaction=transaction):
+    with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
         scenario_navigator.review_approve()
     # The device has yielded the result, parse it and ensure the signatures are correct
@@ -794,10 +921,10 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
 
     # The device should have returned two signatures, one for each input that
     # required signing (the Utxo and the AccountCommand).
-    # Each signature is 64 bytes + 1 sighash byte = 65 bytes.
+    # Each signature is 64 bytes + 3 sighash byte = 67 bytes.
     assert len(responses) == 2
     for resp in responses:
-        assert len(resp) == 65
+        assert len(resp) == TX_RESPONSE_SIZE
 
 def test_sign_tx_change_token_metadata_uri(backend, scenario_navigator, device, navigator):
     """
@@ -830,7 +957,14 @@ def test_sign_tx_change_token_metadata_uri(backend, scenario_navigator, device, 
 
     # The complete UTXO input tuple (meta, data)
     utxo_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         utxo_input_data
     )
 
@@ -848,7 +982,14 @@ def test_sign_tx_change_token_metadata_uri(backend, scenario_navigator, device, 
     }).data
 
     account_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         account_input_data
     )
 
@@ -860,6 +1001,7 @@ def test_sign_tx_change_token_metadata_uri(backend, scenario_navigator, device, 
     }).data
 
     transaction = Transaction(
+        coin=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitements=[utxo_commitment, commitement_obj.encode({'None': None}).data],
         outputs=[change_output]
@@ -867,7 +1009,7 @@ def test_sign_tx_change_token_metadata_uri(backend, scenario_navigator, device, 
 
     # Send the sign transaction instruction.
     # It will yield the result when the user validates on-screen.
-    with client.sign_tx(path=path, transaction=transaction):
+    with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
         scenario_navigator.review_approve()
     # The device has yielded the result, parse it and ensure the signatures are correct
@@ -875,10 +1017,10 @@ def test_sign_tx_change_token_metadata_uri(backend, scenario_navigator, device, 
 
     # The device should have returned two signatures, one for each input that
     # required signing (the Utxo and the AccountCommand).
-    # Each signature is 64 bytes + 1 sighash byte = 65 bytes.
+    # Each signature is 64 bytes + 3 sighash byte = 67 bytes.
     assert len(responses) == 2
     for resp in responses:
-        assert len(resp) == 65
+        assert len(resp) == TX_RESPONSE_SIZE
 
 def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     """
@@ -912,7 +1054,14 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
 
     # The complete UTXO input tuple (meta, data)
     utxo_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         utxo_input_data
     )
 
@@ -938,7 +1087,14 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
 
 
     account_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         account_input_data
     )
 
@@ -958,6 +1114,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
 
 
     transaction = Transaction(
+        coin=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitements=[utxo_commitment, fill_comitment],
         outputs=[change_output, fill_output]
@@ -965,7 +1122,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
 
     # Send the sign transaction instruction.
     # It will yield the result when the user validates on-screen.
-    with client.sign_tx(path=path, transaction=transaction):
+    with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
         scenario_navigator.review_approve()
     # The device has yielded the result, parse it and ensure the signatures are correct
@@ -973,10 +1130,10 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
 
     # The device should have returned two signatures, one for each input that
     # required signing (the Utxo and the AccountCommand).
-    # Each signature is 64 bytes + 1 sighash byte = 65 bytes.
+    # Each signature is 64 bytes + 3 sighash byte = 67 bytes.
     assert len(responses) == 2
     for resp in responses:
-        assert len(resp) == 65
+        assert len(resp) == TX_RESPONSE_SIZE
 
 def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     """
@@ -1009,7 +1166,14 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
 
     # The complete UTXO input tuple (meta, data)
     utxo_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         utxo_input_data
     )
 
@@ -1034,7 +1198,14 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
 
 
     account_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         account_input_data
     )
 
@@ -1054,6 +1225,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
 
 
     transaction = Transaction(
+        coin=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitements=[utxo_commitment, conclude_comitment],
         outputs=[change_output, conclude_output]
@@ -1061,7 +1233,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
 
     # Send the sign transaction instruction.
     # It will yield the result when the user validates on-screen.
-    with client.sign_tx(path=path, transaction=transaction):
+    with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
         scenario_navigator.review_approve()
     # The device has yielded the result, parse it and ensure the signatures are correct
@@ -1069,10 +1241,10 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
 
     # The device should have returned two signatures, one for each input that
     # required signing (the Utxo and the AccountCommand).
-    # Each signature is 64 bytes + 1 sighash byte = 65 bytes.
+    # Each signature is 64 bytes + 3 sighash byte = 67 bytes.
     assert len(responses) == 2
     for resp in responses:
-        assert len(resp) == 65
+        assert len(resp) == TX_RESPONSE_SIZE
 
 def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
     """
@@ -1104,7 +1276,14 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
 
     # The complete UTXO input tuple (meta, data)
     utxo_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         utxo_input_data
     )
 
@@ -1122,7 +1301,14 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
     }).data
 
     account_input = (
-        input_meta_obj.encode({"path": bip44_path}).data,
+        input_meta_obj.encode({
+            "addresses": [
+                {
+                    "path": bip44_path,
+                    "multisig_idx": None
+                }
+            ]
+        }).data,
         account_input_data
     )
 
@@ -1147,6 +1333,7 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
     }).data
 
     transaction = Transaction(
+        coin=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitements=[utxo_commitment, commitement_obj.encode({'None': None}).data],
         outputs=[htlc_output, change_output]
@@ -1154,7 +1341,7 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
 
     # Send the sign transaction instruction.
     # It will yield the result when the user validates on-screen.
-    with client.sign_tx(path=path, transaction=transaction):
+    with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
         scenario_navigator.review_approve()
     # The device has yielded the result, parse it and ensure the signatures are correct
@@ -1162,7 +1349,7 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
 
     # The device should have returned two signatures, one for each input that
     # required signing (the Utxo and the AccountCommand).
-    # Each signature is 64 bytes + 1 sighash byte = 65 bytes.
+    # Each signature is 64 bytes + 3 sighash byte = 67 bytes.
     assert len(responses) == 2
     for resp in responses:
-        assert len(resp) == 65
+        assert len(resp) == TX_RESPONSE_SIZE

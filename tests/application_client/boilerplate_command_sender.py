@@ -2,8 +2,9 @@ from enum import IntEnum
 from typing import Generator, List, Optional
 from contextlib import contextmanager
 
+import scalecodec
+
 from ragger.backend.interface import BackendInterface, RAPDU
-from ragger.bip import pack_derivation_path
 
 from .boilerplate_transaction import Transaction
 
@@ -15,6 +16,10 @@ CLA: int = 0xE0
 class P1(IntEnum):
     # Parameter 1 for first APDU number.
     P1_START = 0x00
+    P1_TX_INPUT = 0x01
+    P1_TX_INPUT_COMMITMENT = 0x02
+    P1_TX_OUTPUT = 0x03
+    P1_TX_NEXT_SIG = 0x04
     # Parameter 1 for maximum APDU number.
     P1_MAX   = 0x03
     # Parameter 1 for screen confirmation for GET_PUBLIC_KEY.
@@ -83,30 +88,36 @@ class BoilerplateCommandSender:
                                      data=b"")
 
 
-    def get_public_key(self, path: str) -> RAPDU:
+    def get_public_key(self, coin: int, path: str) -> RAPDU:
+        data = coin.to_bytes(1) + pack_derivation_path(path)
+
         return self.backend.exchange(cla=CLA,
                                      ins=InsType.GET_PUBLIC_KEY,
                                      p1=P1.P1_START,
                                      p2=P2.P2_LAST,
-                                     data=pack_derivation_path(path))
+                                     data=data)
 
 
     @contextmanager
-    def get_public_key_with_confirmation(self, path: str) -> Generator[None, None, None]:
+    def get_public_key_with_confirmation(self, coin: int, path: str) -> Generator[None, None, None]:
+        data = coin.to_bytes(1) + pack_derivation_path(path)
+
         with self.backend.exchange_async(cla=CLA,
                                          ins=InsType.GET_PUBLIC_KEY,
                                          p1=P1.P1_CONFIRM,
                                          p2=P2.P2_LAST,
-                                         data=pack_derivation_path(path)) as response:
+                                         data=data) as response:
             yield response
 
     @contextmanager
-    def sign_message(self, path: str, message: bytes) -> Generator[None, None, None]:
+    def sign_message(self, coin: int, path: str, message: bytes) -> Generator[None, None, None]:
+        data = coin.to_bytes(1) + pack_derivation_path(path)
+        
         self.backend.exchange(cla=CLA,
                               ins=InsType.SIGN_MESSAGE,
                               p1=P1.P1_START,
                               p2=P2.P2_MORE,
-                              data=pack_derivation_path(path))
+                              data=data)
         messages = split_message(message, MAX_APDU_LEN)
         idx: int = P1.P1_START + 1
 
@@ -126,10 +137,10 @@ class BoilerplateCommandSender:
             yield response
 
     @contextmanager
-    def sign_tx(self, path: str, transaction: Transaction) -> Generator[None, None, None]:
+    def sign_tx(self, transaction: Transaction) -> Generator[None, None, None]:
         metadata = bytes([
             #1 + 1 + 4 + 4, # len
-            0, # mainnet
+            transaction.coin,
             1, # version
             ]) + len(transaction.inputs).to_bytes(byteorder="big", length=4) + len(transaction.outputs).to_bytes(byteorder="big", length=4)
         print("metadata ", len(metadata))
@@ -144,47 +155,41 @@ class BoilerplateCommandSender:
         for inp in transaction.inputs:
             res = self.backend.exchange(cla=CLA,
                                     ins=InsType.SIGN_TX,
-                                    p1=1,
-                                    p2=0,
+                                    p1=P1.P1_TX_INPUT,
+                                    p2=P2.P2_LAST,
                                     data=inp[0])
             print("inp M ", res)
 
             res = self.backend.exchange(cla=CLA,
                                     ins=InsType.SIGN_TX,
-                                    p1=1,
-                                    p2=2,
+                                    p1=P1.P1_TX_INPUT,
+                                    p2=P2.P2_LAST,
                                     data=inp[1])
             print("inp ", res)
 
         for inpc in transaction.input_commitements:
             res = self.backend.exchange(cla=CLA,
                                     ins=InsType.SIGN_TX,
-                                    p1=2,
-                                    p2=2,
+                                    p1=P1.P1_TX_INPUT_COMMITMENT,
+                                    p2=P2.P2_LAST,
                                     data=inpc)
             print("inpC ", res)
 
         for out in transaction.outputs[:-1]:
             res = self.backend.exchange(cla=CLA,
                                     ins=InsType.SIGN_TX,
-                                    p1=3,
-                                    p2=2,
+                                    p1=P1.P1_TX_OUTPUT,
+                                    p2=P2.P2_LAST,
                                     data=out)
             print("Out ", res)
 
-        print('sending final Out:')
         with self.backend.exchange_async(cla=CLA,
                                          ins=InsType.SIGN_TX,
-                                         p1=3,
-                                         p2=2,
+                                         p1=P1.P1_TX_OUTPUT,
+                                         p2=P2.P2_LAST,
                                          data=transaction.outputs[-1]) as response:
-            print("got out response", response)
             yield response
-            print("yielded")
 
-        print('out of context')
-
-        
             
 
         """
@@ -220,3 +225,26 @@ class BoilerplateCommandSender:
                                     data=bytes())
             responses.append(res.data)
         return responses
+
+def hardened_index(index: int) -> int:
+    return index | 1 << 31
+
+def pack_derivation_path(derivation_path: str) -> bytes:
+    path_obj = scalecodec.base.RuntimeConfiguration().create_scale_object('Bip32Path')
+
+    split = derivation_path.split("/")
+
+
+    if split[0] != "m":
+        raise ValueError("Error master expected")
+
+    path = []
+    for value in split[1:]:
+        if value == "":
+            raise ValueError(f'Error missing value in split list "{split}"')
+        if value.endswith('\''):
+            path.append(hardened_index(int(value[:-1])))
+        else:
+            path.append(int(value))
+        
+    return path_obj.encode(path).data

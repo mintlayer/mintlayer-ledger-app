@@ -14,13 +14,14 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *****************************************************************************/
+use crate::app_ui::utils::{bech32m_encode, to_address};
 use crate::handlers::sign_tx::{CoinOrTokenId, TxContext};
 use crate::utils::CoinType;
 use crate::AppSW;
 
 use chrono::{TimeZone, Utc};
 use include_gif::include_gif;
-use ledger_device_sdk::nbgl::{Field, NbglGlyph, NbglReview, NbglSpinner, TransactionType};
+use ledger_device_sdk::nbgl::{Field, NbglGlyph, NbglReview, NbglStreamingReview, NbglSpinner, TransactionType};
 use ml_common::{
     Amount, Destination, IsTokenFreezable, NftIssuance, OutputTimeLock, OutputValue, TokenIssuance,
     TokenTotalSupply, TxOutput, VRFPublicKeyHolder, H256,
@@ -97,6 +98,30 @@ pub fn ui_display_tx(tx: &TxContext) -> Result<bool, AppSW> {
     #[cfg(any(target_os = "nanosplus", target_os = "nanox"))]
     const FERRIS: NbglGlyph = NbglGlyph::from_include(include_gif!("crab_16x16.gif", NBGL));
 
+
+    /*
+    let mut review: NbglStreamingReview = NbglStreamingReview::new()
+        .glyph(&FERRIS)
+        .tx_type(TransactionType::Transaction);
+
+    if !review.start("Review transaction\nto send ML", "Foo") {
+        panic!("hello");
+        return Ok(false);
+    }
+    let f = Field {
+            name: "Fees:",
+            value: &fees,
+        };
+    if !review.continue_review(&[f]) {
+            return Ok(false);
+        }
+
+    Ok(review.finish("Sign transaction\nto send ML"))
+
+    
+     */
+    
+
     // Create NBGL review. Maximum number of fields and string buffer length can be customised
     // with constant generic parameters of NbglReview. Default values are 32 and 1024 respectively.
     let review: NbglReview = NbglReview::new()
@@ -136,8 +161,8 @@ pub fn show_signing_spinner(spinner: &mut NbglSpinner) {
 /// * `Err(AppSW)` on error.
 pub fn ui_display_message(message: &[u8]) -> Result<bool, AppSW> {
     let message_str = match core::str::from_utf8(message) {
-        Ok(s) => s.to_string(),
-        Err(_) => format!("0x{}", hex::encode(message)),
+        Ok(s) if s.is_ascii() => s.to_string(),
+        Ok(_) | Err(_) => format!("0x{}", hex::encode(message)),
     };
 
     let my_fields = [Field {
@@ -164,20 +189,6 @@ pub fn ui_display_message(message: &[u8]) -> Result<bool, AppSW> {
 
     // Show the review screen with the defined fields and return the user's choice.
     Ok(review.show(&my_fields))
-}
-
-fn bech32m_encode(hrp: &str, data: &[u8]) -> Result<String, AppSW> {
-    let parsed_hrp = bech32::Hrp::parse(hrp).map_err(|_| AppSW::TxAddressFail)?;
-
-    let encoded =
-        bech32::encode::<bech32::Bech32m>(parsed_hrp, data).map_err(|_| AppSW::TxAddressFail)?;
-
-    Ok(encoded)
-}
-
-fn to_address(destination: &Destination, coin: CoinType) -> Result<String, AppSW> {
-    let hrp = coin.address_prefix(destination);
-    bech32m_encode(hrp, &destination.encode())
 }
 
 fn vrf_to_address(key: &VRFPublicKeyHolder, coin: CoinType) -> Result<String, AppSW> {

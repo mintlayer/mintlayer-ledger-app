@@ -10,6 +10,7 @@ class TransactionError(Exception):
 
 @dataclass
 class Transaction:
+    coin: int
     inputs: List[Tuple[bytes, bytes]]
     input_commitements: List[bytes]
     outputs: List[bytes]

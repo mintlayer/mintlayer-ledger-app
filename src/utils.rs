@@ -62,7 +62,7 @@ impl TryFrom<u8> for CoinType {
             1 => Self::Testnet,
             2 => Self::Regtest,
             3 => Self::Signet,
-            _ => return Err(AppSW::TxDeserializeFail)
+            _ => return Err(AppSW::DeserializeFail),
         };
 
         Ok(coin)
@@ -76,6 +76,14 @@ impl CoinType {
             Self::Testnet => "TML",
             Self::Regtest => "RML",
             Self::Signet => "SML",
+        }
+    }
+
+    pub const fn coin_path(&self) -> u32 {
+        let hardened_bit = 1 << 31;
+        match self {
+            Self::Mainnet => 19788 + hardened_bit,
+            Self::Testnet | Self::Regtest | Self::Signet => 1 + hardened_bit,
         }
     }
 

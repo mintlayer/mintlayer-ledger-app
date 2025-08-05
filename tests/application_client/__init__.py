@@ -15,9 +15,16 @@
 
 import scalecodec
 
+MAINNET = 0
+TESTNET = 1
+REGTEST = 2
+SIGNET = 3
+
 def init_mintlayer_types():
     custom_types = {
         "types": {
+            "Bip32Path": "Vec<u32>",
+
             "Amount": "Compact<u128>",
 
             "H256": "[u8; 32]",
@@ -33,10 +40,18 @@ def init_mintlayer_types():
                 ]
             },
 
+            "InputAddressPath": {
+                "type": "struct",
+                "type_mapping": [
+                    ["path", "Vec<u32>"],
+                    ["multisig_idx", "Option<u32>"],
+                ],
+            },
+
             "InputMeta": {
                 "type": "struct",
                 "type_mapping": [
-                    ["path", "Option<Vec<u32>>"],
+                    ["addresses", "Vec<InputAddressPath>"],
                 ],
             },
 

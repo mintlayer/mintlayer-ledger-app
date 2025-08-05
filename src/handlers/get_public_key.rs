@@ -16,27 +16,33 @@
  *****************************************************************************/
 
 use crate::app_ui::address::ui_display_pk;
-use crate::utils::Bip32Path;
+use crate::utils::{Bip32Path, CoinType};
 use crate::AppSW;
+
+use parity_scale_codec::DecodeAll;
+
 use ledger_device_sdk::ecc::{Secp256k1, SeedDerive};
-use ledger_device_sdk::hash::{sha3::Keccak256, HashInit};
 use ledger_device_sdk::io::Comm;
 
 pub fn handler_get_public_key(comm: &mut Comm, display: bool) -> Result<(), AppSW> {
     let data = comm.get_data().map_err(|_| AppSW::WrongApduLength)?;
-    let path: Bip32Path = data.try_into()?;
+    let chain_type = CoinType::try_from(*data.get(0).ok_or(AppSW::WrongApduLength)?)?;
+    let path = Bip32Path::decode_all(&mut &data[1..]).map_err(|_| AppSW::DeserializeFail)?;
+
+    if path.as_ref().len() < 3 {
+        return Err(AppSW::InvalidPath);
+    }
+    if path.as_ref()[1] != chain_type.coin_path() {
+        return Err(AppSW::InvalidPath);
+    }
 
     let (k, cc) = Secp256k1::derive_from(path.as_ref());
     let pk = k.public_key().map_err(|_| AppSW::KeyDeriveFail)?;
+    let code = cc.ok_or(AppSW::KeyDeriveFail)?;
 
     // Display address on device if requested
     if display {
-        let mut keccak256 = Keccak256::new();
-        let mut address: [u8; 32] = [0u8; 32];
-
-        let _ = keccak256.hash(&pk.pubkey[1..], &mut address);
-
-        if !ui_display_pk(&address)? {
+        if !ui_display_pk(&pk.pubkey, chain_type)? {
             return Err(AppSW::Deny);
         }
     }
@@ -44,9 +50,7 @@ pub fn handler_get_public_key(comm: &mut Comm, display: bool) -> Result<(), AppS
     comm.append(&[pk.pubkey.len() as u8]);
     comm.append(&pk.pubkey);
 
-    const CHAINCODE_LEN: u8 = 32;
-    let code = cc.unwrap();
-    comm.append(&[CHAINCODE_LEN]);
+    comm.append(&[code.value.len() as u8]);
     comm.append(&code.value);
 
     Ok(())
