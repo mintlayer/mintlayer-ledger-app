@@ -5,8 +5,8 @@ authors = ["Ledger"]
 edition = "2021"
 
 [dependencies]
-ledger_device_sdk = "1.23.0"
-ledger_secure_sdk_sys = "1.9.0"
+ledger_device_sdk = "1.24.4"
+ledger_secure_sdk_sys = "1.11.1"
 include_gif = "1.2.1"
 serde = { version = "1.0.192", default-features = false, features = ["derive"] }
 serde-json-core = { git = "https://github.com/rust-embedded-community/serde-json-core" }
@@ -27,7 +27,7 @@ parity-scale-codec = { git = "https://github.com/OBorce/parity-scale-codec.git",
     "derive",
     "chain-error",
 ] }
-ml_common = { git = "https://github.com/mintlayer/mintlayer-core", package = "trezor-common", branch = "feature/hardware-wallet-common" }
+ml_common = { git = "https://github.com/mintlayer/mintlayer-core", package = "trezor-common", branch = "feature/hardware-wallet-common2" }
 
 
 [profile.release]

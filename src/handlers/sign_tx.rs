@@ -34,7 +34,7 @@ use ml_common::{
 use parity_scale_codec::{Compact, Decode, DecodeAll, Encode};
 
 const MAX_TRANSACTION_LEN: usize = 510;
-const BIP44: u32 = 44 + 1 << 31;
+const BIP44: u32 = 44 + (1 << 31);
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 pub enum CoinOrTokenId {
@@ -824,7 +824,7 @@ fn process_input(ctx: &mut TxContext) -> Result<(), AppSW> {
             }
         },
         TxInput::OrderAccountCommand(cmd) => match cmd {
-            OrderAccountCommand::FillOrder(_, fill_amount, _) => {
+            OrderAccountCommand::FillOrder(_, fill_amount) => {
                 ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FillOrder);
                 InputData::FillOrderV1(fill_amount)
             }
