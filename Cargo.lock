@@ -889,7 +889,7 @@ dependencies = [
 [[package]]
 name = "trezor-common"
 version = "1.0.2"
-source = "git+https://github.com/mintlayer/mintlayer-core?branch=feature%2Fhardware-wallet-common#50f70b9d2ad99a1ad9bc44f910562068a6a62e0f"
+source = "git+https://github.com/mintlayer/mintlayer-core?branch=feature%2Fhardware-wallet-common#add82c7c5dcbbf8dd362a70d127be638a92dba86"
 dependencies = [
  "num-derive",
  "num-traits",

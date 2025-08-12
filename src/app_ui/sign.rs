@@ -21,7 +21,7 @@ use crate::AppSW;
 
 use chrono::{TimeZone, Utc};
 use include_gif::include_gif;
-use ledger_device_sdk::nbgl::{Field, NbglGlyph, NbglReview, NbglStreamingReview, NbglSpinner, TransactionType};
+use ledger_device_sdk::nbgl::{Field, NbglGlyph, NbglReview, NbglStreamingReview, TransactionType};
 use ml_common::{
     Amount, Destination, IsTokenFreezable, NftIssuance, OutputTimeLock, OutputValue, TokenIssuance,
     TokenTotalSupply, TxOutput, VRFPublicKeyHolder, H256,
@@ -139,10 +139,6 @@ pub fn ui_display_tx(tx: &TxContext) -> Result<bool, AppSW> {
     //} else {
     Ok(review.show(&my_fields))
     //}
-}
-
-pub fn show_signing_spinner(spinner: &mut NbglSpinner) {
-    spinner.show("Signing...");
 }
 
 /// Displays a message for review and signing confirmation on the device.
@@ -311,8 +307,8 @@ pub fn format_output(output: &TxOutput, coin: CoinType) -> Result<(&str, String)
         TxOutput::IssueFungibleToken(x) => {
             let TokenIssuance::V1(data) = x;
 
-            let ticker = String::from_utf8_lossy(&data.token_ticker);
-            let metadata_uri = String::from_utf8_lossy(&data.metadata_uri);
+            let ticker = String::from_utf8_lossy(data.token_ticker.as_ref());
+            let metadata_uri = String::from_utf8_lossy(data.metadata_uri.as_ref());
 
             let total_supply_str = match data.total_supply {
                 TokenTotalSupply::Unlimited => "UNLIMITED".to_string(),
@@ -340,13 +336,13 @@ pub fn format_output(output: &TxOutput, coin: CoinType) -> Result<(&str, String)
             };
             let address_short = format!(
                 "Name: {}\nCreator: {}\nTicker: {}\nAddress: {}\nIcon URI: {}\nAdditional medatada URI: {}\nMedia URI: {}",
-                String::from_utf8_lossy(&data.name),
+                String::from_utf8_lossy(data.name.as_ref()),
                 data.creator.clone().map(|creator| to_address(&Destination::PublicKey(creator), coin)).transpose()?.unwrap_or_default(),
-                String::from_utf8_lossy(&data.ticker),
+                String::from_utf8_lossy(data.ticker.as_ref()),
                 to_address(destination, coin)?,
-                String::from_utf8_lossy(&data.icon_uri),
-                String::from_utf8_lossy(&data.additional_metadata_uri),
-                String::from_utf8_lossy(&data.media_uri)
+                String::from_utf8_lossy(data.icon_uri.as_ref()),
+                String::from_utf8_lossy(data.additional_metadata_uri.as_ref()),
+                String::from_utf8_lossy(data.media_uri.as_ref())
             );
             ("Issue NFT token", address_short)
         }

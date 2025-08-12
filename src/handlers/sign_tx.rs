@@ -14,7 +14,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *****************************************************************************/
-use crate::app_ui::sign::{show_signing_spinner, ui_display_tx};
+use crate::app_ui::sign::ui_display_tx;
 use crate::handlers::sign_message::schnorr_sign;
 use crate::utils::{Bip32Path, CoinType};
 use crate::{AppSW, DataContext, P1SignTx, P2_SIGN_TX_LAST, P2_SIGN_TX_MORE};
@@ -118,7 +118,7 @@ pub struct TxContext {
     num_prcessed_input_commitments: u32,
     pub outputs: Vec<TxOutput>,
 
-    spinner: Option<NbglSpinner>,
+    spinner: NbglSpinner,
 }
 
 enum SigningState {
@@ -169,7 +169,7 @@ impl TxContext {
             inputs_data: Vec::with_capacity(25),
             num_prcessed_input_commitments: 0,
             outputs: Default::default(),
-            spinner: None,
+            spinner: NbglSpinner::new(),
         })
     }
 
@@ -350,6 +350,25 @@ impl TxContext {
             (_, _) => Err(AppSW::WrongP1P2),
         }
     }
+
+    // show a spinnger for bigger transactions
+    fn show_spinner(&mut self) {
+        let is_transaction_big = self.num_inputs * 2 + self.num_outputs > 10;
+        let returning_signatures = match self.state {
+            TxParsingState::ApprovedNotFinishedSigning { inp_idx: _, sig_idx: _, sighash: _ }
+            | TxParsingState::CompleteNotApproved { inp_idx: _, sig_idx: _, sighash: _ } => true,
+            TxParsingState::Input(_)
+            | TxParsingState::Finished
+            | TxParsingState::InputCommitement(_)
+            | TxParsingState::Output(_) => false
+        };
+
+        if returning_signatures && self.num_inputs > 1 {
+            self.spinner.show("Signing...");
+        } else if is_transaction_big {
+            self.spinner.show("Parsing transaction...");
+        }
+    }
 }
 
 pub fn handler_sign_tx(
@@ -372,7 +391,10 @@ pub fn handler_sign_tx(
         let num_inputs = u32::from_be_bytes(data[2..6].try_into().unwrap());
         let num_outputs = u32::from_be_bytes(data[6..10].try_into().unwrap());
 
-        let tx_ctx = TxContext::new(coin, version, num_inputs, num_outputs)?;
+        let mut tx_ctx = TxContext::new(coin, version, num_inputs, num_outputs)?;
+
+        tx_ctx.show_spinner();
+
         *ctx = DataContext::TxContext(tx_ctx);
         Ok(())
     // Next chunks, append data to raw_tx and return or parse
@@ -382,6 +404,8 @@ pub fn handler_sign_tx(
             DataContext::TxContext(ctx) => ctx,
             _ => return Err(AppSW::WrongContext),
         };
+
+        ctx.show_spinner();
 
         if ctx.raw_buf.len() + data.len() > MAX_TRANSACTION_LEN {
             return Err(AppSW::TxWrongLength);
@@ -461,7 +485,7 @@ pub fn handler_sign_tx(
                     if ctx.completed_all_signatures() {
                         ctx.review_finished = true;
                     } else {
-                        show_signing_spinner(ctx.spinner.get_or_insert_with(NbglSpinner::new));
+                        ctx.show_spinner();
                     }
 
                     Ok(())
@@ -480,7 +504,7 @@ pub fn handler_sign_tx(
                 if ctx.completed_all_signatures() {
                     ctx.review_finished = true;
                 } else {
-                    show_signing_spinner(ctx.spinner.get_or_insert_with(NbglSpinner::new));
+                    ctx.show_spinner();
                 }
 
                 Ok(())
@@ -517,8 +541,9 @@ fn process_output(ctx: &mut TxContext) -> Result<(), AppSW> {
         ctx.tx_hasher
             .update(&Compact::<u32>::encode(&ctx.num_outputs.into()))
             .map_err(|_| AppSW::TxHashFail)?;
-        ctx.outputs.push(out); // FIXME:
     }
+
+    ctx.outputs.push(out); // FIXME: out of memory for large TXs
     Ok(())
 }
 

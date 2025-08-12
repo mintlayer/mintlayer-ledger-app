@@ -4,7 +4,7 @@ import scalecodec
 from application_client.boilerplate_transaction import Transaction
 from application_client.boilerplate_command_sender import BoilerplateCommandSender, Errors
 from application_client.boilerplate_response_unpacker import unpack_get_public_key_response, unpack_sign_tx_response
-from application_client import MAINNET
+from application_client import MAINNET, TESTNET
 from ragger.error import ExceptionRAPDU
 from ragger.navigator import NavIns, NavInsID
 from utils import ROOT_SCREENSHOT_PATH, check_signature_validity
@@ -75,7 +75,7 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
     # The device as yielded the result, parse it and ensure that the signature is correct
     response = client.get_async_response().data
 
-    assert len(response) == 67
+    assert len(response) == TX_RESPONSE_SIZE
     #_, der_sig, _ = unpack_sign_tx_response(response)
     
     #assert check_signature_validity(public_key, der_sig, transaction.to_hash())
