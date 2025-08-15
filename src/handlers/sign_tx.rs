@@ -34,6 +34,7 @@ use ml_common::{
 use parity_scale_codec::{Compact, Decode, DecodeAll, Encode};
 
 const MAX_TRANSACTION_LEN: usize = 510;
+const BIP44: u32 = 44 + 1 << 31;
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 pub enum CoinOrTokenId {
@@ -46,6 +47,41 @@ fn into_coin_or_token_id_and_amount(value: &OutputValue) -> Result<(CoinOrTokenI
         OutputValue::Coin(amount) => Ok((CoinOrTokenId::Coin, *amount)),
         OutputValue::TokenV0 => Err(AppSW::TxInvalidTokenV0),
         OutputValue::TokenV1(token_id, amount) => Ok((CoinOrTokenId::TokenId(*token_id), *amount)),
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum TxType {
+    Transfer,
+    Burn,
+    Htlc,
+    CreateDelegation,
+    DelegationStake,
+    DelegationWithdrawl,
+    CreateStakePool,
+    DecommissionStakePool,
+    CreateNft,
+    CreateToken,
+    MintTokens,
+    UnmintTokens,
+    FreezeToken,
+    UnfreezeToken,
+    LockTokenSupply,
+    ChangeTokenAuthority,
+    ChangeTokenMetadataUri,
+    FillOrder,
+    FreezeOrder,
+    CreateOrder,
+    ConcludeOrder,
+    ComplexTransaction,
+    DataDeposit,
+}
+
+fn merge_tx_type(tx_type: Option<TxType>, new_type: TxType) -> Option<TxType> {
+    if tx_type.is_none() {
+        Some(new_type)
+    } else {
+        Some(TxType::ComplexTransaction)
     }
 }
 
@@ -64,6 +100,39 @@ pub struct Input {
 pub struct InputAddressPath {
     pub path: Bip32Path,
     pub multisig_idx: Option<u32>,
+}
+
+pub struct InputCompressed {
+    pub addresses: Vec<InputAddressPathCompressed>,
+}
+
+pub struct InputAddressPathCompressed {
+    pub path: [u32; 3],
+    pub multisig_idx: Option<u32>,
+}
+
+impl InputAddressPathCompressed {
+    fn new(addr: InputAddressPath, coin: CoinType) -> Result<Self, AppSW> {
+        let path = addr.path.as_ref();
+        if path.len() != 5 {
+            return Err(AppSW::TxInvalidInputPath);
+        }
+
+        if path[0] != BIP44 {
+            return Err(AppSW::TxInvalidInputPath);
+        }
+
+        if path[1] != coin.coin_path() {
+            return Err(AppSW::TxInvalidInputPath);
+        }
+
+        Ok(Self {
+            path: path[2..]
+                .try_into()
+                .map_err(|_| AppSW::TxInvalidInputPath)?,
+            multisig_idx: addr.multisig_idx,
+        })
+    }
 }
 
 pub enum InputData {
@@ -108,12 +177,13 @@ pub struct TxContext {
     num_outputs: u32,
     review_finished: bool,
     state: TxParsingState,
+    pub tx_type: Option<TxType>,
 
     tx_hasher: Blake2b_512,
 
     pub total_inputs: BTreeMap<CoinOrTokenId, Amount>,
     pub total_outputs: BTreeMap<CoinOrTokenId, Amount>,
-    inputs: Vec<Input>,
+    inputs: Vec<InputCompressed>,
     inputs_data: Vec<InputData>,
     num_prcessed_input_commitments: u32,
     pub outputs: Vec<TxOutput>,
@@ -162,11 +232,12 @@ impl TxContext {
             review_finished: false,
             tx_hasher,
             state: TxParsingState::Input(0),
+            tx_type: None,
 
             total_inputs: Default::default(),
             total_outputs: Default::default(),
-            inputs: Vec::with_capacity(25),
-            inputs_data: Vec::with_capacity(25),
+            inputs: Vec::with_capacity(20),
+            inputs_data: Vec::with_capacity(20),
             num_prcessed_input_commitments: 0,
             outputs: Default::default(),
             spinner: NbglSpinner::new(),
@@ -234,6 +305,7 @@ impl TxContext {
                 if n < (self.num_inputs - 1) as usize {
                     TxParsingState::InputCommitement(n + 1)
                 } else {
+                    self.inputs_data = Vec::new();
                     TxParsingState::Output(0)
                 }
             }
@@ -355,12 +427,20 @@ impl TxContext {
     fn show_spinner(&mut self) {
         let is_transaction_big = self.num_inputs * 2 + self.num_outputs > 10;
         let returning_signatures = match self.state {
-            TxParsingState::ApprovedNotFinishedSigning { inp_idx: _, sig_idx: _, sighash: _ }
-            | TxParsingState::CompleteNotApproved { inp_idx: _, sig_idx: _, sighash: _ } => true,
+            TxParsingState::ApprovedNotFinishedSigning {
+                inp_idx: _,
+                sig_idx: _,
+                sighash: _,
+            }
+            | TxParsingState::CompleteNotApproved {
+                inp_idx: _,
+                sig_idx: _,
+                sighash: _,
+            } => true,
             TxParsingState::Input(_)
             | TxParsingState::Finished
             | TxParsingState::InputCommitement(_)
-            | TxParsingState::Output(_) => false
+            | TxParsingState::Output(_) => false,
         };
 
         if returning_signatures && self.num_inputs > 1 {
@@ -377,9 +457,8 @@ pub fn handler_sign_tx(
     data_type: u8,
     ctx: &mut DataContext,
 ) -> Result<(), AppSW> {
-    // Try to get data from comm
     let data = comm.get_data().map_err(|_| AppSW::WrongApduLength)?;
-    // First chunk, try to parse the path
+
     if p1 == P1SignTx::Metadata {
         // Reset transaction context
         if data.len() != 10 {
@@ -397,8 +476,6 @@ pub fn handler_sign_tx(
 
         *ctx = DataContext::TxContext(tx_ctx);
         Ok(())
-    // Next chunks, append data to raw_tx and return or parse
-    // the transaction if it is the last chunk.
     } else {
         let ctx = match ctx {
             DataContext::TxContext(ctx) => ctx,
@@ -427,7 +504,13 @@ pub fn handler_sign_tx(
                     let inp = Input::decode_all(&mut ctx.raw_buf.as_slice())
                         .map_err(|_| AppSW::DeserializeFail)?;
 
-                    ctx.inputs.push(inp);
+                    let addresses = inp
+                        .addresses
+                        .into_iter()
+                        .map(|a| InputAddressPathCompressed::new(a, ctx.coin))
+                        .collect::<Result<Vec<_>, AppSW>>()?;
+
+                    ctx.inputs.push(InputCompressed { addresses });
                     ctx.raw_buf.clear();
                     return Ok(());
                 } else {
@@ -517,25 +600,49 @@ fn process_output(ctx: &mut TxContext) -> Result<(), AppSW> {
     let out = ml_common::TxOutput::decode_all(&mut ctx.raw_buf.as_slice())
         .map_err(|_| AppSW::DeserializeFail)?;
     match &out {
-        TxOutput::Transfer(value, _)
-        | TxOutput::LockThenTransfer(value, _, _)
-        | TxOutput::Burn(value)
-        | TxOutput::Htlc(value, _) => {
+        TxOutput::Transfer(value, _) | TxOutput::LockThenTransfer(value, _, _) => {
+            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::Transfer);
+
+            let (coin_or_token_id, amount) = into_coin_or_token_id_and_amount(value)?;
+            increase_output_totals(&mut ctx.total_outputs, coin_or_token_id, amount)?;
+        }
+        TxOutput::Burn(value) => {
+            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::Burn);
+
+            let (coin_or_token_id, amount) = into_coin_or_token_id_and_amount(value)?;
+            increase_output_totals(&mut ctx.total_outputs, coin_or_token_id, amount)?;
+        }
+        TxOutput::Htlc(value, _) => {
+            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::Htlc);
+
             let (coin_or_token_id, amount) = into_coin_or_token_id_and_amount(value)?;
             increase_output_totals(&mut ctx.total_outputs, coin_or_token_id, amount)?;
         }
         TxOutput::CreateStakePool(_, data) => {
+            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::CreateStakePool);
+
             increase_output_totals(&mut ctx.total_outputs, CoinOrTokenId::Coin, data.pledge)?;
         }
         TxOutput::ProduceBlockFromStake(_, _) => {}
         TxOutput::DelegateStaking(amount, _) => {
+            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::DelegationStake);
             increase_output_totals(&mut ctx.total_outputs, CoinOrTokenId::Coin, *amount)?;
         }
-        TxOutput::CreateDelegationId(_, _)
-        | TxOutput::IssueFungibleToken(_)
-        | TxOutput::DataDeposit(_)
-        | TxOutput::IssueNft(_, _, _)
-        | TxOutput::CreateOrder(_) => {}
+        TxOutput::CreateDelegationId(_, _) => {
+            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::CreateDelegation);
+        }
+        TxOutput::IssueFungibleToken(_) => {
+            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::CreateToken);
+        }
+        TxOutput::DataDeposit(_) => {
+            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::DataDeposit);
+        }
+        TxOutput::IssueNft(_, _, _) => {
+            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::CreateNft);
+        }
+        TxOutput::CreateOrder(_) => {
+            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::CreateOrder);
+        }
     }
     if ctx.outputs.len() == 0 {
         ctx.tx_hasher
@@ -543,7 +650,7 @@ fn process_output(ctx: &mut TxContext) -> Result<(), AppSW> {
             .map_err(|_| AppSW::TxHashFail)?;
     }
 
-    ctx.outputs.push(out); // FIXME: out of memory for large TXs
+    ctx.outputs.push(out);
     Ok(())
 }
 
@@ -592,7 +699,6 @@ fn process_input_commitement(ctx: &mut TxContext) -> Result<(), AppSW> {
             initially_given,
         } => match &inp_data {
             InputData::FillOrderV0(fill_amount) => {
-                // FIXME:
                 let (fill_coin_or_token_id, asked_amount) =
                     into_coin_or_token_id_and_amount(initially_asked)?;
                 let (given_coin_or_token_id, given_amount) =
@@ -669,12 +775,14 @@ fn process_input(ctx: &mut TxContext) -> Result<(), AppSW> {
         TxInput::Utxo(_) => InputData::Utxo,
         TxInput::Account(acc) => match acc.account {
             AccountSpending::DelegationBalance(_, amount) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::DelegationWithdrawl);
                 increase_input_totals(&mut ctx.total_inputs, CoinOrTokenId::Coin, amount)?;
                 InputData::DelegationWithdrawl
             }
         },
         TxInput::AccountCommand(_, cmd) => match cmd {
             AccountCommand::MintTokens(token_id, amount) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::MintTokens);
                 increase_input_totals(
                     &mut ctx.total_inputs,
                     CoinOrTokenId::TokenId(token_id),
@@ -682,21 +790,52 @@ fn process_input(ctx: &mut TxContext) -> Result<(), AppSW> {
                 )?;
                 InputData::MintTokens
             }
-            AccountCommand::ConcludeOrder(_) => InputData::ConcludeOrderV0,
-            AccountCommand::FillOrder(_, fill_amount, _) => InputData::FillOrderV0(fill_amount),
-            AccountCommand::UnmintTokens(_) => InputData::UnmintTokens,
-            AccountCommand::LockTokenSupply(_) => InputData::LockTokenSupply,
-            AccountCommand::FreezeToken(_, _) => InputData::FreezeToken,
-            AccountCommand::UnfreezeToken(_) => InputData::UnfreezeToken,
-            AccountCommand::ChangeTokenAuthority(_, _) => InputData::ChangeTokenAuthority,
-            AccountCommand::ChangeTokenMetadataUri(_, _) => InputData::ChangeTokenMetadataUri,
+            AccountCommand::ConcludeOrder(_) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ConcludeOrder);
+                InputData::ConcludeOrderV0
+            }
+            AccountCommand::FillOrder(_, fill_amount, _) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FillOrder);
+                InputData::FillOrderV0(fill_amount)
+            }
+            AccountCommand::UnmintTokens(_) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::UnmintTokens);
+                InputData::UnmintTokens
+            }
+            AccountCommand::LockTokenSupply(_) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::LockTokenSupply);
+                InputData::LockTokenSupply
+            }
+            AccountCommand::FreezeToken(_, _) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FreezeToken);
+                InputData::FreezeToken
+            }
+            AccountCommand::UnfreezeToken(_) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::UnfreezeToken);
+                InputData::UnfreezeToken
+            }
+            AccountCommand::ChangeTokenAuthority(_, _) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ChangeTokenAuthority);
+                InputData::ChangeTokenAuthority
+            }
+            AccountCommand::ChangeTokenMetadataUri(_, _) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ChangeTokenMetadataUri);
+                InputData::ChangeTokenMetadataUri
+            }
         },
         TxInput::OrderAccountCommand(cmd) => match cmd {
             OrderAccountCommand::FillOrder(_, fill_amount, _) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FillOrder);
                 InputData::FillOrderV1(fill_amount)
             }
-            OrderAccountCommand::ConcludeOrder(_) => InputData::ConcludeOrderV1,
-            OrderAccountCommand::FreezeOrder(_) => InputData::FreezeOrderV1,
+            OrderAccountCommand::ConcludeOrder(_) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ConcludeOrder);
+                InputData::ConcludeOrderV1
+            }
+            OrderAccountCommand::FreezeOrder(_) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FreezeOrder);
+                InputData::FreezeOrderV1
+            }
         },
     };
     ctx.inputs_data.push(input_data);
@@ -755,7 +894,10 @@ fn compute_signature_and_append(
         .get(sig_idx)
         .ok_or(AppSW::WrongContext)?;
 
-    let private_key = Secp256k1::derive_from_path(address.path.as_ref());
+    let [p1, p2, p3] = address.path;
+    let addr = [BIP44, ctx.coin.coin_path(), p1, p2, p3];
+
+    let private_key = Secp256k1::derive_from_path(&addr);
     let sig = schnorr_sign(&private_key, sighash, hash_algorithm_id, signing_mode)?;
 
     let sig = Signature {

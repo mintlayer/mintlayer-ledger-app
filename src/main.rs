@@ -110,9 +110,10 @@ pub enum AppSW {
     TxNumericOperationFail = 0xB00E,
     TxUnsupportedInput = 0xB00F,
     TxInvalidTokenV0 = 0xB010,
-    NothingToSign = 0xB011,
-    TxFinished = 0xB012,
-    InvalidPath = 0xB013,
+    TxInvalidInputPath = 0xB011,
+    NothingToSign = 0xB012,
+    TxFinished = 0xB013,
+    InvalidPath = 0xB014,
 
     WrongApduLength = StatusWords::BadLen as u16,
     Ok = 0x9000,

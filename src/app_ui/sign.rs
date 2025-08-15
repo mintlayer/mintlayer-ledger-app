@@ -15,13 +15,13 @@
  *  limitations under the License.
  *****************************************************************************/
 use crate::app_ui::utils::{bech32m_encode, to_address};
-use crate::handlers::sign_tx::{CoinOrTokenId, TxContext};
+use crate::handlers::sign_tx::{CoinOrTokenId, TxContext, TxType};
 use crate::utils::CoinType;
 use crate::AppSW;
 
 use chrono::{TimeZone, Utc};
 use include_gif::include_gif;
-use ledger_device_sdk::nbgl::{Field, NbglGlyph, NbglReview, NbglStreamingReview, TransactionType};
+use ledger_device_sdk::nbgl::{Field, NbglGlyph, NbglReview, TransactionType};
 use ml_common::{
     Amount, Destination, IsTokenFreezable, NftIssuance, OutputTimeLock, OutputValue, TokenIssuance,
     TokenTotalSupply, TxOutput, VRFPublicKeyHolder, H256,
@@ -98,47 +98,44 @@ pub fn ui_display_tx(tx: &TxContext) -> Result<bool, AppSW> {
     #[cfg(any(target_os = "nanosplus", target_os = "nanox"))]
     const FERRIS: NbglGlyph = NbglGlyph::from_include(include_gif!("crab_16x16.gif", NBGL));
 
-
-    /*
-    let mut review: NbglStreamingReview = NbglStreamingReview::new()
-        .glyph(&FERRIS)
-        .tx_type(TransactionType::Transaction);
-
-    if !review.start("Review transaction\nto send ML", "Foo") {
-        panic!("hello");
-        return Ok(false);
-    }
-    let f = Field {
-            name: "Fees:",
-            value: &fees,
-        };
-    if !review.continue_review(&[f]) {
-            return Ok(false);
-        }
-
-    Ok(review.finish("Sign transaction\nto send ML"))
-
-    
-     */
-    
+    let title = transaction_title(tx);
 
     // Create NBGL review. Maximum number of fields and string buffer length can be customised
     // with constant generic parameters of NbglReview. Default values are 32 and 1024 respectively.
     let review: NbglReview = NbglReview::new()
-        .titles(
-            "Review transaction\nto send ML",
-            "",
-            "Sign transaction\nto send ML",
-        )
+        .titles("Review transaction\nto send ML", "", title)
         .glyph(&FERRIS);
 
-    // If first setting switch is disabled do not display the transaction memo
-    //let settings: Settings = Default::default();
-    //if settings.get_element(0) == 0 {
-    //    Ok(review.show(&my_fields[0..2]))
-    //} else {
     Ok(review.show(&my_fields))
-    //}
+}
+
+fn transaction_title(tx: &TxContext) -> &'static str {
+    let title = match tx.tx_type {
+        None | Some(TxType::ComplexTransaction) => "Sign transaction",
+        Some(TxType::Transfer) => "Sign transfer transaction",
+        Some(TxType::Burn) => "Sign burn transaction",
+        Some(TxType::Htlc) => "Sign create HTLC transaction",
+        Some(TxType::CreateDelegation) => "Sign create Delegation transaction",
+        Some(TxType::DelegationStake) => "Sign stake Delegation transaction",
+        Some(TxType::DelegationWithdrawl) => "Sign withdrawal Delegation transaction",
+        Some(TxType::CreateStakePool) => "Sign create stake pool transaction",
+        Some(TxType::DecommissionStakePool) => "Sign decommission stake pool transaction",
+        Some(TxType::CreateNft) => "Sign create NFT transaction",
+        Some(TxType::CreateToken) => "Sign create Token transaction",
+        Some(TxType::MintTokens) => "Sign mint Tokens transaction",
+        Some(TxType::UnmintTokens) => "Sign unmint Tokens transaction",
+        Some(TxType::FreezeToken) => "Sign freeze Tokens transaction",
+        Some(TxType::UnfreezeToken) => "Sign unfreeze Tokens transaction",
+        Some(TxType::LockTokenSupply) => "Sign lock Token supply transaction",
+        Some(TxType::ChangeTokenAuthority) => "Sign change Token authority transaction",
+        Some(TxType::ChangeTokenMetadataUri) => "Sign change Token metadata uri transaction",
+        Some(TxType::CreateOrder) => "Sign create Order transaction",
+        Some(TxType::FillOrder) => "Sign fill Order transaction",
+        Some(TxType::FreezeOrder) => "Sign freeze Order transaction",
+        Some(TxType::ConcludeOrder) => "Sign conclude Order transaction",
+        Some(TxType::DataDeposit) => "Sign data deposit transaction",
+    };
+    title
 }
 
 /// Displays a message for review and signing confirmation on the device.

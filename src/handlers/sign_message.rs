@@ -1,5 +1,5 @@
 use crate::app_ui::sign::ui_display_message;
-use crate::utils::Bip32Path;
+use crate::utils::{Bip32Path, CoinType};
 use crate::{AppSW, DataContext};
 use alloc::vec::Vec;
 use ledger_device_sdk::ecc::{Secp256k1, SeedDerive};
@@ -13,16 +13,14 @@ use ledger_secure_sdk_sys::*;
 
 use parity_scale_codec::DecodeAll;
 
-const MAX_TRANSACTION_LEN: usize = 510;
+const MAX_MESSAGE_LEN: usize = 510;
 pub struct SignMessageContext {
     message: Vec<u8>,
     path: Bip32Path,
     review_finished: bool,
 }
 
-// Implement constructor for TxInfo with default values
 impl SignMessageContext {
-    // Constructor
     pub fn new(path: Bip32Path) -> Self {
         Self {
             message: Vec::new(),
@@ -30,8 +28,7 @@ impl SignMessageContext {
             review_finished: false,
         }
     }
-    // Get review status
-    #[allow(dead_code)]
+
     pub fn finished(&self) -> bool {
         self.review_finished
     }
@@ -43,41 +40,36 @@ pub fn handler_sign_message(
     more: bool,
     ctx: &mut DataContext,
 ) -> Result<(), AppSW> {
-    // Try to get data from comm
     let data = comm.get_data().map_err(|_| AppSW::WrongApduLength)?;
-    // First chunk, try to parse the path
+
     if chunk == 0 {
-        // Reset transaction context
-        let chain_type = data.get(0).ok_or(AppSW::WrongApduLength)?;
+        let coin: CoinType = (*data.get(0).ok_or(AppSW::WrongApduLength)?).try_into()?;
         let path = Bip32Path::decode_all(&mut &data[1..]).map_err(|_| AppSW::DeserializeFail)?;
+        if path.as_ref().get(1) != Some(&coin.coin_path()) {
+            return Err(AppSW::TxInvalidInputPath);
+        }
+
         let msg_ctx = SignMessageContext::new(path);
         *ctx = DataContext::SignMessageContext(msg_ctx);
         Ok(())
-    // Next chunks, append data to raw_tx and return or parse
-    // the transaction if it is the last chunk.
     } else {
         let ctx = match ctx {
             DataContext::SignMessageContext(ctx) => ctx,
             _ => return Err(AppSW::WrongContext),
         };
 
-        if ctx.message.len() + data.len() > MAX_TRANSACTION_LEN {
+        if ctx.message.len() + data.len() > MAX_MESSAGE_LEN {
             return Err(AppSW::TxWrongLength);
         }
 
-        // Append data to raw_tx
         ctx.message.extend(data);
 
-        // If we expect more chunks, return
         if more {
             ctx.review_finished = false;
             Ok(())
-        // Otherwise, try to parse the transaction
         } else {
-            // Try to deserialize the transaction
-            //let (tx, _): (Tx, usize) = from_slice(&ctx.raw_tx).map_err(|_| AppSW::TxParsingFail)?;
-            // Display transaction. If user approves
-            // the transaction, sign it. Otherwise,
+            // Display review. If user approves
+            // sign it. Otherwise,
             // return a "deny" status word.
             if ui_display_message(&ctx.message)? {
                 ctx.review_finished = true;
