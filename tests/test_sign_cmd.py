@@ -70,7 +70,7 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
     # It will yield the result when the navigation is done
     with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation appropriate for this device
-        scenario_navigator.review_approve()
+        scenario_navigator.review_approve(custom_screen_text=r"Sign\stransfer")
 
     # The device as yielded the result, parse it and ensure that the signature is correct
     response = client.get_async_response().data
@@ -128,7 +128,7 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
     # It will yield the result when the navigation is done
     with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation appropriate for this device
-        scenario_navigator.review_approve()
+        scenario_navigator.review_approve(custom_screen_text=r"Sign\swithdrawal")
 
     # The device as yielded the result, parse it and ensure that the signature is correct
     response = client.get_async_response().data
@@ -184,7 +184,7 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
     # It will yield the result when the navigation is done
     with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation appropriate for this device
-        scenario_navigator.review_approve()
+        scenario_navigator.review_approve(custom_screen_text=r"Sign\screate")
 
     # The device as yielded the result, parse it and ensure that the signature is correct
     response = client.get_async_response().data
@@ -239,7 +239,7 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
     # It will yield the result when the navigation is done
     with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation appropriate for this device
-        scenario_navigator.review_approve()
+        scenario_navigator.review_approve(custom_screen_text=r"Sign\sstake")
 
     # The device as yielded the result, parse it and ensure that the signature is correct
     response = client.get_async_response().data
@@ -301,7 +301,7 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
     # It will yield the result when the navigation is done
     with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation appropriate for this device
-        scenario_navigator.review_approve()
+        scenario_navigator.review_approve(custom_screen_text=r"Sign\screate\sstake")
 
     # The device as yielded the result, parse it and ensure that the signature is correct
     response = client.get_async_response().data
@@ -357,7 +357,7 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
     # Send the sign device instruction
     with client.sign_tx(transaction=transaction):
         # Validate the on-screen request
-        scenario_navigator.review_approve()
+        scenario_navigator.review_approve(custom_screen_text=r"Sign\screate\sToken")
 
     # The device has yielded the result, parse it and ensure that the signature is correct
     response = client.get_async_response().data
@@ -421,7 +421,7 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
     # Send the sign device instruction
     with client.sign_tx(transaction=transaction):
         # Validate the on-screen request
-        scenario_navigator.review_approve()
+        scenario_navigator.review_approve(custom_screen_text=r"Sign\screate\sNFT")
 
     # The device has yielded the result, parse it and ensure that the signature is correct
     response = client.get_async_response().data
@@ -512,7 +512,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
     # It will yield the result when the user validates on-screen.
     with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
-        scenario_navigator.review_approve()
+        scenario_navigator.review_approve(custom_screen_text=r"Sign\smint\sTokens")
     # The device has yielded the result, parse it and ensure the signatures are correct
     responses = client.get_all_signatures(transaction)
 
@@ -630,7 +630,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     # It will yield the result when the user validates on-screen.
     with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
-        scenario_navigator.review_approve()
+        scenario_navigator.review_approve(custom_screen_text=r"Sign\sunmint\sTokens")
     # The device has yielded the result, parse it and ensure the signatures are correct
     responses = client.get_all_signatures(transaction)
 
@@ -726,7 +726,7 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
     # It will yield the result when the user validates on-screen.
     with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
-        scenario_navigator.review_approve()
+        scenario_navigator.review_approve(custom_screen_text=r"Sign\sfreeze\sTokens")
     # The device has yielded the result, parse it and ensure the signatures are correct
     responses = client.get_all_signatures(transaction)
 
@@ -819,7 +819,7 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
     # It will yield the result when the user validates on-screen.
     with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
-        scenario_navigator.review_approve()
+        scenario_navigator.review_approve(custom_screen_text=r"Sign\sunfreeze")
     # The device has yielded the result, parse it and ensure the signatures are correct
     responses = client.get_all_signatures(transaction)
 
@@ -915,7 +915,7 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
     # It will yield the result when the user validates on-screen.
     with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
-        scenario_navigator.review_approve()
+        scenario_navigator.review_approve(custom_screen_text=r"Sign\schange\sToken")
     # The device has yielded the result, parse it and ensure the signatures are correct
     responses = client.get_all_signatures(transaction)
 
@@ -1011,7 +1011,7 @@ def test_sign_tx_change_token_metadata_uri(backend, scenario_navigator, device, 
     # It will yield the result when the user validates on-screen.
     with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
-        scenario_navigator.review_approve()
+        scenario_navigator.review_approve(custom_screen_text=r"Sign\schange\sToken")
     # The device has yielded the result, parse it and ensure the signatures are correct
     responses = client.get_all_signatures(transaction)
 
@@ -1073,7 +1073,6 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
                 'FillOrder': [
                     f'0x{bytes([0]*32).hex()}', # OrderId
                     fill_amount,
-                    {'PublicKey': {'key': {'Secp256k1Schnorr': {'pubkey_data': bytes([2]*33)}}}}
                 ]
             }
     }).data
@@ -1124,7 +1123,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     # It will yield the result when the user validates on-screen.
     with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
-        scenario_navigator.review_approve()
+        scenario_navigator.review_approve(custom_screen_text=r"Sign\sfill\sOrder")
     # The device has yielded the result, parse it and ensure the signatures are correct
     responses = client.get_all_signatures(transaction)
 
@@ -1235,7 +1234,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     # It will yield the result when the user validates on-screen.
     with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
-        scenario_navigator.review_approve()
+        scenario_navigator.review_approve(custom_screen_text=r"Sign\sconclude\sOrder")
     # The device has yielded the result, parse it and ensure the signatures are correct
     responses = client.get_all_signatures(transaction)
 

@@ -50,7 +50,7 @@ fn into_coin_or_token_id_and_amount(value: &OutputValue) -> Result<(CoinOrTokenI
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum TxType {
     Transfer,
     Burn,
@@ -78,10 +78,11 @@ pub enum TxType {
 }
 
 fn merge_tx_type(tx_type: Option<TxType>, new_type: TxType) -> Option<TxType> {
-    if tx_type.is_none() {
-        Some(new_type)
-    } else {
-        Some(TxType::ComplexTransaction)
+    match tx_type {
+        None => Some(new_type),
+        // Transfers are a lower priority so keep the previous one
+        Some(_) if new_type == TxType::Transfer => tx_type,
+        Some(_) => Some(TxType::ComplexTransaction)
     }
 }
 

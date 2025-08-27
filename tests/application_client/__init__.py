@@ -282,7 +282,7 @@ def init_mintlayer_types():
             "OrderAccountCommand": {
                 "type": "enum",
                 "type_mapping": [
-                    ["FillOrder", "(OrderId, Amount, Destination)"],
+                    ["FillOrder", "(OrderId, Amount)"],
                     ["FreezeOrder", "OrderId"],
                     ["ConcludeOrder", "OrderId"],
                 ]
