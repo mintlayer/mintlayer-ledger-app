@@ -21,7 +21,7 @@ use crate::AppSW;
 
 use chrono::{TimeZone, Utc};
 use include_gif::include_gif;
-use ledger_device_sdk::nbgl::{Field, NbglGlyph, NbglReview, TransactionType};
+use ledger_device_sdk::nbgl::{Field, NbglGlyph, NbglReview, NbglStreamingReview, TransactionType};
 use ml_common::{
     Amount, Destination, IsTokenFreezable, NftIssuance, OutputTimeLock, OutputValue, TokenIssuance,
     TokenTotalSupply, TxOutput, VRFPublicKeyHolder, H256,
@@ -33,18 +33,52 @@ use alloc::vec::Vec;
 use alloc::{format, string::ToString};
 use core::fmt::Write;
 
-/// Displays a transaction and returns true if user approved it.
-///
-/// This method can return [`AppSW::TxDisplayFail`] error if the coin name length is too long.
-///
-/// # Arguments
-///
-/// * `tx` - Transaction to be displayed for validation
-pub fn ui_display_tx(tx: &TxContext) -> Result<bool, AppSW> {
-    let fees = tx.total_inputs.iter().try_fold(
+pub fn new_streaming_review() -> NbglStreamingReview {
+    // Load glyph from 64x64 4bpp gif file with include_gif macro. Creates an NBGL compatible glyph.
+    #[cfg(any(target_os = "stax", target_os = "flex"))]
+    const FERRIS: NbglGlyph = NbglGlyph::from_include(include_gif!("crab_64x64.gif", NBGL));
+    #[cfg(any(target_os = "nanosplus", target_os = "nanox"))]
+    const FERRIS: NbglGlyph = NbglGlyph::from_include(include_gif!("crab_16x16.gif", NBGL));
+
+    NbglStreamingReview::new()
+        .glyph(&FERRIS)
+        .tx_type(TransactionType::Transaction)
+}
+
+pub fn start_streaming_review(review: &NbglStreamingReview) -> bool {
+    review.start("Review transaction", None)
+}
+
+pub fn streaming_review_show_output(
+    review: &NbglStreamingReview,
+    output: &TxOutput,
+    coin: CoinType,
+) -> Result<bool, AppSW> {
+    let (name, value) = format_output(output, coin)?;
+    let fields = [Field {
+        name,
+        value: &value,
+    }];
+
+    Ok(review.continue_review(&fields))
+}
+
+pub fn approve_streaming_review(
+    review: &NbglStreamingReview,
+    output: &TxOutput,
+    ctx: &TxContext,
+) -> Result<bool, AppSW> {
+    if !streaming_review_show_output(review, output, ctx.coin)? {
+        return Ok(false);
+    }
+
+    let fees = ctx.total_inputs.iter().try_fold(
         String::new(),
         |mut acc, (coin_or_token, amount)| -> Result<_, AppSW> {
-            let out = *tx.total_outputs.get(coin_or_token).unwrap_or(&Amount::ZERO);
+            let out = *ctx
+                .total_outputs
+                .get(coin_or_token)
+                .unwrap_or(&Amount::ZERO);
             let fee: u128 = amount
                 .into_atoms()
                 .checked_sub(out.into_atoms())
@@ -54,8 +88,8 @@ pub fn ui_display_tx(tx: &TxContext) -> Result<bool, AppSW> {
                 CoinOrTokenId::Coin => writeln!(
                     acc,
                     "{} {}",
-                    format_amount(Amount::from_atoms(fee), tx.coin),
-                    tx.coin.coin_ticker()
+                    format_amount(Amount::from_atoms(fee), ctx.coin),
+                    ctx.coin.coin_ticker()
                 )
                 .map_err(|_| AppSW::TxDisplayFail)?,
                 CoinOrTokenId::TokenId(token_id) => {
@@ -63,7 +97,7 @@ pub fn ui_display_tx(tx: &TxContext) -> Result<bool, AppSW> {
                         writeln!(
                             acc,
                             "{fee} {}",
-                            id_to_address(token_id, tx.coin.token_id_address_prefix())?
+                            id_to_address(token_id, ctx.coin.token_id_address_prefix())?
                         )
                         .map_err(|_| AppSW::TxDisplayFail)?
                     }
@@ -74,10 +108,66 @@ pub fn ui_display_tx(tx: &TxContext) -> Result<bool, AppSW> {
         },
     )?;
 
-    let formated_outputs: Vec<(&str, String)> = tx
-        .outputs
+    let fields = [Field {
+        name: "Fees:",
+        value: &fees,
+    }];
+
+    if !review.continue_review(&fields) {
+        return Ok(false);
+    }
+
+    let title = transaction_title(ctx);
+    Ok(review.finish(title))
+}
+
+/// Displays a transaction and returns true if user approved it.
+///
+/// This method can return [`AppSW::TxDisplayFail`] error if the coin name length is too long.
+///
+/// # Arguments
+///
+/// * `ctx` - TxContext to be displayed for validation
+pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, AppSW> {
+    let fees = ctx.total_inputs.iter().try_fold(
+        String::new(),
+        |mut acc, (coin_or_token, amount)| -> Result<_, AppSW> {
+            let out = *ctx
+                .total_outputs
+                .get(coin_or_token)
+                .unwrap_or(&Amount::ZERO);
+            let fee: u128 = amount
+                .into_atoms()
+                .checked_sub(out.into_atoms())
+                .ok_or(AppSW::TxNumericOperationFail)?;
+
+            match coin_or_token {
+                CoinOrTokenId::Coin => writeln!(
+                    acc,
+                    "{} {}",
+                    format_amount(Amount::from_atoms(fee), ctx.coin),
+                    ctx.coin.coin_ticker()
+                )
+                .map_err(|_| AppSW::TxDisplayFail)?,
+                CoinOrTokenId::TokenId(token_id) => {
+                    if fee != 0 {
+                        writeln!(
+                            acc,
+                            "{fee} {}",
+                            id_to_address(token_id, ctx.coin.token_id_address_prefix())?
+                        )
+                        .map_err(|_| AppSW::TxDisplayFail)?
+                    }
+                }
+            };
+
+            Ok(acc)
+        },
+    )?;
+
+    let formated_outputs: Vec<(&str, String)> = outputs
         .iter()
-        .map(|out| format_output(out, tx.coin))
+        .map(|out| format_output(out, ctx.coin))
         .collect::<Result<Vec<_>, _>>()?;
 
     // Define transaction review fields
@@ -98,12 +188,12 @@ pub fn ui_display_tx(tx: &TxContext) -> Result<bool, AppSW> {
     #[cfg(any(target_os = "nanosplus", target_os = "nanox"))]
     const FERRIS: NbglGlyph = NbglGlyph::from_include(include_gif!("crab_16x16.gif", NBGL));
 
-    let title = transaction_title(tx);
+    let title = transaction_title(ctx);
 
     // Create NBGL review. Maximum number of fields and string buffer length can be customised
     // with constant generic parameters of NbglReview. Default values are 32 and 1024 respectively.
     let review: NbglReview = NbglReview::new()
-        .titles("Review transaction\nto send ML", "", title)
+        .titles("Review transaction", "", title)
         .glyph(&FERRIS);
 
     Ok(review.show(&my_fields))

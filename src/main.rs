@@ -34,23 +34,23 @@ mod handlers {
 
 mod settings;
 
+use ledger_device_sdk::{
+    ecc::CxError,
+    io::{ApduHeader, Comm, Reply, StatusWords},
+    nbgl::{init_comm, NbglHomeAndSettings, NbglReviewStatus, StatusType},
+};
+
 use app_ui::menu::ui_menu_main;
 use handlers::{
     get_public_key::handler_get_public_key,
     get_version::handler_get_version,
-    sign_tx::{handler_sign_tx, TxContext},
+    sign_message::{handler_sign_message, SignMessageContext},
+    sign_tx::{handler_sign_tx, Review, TxContext},
 };
-use ledger_device_sdk::ecc::CxError;
-use ledger_device_sdk::io::{ApduHeader, Comm, Reply, StatusWords};
 
 ledger_device_sdk::set_panic!(ledger_device_sdk::exiting_panic);
-
 // Required for using String, Vec, format!...
 extern crate alloc;
-
-use ledger_device_sdk::nbgl::{init_comm, NbglHomeAndSettings, NbglReviewStatus, StatusType};
-
-use crate::handlers::sign_message::{handler_sign_message, SignMessageContext};
 
 // P2 for last APDU to receive.
 const P2_SIGN_TX_LAST: u8 = 0x00;
@@ -248,7 +248,7 @@ fn show_status_and_home_if_needed(ins: &Instruction, ctx: &mut Context, status: 
 
 pub enum DataContext {
     Empty,
-    TxContext(TxContext),
+    TxContext(TxContext, Review),
     SignMessageContext(SignMessageContext),
 }
 
@@ -269,7 +269,7 @@ impl Context {
         match &self.data {
             DataContext::Empty => false,
             DataContext::SignMessageContext(ctx) => ctx.finished(),
-            DataContext::TxContext(ctx) => ctx.finished(),
+            DataContext::TxContext(ctx, _) => ctx.finished(),
         }
     }
 }
