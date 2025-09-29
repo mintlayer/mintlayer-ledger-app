@@ -1,5 +1,20 @@
+// Copyright (c) 2025 RBB S.r.l
+// opensource@mintlayer.org
+// SPDX-License-Identifier: MIT
+// Licensed under the MIT License;
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// https://github.com/mintlayer/mintlayer-core/blob/master/LICENSE
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use crate::app_ui::sign::ui_display_message;
-use crate::utils::{Bip32Path, CoinType};
+use crate::utils::{AddrType, Bip32Path, CoinType};
 use crate::{AppSW, DataContext};
 use alloc::vec::Vec;
 use ledger_device_sdk::ecc::{Secp256k1, SeedDerive};
@@ -14,17 +29,22 @@ use ledger_secure_sdk_sys::*;
 use parity_scale_codec::DecodeAll;
 
 const MAX_MESSAGE_LEN: usize = 510;
+
 pub struct SignMessageContext {
     message: Vec<u8>,
     path: Bip32Path,
+    coin: CoinType,
+    addr_type: AddrType,
     review_finished: bool,
 }
 
 impl SignMessageContext {
-    pub fn new(path: Bip32Path) -> Self {
+    pub fn new(path: Bip32Path, coin: CoinType, addr_type: AddrType) -> Self {
         Self {
             message: Vec::new(),
             path,
+            coin,
+            addr_type,
             review_finished: false,
         }
     }
@@ -44,12 +64,13 @@ pub fn handler_sign_message(
 
     if chunk == 0 {
         let coin: CoinType = (*data.get(0).ok_or(AppSW::WrongApduLength)?).try_into()?;
-        let path = Bip32Path::decode_all(&mut &data[1..]).map_err(|_| AppSW::DeserializeFail)?;
+        let addr_type: AddrType = (*data.get(1).ok_or(AppSW::WrongApduLength)?).try_into()?;
+        let path = Bip32Path::decode_all(&mut &data[2..]).map_err(|_| AppSW::DeserializeFail)?;
         if path.as_ref().get(1) != Some(&coin.coin_path()) {
             return Err(AppSW::TxInvalidInputPath);
         }
 
-        let msg_ctx = SignMessageContext::new(path);
+        let msg_ctx = SignMessageContext::new(path, coin, addr_type);
         *ctx = DataContext::SignMessageContext(msg_ctx);
         Ok(())
     } else {
@@ -68,12 +89,17 @@ pub fn handler_sign_message(
             ctx.review_finished = false;
             Ok(())
         } else {
-            // Display review. If user approves
-            // sign it. Otherwise,
-            // return a "deny" status word.
-            if ui_display_message(&ctx.message)? {
+            let private_key = Secp256k1::derive_from_path(ctx.path.as_ref());
+            let public_key = private_key
+                .public_key()
+                .map_err(|_| AppSW::KeyDeriveFail)?
+                .pubkey;
+
+            // Display review. If user approves sign it.
+            // Otherwise, return a "deny" status word.
+            if ui_display_message(&ctx.message, &public_key, ctx.coin, ctx.addr_type)? {
                 ctx.review_finished = true;
-                compute_signature_and_append(comm, ctx)
+                compute_signature_and_append(comm, &private_key, ctx)
             } else {
                 ctx.review_finished = true;
                 Err(AppSW::Deny)
@@ -82,8 +108,9 @@ pub fn handler_sign_message(
     }
 }
 
-fn compute_signature_and_append(
+fn compute_signature_and_append<const N: usize>(
     comm: &mut Comm,
+    private_key: &ECPrivateKey<N, 'W'>,
     ctx: &mut SignMessageContext,
 ) -> Result<(), AppSW> {
     const MESSAGE_MAGIC_PREFIX: &str = "===MINTLAYER MESSAGE BEGIN===\n";
@@ -118,9 +145,8 @@ fn compute_signature_and_append(
     let hash_algorithm_id = CX_SHA256;
     let signing_mode = CX_ECSCHNORR_BIP0340 | CX_RND_PROVIDED | CX_LAST;
 
-    let private_key = Secp256k1::derive_from_path(ctx.path.as_ref());
     let sig = schnorr_sign(
-        &private_key,
+        private_key,
         &message_hash2_32,
         hash_algorithm_id,
         signing_mode,

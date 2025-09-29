@@ -17,6 +17,27 @@ impl AsRef<[u32]> for Bip32Path {
 
 #[repr(u8)]
 #[derive(Decode, Clone, Copy)]
+pub enum AddrType {
+    PublicKey = 0,
+    PublicKeyHash = 1,
+}
+
+impl TryFrom<u8> for AddrType {
+    type Error = AppSW;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        let addr_type = match value {
+            0 => Self::PublicKey,
+            1 => Self::PublicKeyHash,
+            _ => return Err(AppSW::DeserializeFail),
+        };
+
+        Ok(addr_type)
+    }
+}
+
+#[repr(u8)]
+#[derive(Decode, Clone, Copy)]
 pub enum CoinType {
     Mainnet = 0,
     Testnet = 1,

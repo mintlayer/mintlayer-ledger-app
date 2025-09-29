@@ -1,28 +1,30 @@
-/*****************************************************************************
- *   Ledger App Boilerplate Rust.
- *   (c) 2023 Ledger SAS.
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *****************************************************************************/
-use crate::app_ui::sign::{
-    approve_streaming_review, new_streaming_review, start_streaming_review,
-    streaming_review_show_output, ui_display_tx,
-};
-use crate::handlers::sign_message::schnorr_sign;
-use crate::utils::{Bip32Path, CoinType};
-use crate::{AppSW, DataContext, P1SignTx, P2_SIGN_TX_LAST, P2_SIGN_TX_MORE};
+// Copyright (c) 2025 RBB S.r.l
+// opensource@mintlayer.org
+// SPDX-License-Identifier: MIT
+// Licensed under the MIT License;
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// https://github.com/mintlayer/mintlayer-core/blob/master/LICENSE
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
+
+use crate::{
+    app_ui::sign::{
+        approve_streaming_review, new_streaming_review, start_streaming_review,
+        streaming_review_show_output, ui_display_tx,
+    },
+    handlers::sign_message::schnorr_sign,
+    utils::{Bip32Path, CoinType},
+    AppSW, DataContext, P1SignTx, P2_SIGN_TX_LAST, P2_SIGN_TX_MORE,
+};
 
 use ledger_device_sdk::{
     ecc::{Secp256k1, SeedDerive},
@@ -84,7 +86,7 @@ pub enum TxType {
 fn merge_tx_type(tx_type: Option<TxType>, new_type: TxType) -> Option<TxType> {
     match tx_type {
         None => Some(new_type),
-        // Transfers are a lower priority so keep the previous one
+        // Transfers are a lower priority (as they can be change outputs) so keep the previous type
         Some(_) if new_type == TxType::Transfer => tx_type,
         Some(_) => Some(TxType::ComplexTransaction),
     }
@@ -272,6 +274,7 @@ impl TxContext {
         })
     }
 
+    // Update the hasher with the contents of the raw_buf (contains an input, input commitment or an output)
     fn update_hash(&mut self) -> Result<(), AppSW> {
         self.tx_hasher
             .update(self.raw_buf.as_slice())
@@ -319,6 +322,7 @@ impl TxContext {
         }
     }
 
+    // After processing an output advance the internal state
     fn advance_next_output_state(&mut self, n: usize) -> Result<NextTxOutputParsingState, AppSW> {
         let next_state = if n < (self.num_outputs - 1) as usize {
             NextTxOutputParsingState::Output(n + 1)
@@ -365,6 +369,7 @@ impl TxContext {
         Ok(next_state)
     }
 
+    // After processing a signature advance the internal state
     fn advance_next_signing_step(&mut self, inp_idx: usize, sig_idx: usize, sighash: &[u8; 32]) {
         let next = self.next_input_idx_to_sign(inp_idx, Some(sig_idx));
         self.state = if let Some((inp_idx, sig_idx)) = next {
@@ -378,6 +383,10 @@ impl TxContext {
         };
     }
 
+    // As some inputs don't need signing and some multisig inputs can be signed multiple times
+    // find the next input index to sign.
+    //
+    // Returns the Tx input index and the index of the path/destination
     fn next_input_idx_to_sign(
         &mut self,
         current_inp_idx: usize,
@@ -407,6 +416,7 @@ impl TxContext {
         next
     }
 
+    // Check the state corresponds to the incoming request
     fn check_state(&self, p1: P1SignTx) -> Result<(), AppSW> {
         match (p1, &self.state) {
             (P1SignTx::Input, TxParsingState::Input(_))
@@ -424,7 +434,7 @@ impl TxContext {
         }
     }
 
-    // show a spinnger for bigger transactions
+    // show a spinner for bigger transactions
     fn show_spinner(&mut self) {
         let is_transaction_big = self.num_inputs * 2 + self.num_outputs > 10;
         let returning_signatures = match self.state {
@@ -455,13 +465,12 @@ impl TxContext {
 pub fn handler_sign_tx(
     comm: &mut Comm,
     p1: P1SignTx,
-    data_type: u8,
+    has_more: bool,
     ctx: &mut DataContext,
 ) -> Result<(), AppSW> {
     let data = comm.get_data().map_err(|_| AppSW::WrongApduLength)?;
 
     if p1 == P1SignTx::Metadata {
-        // Reset transaction context
         if data.len() != 10 {
             return Err(AppSW::WrongApduLength);
         }
@@ -495,11 +504,9 @@ pub fn handler_sign_tx(
             return Err(AppSW::TxWrongLength);
         }
 
-        // Append data to raw_tx
         ctx.raw_buf.extend(data);
 
-        // If we expect more chunks, return
-        if data_type == P2_SIGN_TX_MORE {
+        if has_more {
             return Ok(());
         }
 
@@ -533,6 +540,7 @@ pub fn handler_sign_tx(
             }
             TxParsingState::Output(num_out) => {
                 let output = process_output(ctx)?;
+                // on the first output add the number of outputs to the hash
                 if num_out == 0 {
                     ctx.tx_hasher
                         .update(&Compact::<u32>::encode(&ctx.num_outputs.into()))
@@ -641,9 +649,8 @@ pub fn handler_sign_tx(
                 sighash,
                 outputs,
             } => {
-                // Display transaction. If user approves
-                // the transaction, sign it. Otherwise,
-                // return a "deny" status word.
+                // Display transaction. If user approves the transaction, sign it.
+                // Otherwise, return a "deny" status word.
                 if ui_display_tx(ctx, outputs)? {
                     compute_signature_and_append(comm, ctx, inp_idx, sig_idx, &sighash)?;
                     if ctx.completed_all_signatures() {
@@ -663,7 +670,7 @@ pub fn handler_sign_tx(
                 sig_idx,
                 sighash,
             } => {
-                // Allready approved sign and return the next signature
+                // Already approved sign and return the next signature
                 compute_signature_and_append(comm, ctx, inp_idx, sig_idx, &sighash)?;
                 if ctx.completed_all_signatures() {
                     ctx.review_finished = true;

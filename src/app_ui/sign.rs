@@ -14,24 +14,32 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *****************************************************************************/
-use crate::app_ui::utils::{bech32m_encode, to_address};
-use crate::handlers::sign_tx::{CoinOrTokenId, TxContext, TxType};
-use crate::utils::CoinType;
-use crate::AppSW;
+use alloc::string::String;
+use alloc::vec::Vec;
+use alloc::{format, string::ToString};
+use core::fmt::Write;
+
+use crate::{
+    app_ui::{
+        address::compress_public_key,
+        utils::{bech32m_encode, to_address},
+    },
+    handlers::sign_tx::{CoinOrTokenId, TxContext, TxType},
+    utils::{AddrType, CoinType},
+    AppSW,
+};
 
 use chrono::{TimeZone, Utc};
 use include_gif::include_gif;
-use ledger_device_sdk::nbgl::{Field, NbglGlyph, NbglReview, NbglStreamingReview, TransactionType};
+use ledger_device_sdk::{
+    hash::{blake2::Blake2b_512, HashInit},
+    nbgl::{Field, NbglGlyph, NbglReview, NbglStreamingReview, TransactionType},
+};
 use ml_common::{
     Amount, Destination, IsTokenFreezable, NftIssuance, OutputTimeLock, OutputValue, TokenIssuance,
     TokenTotalSupply, TxOutput, VRFPublicKeyHolder, H256,
 };
 use parity_scale_codec::Encode;
-
-use alloc::string::String;
-use alloc::vec::Vec;
-use alloc::{format, string::ToString};
-use core::fmt::Write;
 
 pub fn new_streaming_review() -> NbglStreamingReview {
     // Load glyph from 64x64 4bpp gif file with include_gif macro. Creates an NBGL compatible glyph.
@@ -242,16 +250,52 @@ fn transaction_title(tx: &TxContext) -> &'static str {
 /// * `Ok(true)` if the user approves the signing.
 /// * `Ok(false)` if the user rejects.
 /// * `Err(AppSW)` on error.
-pub fn ui_display_message(message: &[u8]) -> Result<bool, AppSW> {
+pub fn ui_display_message(
+    message: &[u8],
+    public_key: &[u8; 65],
+    coin_type: CoinType,
+    addr_type: AddrType,
+) -> Result<bool, AppSW> {
+    let pk = compress_public_key(public_key)?;
+
+    let dest = match addr_type {
+        AddrType::PublicKey => ml_common::Destination::PublicKey(
+            ml_common::PublicKeyHolder::Secp256k1Schnorr(ml_common::PublicKey(pk)),
+        ),
+        AddrType::PublicKeyHash => {
+            let mut blake2b256 = Blake2b_512::new();
+            let mut public_key_hash: [u8; 64] = [0u8; 64];
+
+            blake2b256.update(&[0]).map_err(|_| AppSW::TxHashFail)?;
+            blake2b256.update(&pk).map_err(|_| AppSW::TxHashFail)?;
+
+            blake2b256
+                .finalize(&mut public_key_hash)
+                .map_err(|_| AppSW::TxHashFail)?;
+
+            let mut pkh = [0u8; 20];
+            pkh.copy_from_slice(&public_key_hash[0..20]);
+
+            ml_common::Destination::PublicKeyHash(ml_common::PublicKeyHash(pkh))
+        }
+    };
+    let addr = to_address(&dest, coin_type)?;
+
     let message_str = match core::str::from_utf8(message) {
         Ok(s) if s.is_ascii() => s.to_string(),
         Ok(_) | Err(_) => format!("0x{}", hex::encode(message)),
     };
 
-    let my_fields = [Field {
-        name: "Message",
-        value: message_str.as_str(),
-    }];
+    let my_fields = [
+        Field {
+            name: "Address",
+            value: addr.as_str(),
+        },
+        Field {
+            name: "Message",
+            value: message_str.as_str(),
+        },
+    ];
 
     // Load a generic icon for signing. You should replace this with your app's icon.
     // The `include_gif!` macro selects the correct size based on the target device.
@@ -285,6 +329,7 @@ fn id_to_address(id: &H256, hrp: &str) -> Result<String, AppSW> {
 fn format_amount(amount: Amount, coin: CoinType) -> String {
     let decimals = coin.coin_decimals() as usize;
     let mantissa = amount.into_atoms();
+
     // ceil(log10(u128::MAX)) + 1 for decimal point = 40
     // This is not the maximum possible length, but a reasonable expectation of it.
     let mut buffer = String::with_capacity(40);

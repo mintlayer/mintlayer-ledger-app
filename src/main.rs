@@ -157,9 +157,6 @@ impl From<CxError> for AppSW {
             CxError::InvalidPoint => Self::InvalidPoint,
             CxError::InvalidCurve => Self::InvalidCurve,
             CxError::GenericError => Self::GenericError,
-            // A catch-all arm to handle any other variants CxError might have.
-            // This makes the conversion robust.
-            //_ => Self::GenericError,
         }
     }
 }
@@ -175,7 +172,7 @@ pub enum Instruction {
     GetVersion,
     GetAppName,
     GetPubkey { display: bool },
-    SignTx { p1: P1SignTx, more: u8 },
+    SignTx { p1: P1SignTx, more: bool },
     SignMessage { chunk: u8, more: bool },
 }
 
@@ -204,8 +201,7 @@ impl TryFrom<ApduHeader> for Instruction {
             | (6, 1..=P1_SIGN_TX_MAX, 1 | 2 | P2_SIGN_TX_LAST | P2_SIGN_TX_MORE) => {
                 Ok(Instruction::SignTx {
                     p1: value.p1.try_into()?,
-                    // FIXME: make bool
-                    more: value.p2,
+                    more: value.p2 == P2_SIGN_TX_MORE,
                 })
             }
             (7, P1_SIGN_TX_START, P2_SIGN_TX_MORE)
