@@ -63,7 +63,7 @@ pub fn handler_sign_message(
     let data = comm.get_data().map_err(|_| AppSW::WrongApduLength)?;
 
     if chunk == 0 {
-        let coin: CoinType = (*data.get(0).ok_or(AppSW::WrongApduLength)?).try_into()?;
+        let coin: CoinType = (*data.first().ok_or(AppSW::WrongApduLength)?).try_into()?;
         let addr_type: AddrType = (*data.get(1).ok_or(AppSW::WrongApduLength)?).try_into()?;
         let path = Bip32Path::decode_all(&mut &data[2..]).map_err(|_| AppSW::DeserializeFail)?;
         if path.as_ref().get(1) != Some(&coin.coin_path()) {

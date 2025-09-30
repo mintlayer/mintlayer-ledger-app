@@ -26,7 +26,7 @@ use ledger_device_sdk::io::Comm;
 
 pub fn handler_get_public_key(comm: &mut Comm, display: bool) -> Result<(), AppSW> {
     let data = comm.get_data().map_err(|_| AppSW::WrongApduLength)?;
-    let chain_type = CoinType::try_from(*data.get(0).ok_or(AppSW::WrongApduLength)?)?;
+    let chain_type = CoinType::try_from(*data.first().ok_or(AppSW::WrongApduLength)?)?;
     let path = Bip32Path::decode_all(&mut &data[1..]).map_err(|_| AppSW::DeserializeFail)?;
 
     if path.as_ref().len() < 3 {
@@ -41,10 +41,8 @@ pub fn handler_get_public_key(comm: &mut Comm, display: bool) -> Result<(), AppS
     let code = cc.ok_or(AppSW::KeyDeriveFail)?;
 
     // Display address on device if requested
-    if display {
-        if !ui_display_pk(&pk.pubkey, chain_type)? {
-            return Err(AppSW::Deny);
-        }
+    if display && !ui_display_pk(&pk.pubkey, chain_type)? {
+        return Err(AppSW::Deny);
     }
 
     comm.append(&[pk.pubkey.len() as u8]);

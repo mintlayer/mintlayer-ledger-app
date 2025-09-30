@@ -33,7 +33,10 @@ use chrono::{TimeZone, Utc};
 use include_gif::include_gif;
 use ledger_device_sdk::{
     hash::{blake2::Blake2b_512, HashInit},
-    nbgl::{Field, NbglGlyph, NbglReview, NbglStreamingReview, TransactionType},
+    nbgl::{
+        Field, NbglGlyph, NbglReview, NbglStreamingReview, NbglStreamingReviewStatus,
+        TransactionType,
+    },
 };
 use ml_common::{
     Amount, Destination, IsTokenFreezable, NftIssuance, OutputTimeLock, OutputValue, TokenIssuance,
@@ -68,7 +71,12 @@ pub fn streaming_review_show_output(
         value: &value,
     }];
 
-    Ok(review.continue_review(&fields))
+    let res = match review.next(&fields) {
+        NbglStreamingReviewStatus::Rejected => false,
+        NbglStreamingReviewStatus::Next | NbglStreamingReviewStatus::Skipped => true,
+    };
+
+    Ok(res)
 }
 
 pub fn approve_streaming_review(
@@ -121,9 +129,10 @@ pub fn approve_streaming_review(
         value: &fees,
     }];
 
-    if !review.continue_review(&fields) {
-        return Ok(false);
-    }
+    match review.next(&fields) {
+        NbglStreamingReviewStatus::Rejected => return Ok(false),
+        NbglStreamingReviewStatus::Next | NbglStreamingReviewStatus::Skipped => {}
+    };
 
     let title = transaction_title(ctx);
     Ok(review.finish(title))
@@ -208,7 +217,7 @@ pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, AppS
 }
 
 fn transaction_title(tx: &TxContext) -> &'static str {
-    let title = match tx.tx_type {
+    match tx.tx_type {
         None | Some(TxType::ComplexTransaction) => "Sign transaction",
         Some(TxType::Transfer) => "Sign transfer transaction",
         Some(TxType::Burn) => "Sign burn transaction",
@@ -232,8 +241,7 @@ fn transaction_title(tx: &TxContext) -> &'static str {
         Some(TxType::FreezeOrder) => "Sign freeze Order transaction",
         Some(TxType::ConcludeOrder) => "Sign conclude Order transaction",
         Some(TxType::DataDeposit) => "Sign data deposit transaction",
-    };
-    title
+    }
 }
 
 /// Displays a message for review and signing confirmation on the device.

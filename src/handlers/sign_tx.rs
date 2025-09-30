@@ -294,7 +294,7 @@ impl TxContext {
         self.review_finished
     }
 
-    fn advance_next_input_step<'a, 'b>(&'a mut self, num_inp: usize) -> SigningState<'b> {
+    fn advance_next_input_step<'a>(&mut self, num_inp: usize) -> SigningState<'a> {
         self.state = if num_inp < (self.num_inputs - 1) as usize {
             TxParsingState::Input(num_inp + 1)
         } else {
@@ -304,11 +304,11 @@ impl TxContext {
         SigningState::TxParsingNotComplete
     }
 
-    fn advance_next_input_commitment_step<'a, 'b>(
-        &'a mut self,
+    fn advance_next_input_commitment_step<'a>(
+        &mut self,
         num_inp: usize,
-        review: &'b Review,
-    ) -> SigningState<'b> {
+        review: &'a Review,
+    ) -> SigningState<'a> {
         self.state = if num_inp < (self.num_inputs - 1) as usize {
             TxParsingState::InputCommitement(num_inp + 1)
         } else {

@@ -389,9 +389,9 @@ dependencies = [
 
 [[package]]
 name = "include_gif"
-version = "1.2.2"
+version = "1.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e142022621634b2f37faa976d6210d07fa804b0efa49e32a542b6532077d89a6"
+checksum = "4ed329eea6ba198654ceab2c4dd41637d4890dc3c2bba845a57b5f81dac6d6a6"
 dependencies = [
  "flate2",
  "image",
@@ -437,24 +437,24 @@ checksum = "03087c2bad5e1034e8cace5926dec053fb3790248370865f5117a7d0213354c8"
 
 [[package]]
 name = "ledger_device_sdk"
-version = "1.24.4"
+version = "1.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfb3d47450321ff9c41ccea6452f9d6735c16e522bac0ed802b1420dca9bc448"
+checksum = "18168861719886ee83098b9ad525b86022943a83f990e57f761368332c2670db"
 dependencies = [
  "const-zero",
  "include_gif",
  "ledger_secure_sdk_sys",
  "num-traits",
- "numtoa",
+ "numtoa 0.2.4",
  "rand_core",
  "zeroize",
 ]
 
 [[package]]
 name = "ledger_secure_sdk_sys"
-version = "1.11.1"
+version = "1.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e484986fd20c0e260507ad2125e1acaf8b12d670b64a66d5b88228b9f906f20"
+checksum = "e1b19cb4b5bcb8125ea4f5f6c0dcd409a4ec9ed9b4af0302e441b4afee379454"
 dependencies = [
  "bindgen",
  "cc",
@@ -535,7 +535,7 @@ dependencies = [
  "include_gif",
  "ledger_device_sdk",
  "ledger_secure_sdk_sys",
- "numtoa",
+ "numtoa 0.3.1",
  "parity-scale-codec",
  "serde",
  "serde-json-core",
@@ -578,6 +578,12 @@ name = "numtoa"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6aa2c4e539b869820a2b82e1aef6ff40aa85e65decdd5185e83fb4b1249cd00f"
+
+[[package]]
+name = "numtoa"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a6da8d50bd4f4b2e9788c44714a3fa4e465d33fd6a6ad70991db6eb30807dca"
 
 [[package]]
 name = "once_cell"
@@ -762,10 +768,11 @@ checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
 
 [[package]]
 name = "serde"
-version = "1.0.219"
+version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f0e2c6ed6606019b4e29e69dbaba95b11854410e5347d525002456dbbb786b6"
+checksum = "9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e"
 dependencies = [
+ "serde_core",
  "serde_derive",
 ]
 
@@ -780,10 +787,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_derive"
-version = "1.0.219"
+name = "serde_core"
+version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b0276cf7f2c73365f7157c8123c21cd9a50fbbd844757af28ca1f5925fc2a00"
+checksum = "41d385c7d4ca58e59fc732af25c3983b67ac852c1a25000afe1175de458b67ad"
+dependencies = [
+ "serde_derive",
+]
+
+[[package]]
+name = "serde_derive"
+version = "1.0.228"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79"
 dependencies = [
  "proc-macro2",
  "quote",

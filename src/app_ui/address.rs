@@ -59,6 +59,6 @@ pub fn ui_display_pk(uncompressed_key: &[u8; 65], coin_type: CoinType) -> Result
     // Display the address confirmation screen.
     Ok(NbglAddressReview::new()
         .glyph(&FERRIS)
-        .verify_str("Verify CRAB address")
+        .review_title("Verify ML address")
         .show(&addr))
 }
