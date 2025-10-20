@@ -383,6 +383,52 @@ def init_mintlayer_types():
                     ["signature", "Signature"],
                 ],
             },
+            "TxMetadataReq": {
+                "type": "struct",
+                "type_mapping": [
+                    ["coin", "u8"],
+                    ["version", "u8"],
+                    ["num_inputs", "u32"],
+                    ["num_outputs", "u32"],
+                ],
+            },
+            "TxInputReq": {
+                "type": "struct",
+                "type_mapping": [
+                    ["addresses", "Vec<InputAddressPath>"],
+                    ["inp", "TxInput"],
+                ],
+            },
+            "InputAdditionalInfoReq": {
+                "type": "enum",
+                "type_mapping": [
+                    ["None", "()"],
+                    ["Utxo", "TxOutput"],
+                    [
+                        "PoolInfo",
+                        "(TxOutput, Amount)",
+                    ],
+                    [
+                        "OrderInfo",
+                        "(OutputValue, OutputValue, Amount, Amount)",
+                    ],
+                ],
+            },
+            "TxOutputReq": {
+                "type": "struct",
+                "type_mapping": [
+                    ["out", "TxOutput"],
+                ],
+            },
+            "SignTxReq": {
+                "type": "enum",
+                "type_mapping": [
+                    ["Input", "TxInputReq"],
+                    ["InputAdditionalInfo", "InputAdditionalInfoReq"],
+                    ["Output", "TxOutputReq"],
+                    ["NextSignature", "()"],
+                ],
+            },
             "SemVer": {
                 "type": "struct",
                 "type_mapping": [

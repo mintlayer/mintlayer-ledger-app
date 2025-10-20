@@ -1,6 +1,7 @@
 /*****************************************************************************
- *   Ledger App Boilerplate Rust.
+ *   Mintlayer Ledger App.
  *   (c) 2023 Ledger SAS.
+ *   (c) 2025 RBB S.r.l.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
 #![no_std]
 #![no_main]
 
-mod utils;
 mod app_ui {
     pub mod address;
     pub mod menu;
@@ -39,51 +39,30 @@ use ledger_device_sdk::{
     io::{ApduHeader, Comm, Reply, StatusWords},
     nbgl::{init_comm, NbglHomeAndSettings, NbglReviewStatus, StatusType},
 };
+use parity_scale_codec::DecodeAll;
 
 use app_ui::menu::ui_menu_main;
 use handlers::{
     get_public_key::handler_get_public_key,
     get_version::handler_get_version,
-    sign_message::{handler_sign_message, SignMessageContext},
-    sign_tx::{handler_sign_tx, Review, TxContext},
+    sign_message::{handler_sign_message, setup_sign_message, SignMessageContext},
+    sign_tx::{setup_sign_tx, Review, TxContext},
 };
+use messages::{
+    Ins, P1SignTx, PubKeyP1, PublicKeyReq, SignMessageReq, SignTxReq, TxMetadataReq, WrongP1P2,
+    APDU_CLASS, P1_APP_NAME, P1_GET_VERSION, P1_SIGN_MAX_CHUNKS, P1_SIGN_NEXT, P1_SIGN_START,
+    P2_DONE, P2_SIGN_MORE,
+};
+
+use crate::handlers::sign_tx::handler_sign_tx;
 
 ledger_device_sdk::set_panic!(ledger_device_sdk::exiting_panic);
 // Required for using String, Vec, format!...
 extern crate alloc;
 
-// P2 for last APDU to receive.
-const P2_SIGN_TX_LAST: u8 = 0x00;
-// P2 for more APDU to receive.
-const P2_SIGN_TX_MORE: u8 = 0x80;
-// P1 for first APDU number.
-const P1_SIGN_TX_START: u8 = 0x00;
-// P1 for maximum APDU number.
-const P1_SIGN_TX_MAX: u8 = 0x04;
-
-#[derive(Clone, Copy, PartialEq)]
-pub enum P1SignTx {
-    Metadata,
-    Input,
-    InputCommitement,
-    Output,
-    NextSignature,
-}
-
-impl TryFrom<u8> for P1SignTx {
-    type Error = AppSW;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        let x = match value {
-            0 => Self::Metadata,
-            1 => Self::Input,
-            2 => Self::InputCommitement,
-            3 => Self::Output,
-            4 => Self::NextSignature,
-            _ => return Err(AppSW::WrongP1P2),
-        };
-
-        Ok(x)
+impl From<WrongP1P2> for AppSW {
+    fn from(_: WrongP1P2) -> Self {
+        Self::WrongP1P2
     }
 }
 
@@ -91,72 +70,73 @@ impl TryFrom<u8> for P1SignTx {
 #[repr(u16)]
 #[derive(Clone, Copy, PartialEq)]
 pub enum AppSW {
-    Deny = 0x6985,
-    WrongP1P2 = 0x6A86,
-    InsNotSupported = 0x6D00,
-    ClaNotSupported = 0x6E00,
-    TxDisplayFail = 0xB001,
-    AddrDisplayFail = 0xB002,
-    TxWrongLength = 0xB004,
-    TxParsingFail = 0xB005,
-    TxHashFail = 0xB006,
-    TxAddressFail = 0xB007,
-    TxSignFail = 0xB008,
-    KeyDeriveFail = 0xB009,
-    VersionParsingFail = 0xB00A,
-    WrongContext = 0xB00B,
-    DeserializeFail = 0xB00C,
-    TxInvalidInputUtxo = 0xB00D,
-    TxNumericOperationFail = 0xB00E,
-    TxUnsupportedInput = 0xB00F,
-    TxInvalidTokenV0 = 0xB010,
-    TxInvalidInputPath = 0xB011,
-    NothingToSign = 0xB012,
-    TxFinished = 0xB013,
-    InvalidPath = 0xB014,
-
+    Ok = StatusWords::Ok as u16,
+    Deny = StatusWords::UserCancelled as u16,
+    ClaNotSupported = StatusWords::BadCla as u16,
+    WrongP1P2 = StatusWords::BadP1P2 as u16,
+    InsNotSupported = StatusWords::BadIns as u16,
     WrongApduLength = StatusWords::BadLen as u16,
-    Ok = 0x9000,
 
-    Carry = 0xFF15,
-    Locked,
-    Unlocked,
-    NotLocked,
-    NotUnlocked,
-    InternalError,
-    InvalidParameterSize,
-    InvalidParameterValue,
-    InvalidParameter,
-    NotInvertible,
-    Overflow,
-    MemoryFull,
-    NoResidue,
-    PointAtInfinity,
-    InvalidPoint,
-    InvalidCurve,
-    GenericError,
+    TxDisplayFail = 0xB000,
+    AddrDisplayFail = 0xB001,
+    TxWrongLength = 0xB002,
+    TxParsingFail = 0xB003,
+    TxHashFail = 0xB004,
+    TxAddressFail = 0xB005,
+    TxSignFail = 0xB006,
+    KeyDeriveFail = 0xB007,
+    VersionParsingFail = 0xB008,
+    WrongContext = 0xB009,
+    DeserializeFail = 0xB00A,
+    TxInvalidInputUtxo = 0xB00B,
+    TxNumericOperationFail = 0xB00C,
+    TxUnsupportedInput = 0xB00D,
+    TxInvalidTokenV0 = 0xB00E,
+    TxInvalidInputPath = 0xB00F,
+    NothingToSign = 0xB010,
+    TxAlreadyFinished = 0xB011,
+    InvalidPath = 0xB012,
+    InvalidUncompressedPublicKey = 0xB013,
+
+    EccCarry = 0xB100,
+    EccLocked = 0xB101,
+    EccUnlocked = 0xB102,
+    EccNotLocked = 0xB103,
+    EccNotUnlocked = 0xB104,
+    EccInternalError = 0xB105,
+    EccInvalidParameterSize = 0xB106,
+    EccInvalidParameterValue = 0xB107,
+    EccInvalidParameter = 0xB108,
+    EccNotInvertible = 0xB109,
+    EccOverflow = 0xB10A,
+    EccMemoryFull = 0xB10B,
+    EccNoResidue = 0xB10C,
+    EccPointAtInfinity = 0xB10D,
+    EccInvalidPoint = 0xB10E,
+    EccInvalidCurve = 0xB10F,
+    EccGenericError = 0xB110,
 }
 
 impl From<CxError> for AppSW {
     fn from(value: CxError) -> Self {
         match value {
-            CxError::Carry => Self::Carry,
-            CxError::Locked => Self::Locked,
-            CxError::Unlocked => Self::Unlocked,
-            CxError::NotLocked => Self::NotLocked,
-            CxError::NotUnlocked => Self::NotUnlocked,
-            CxError::InternalError => Self::InternalError,
-            CxError::InvalidParameterSize => Self::InvalidParameterSize,
-            CxError::InvalidParameterValue => Self::InvalidParameterValue,
-            CxError::InvalidParameter => Self::InvalidParameter,
-            CxError::NotInvertible => Self::NotInvertible,
-            CxError::Overflow => Self::Overflow,
-            CxError::MemoryFull => Self::MemoryFull,
-            CxError::NoResidue => Self::NoResidue,
-            CxError::PointAtInfinity => Self::PointAtInfinity,
-            CxError::InvalidPoint => Self::InvalidPoint,
-            CxError::InvalidCurve => Self::InvalidCurve,
-            CxError::GenericError => Self::GenericError,
+            CxError::Carry => Self::EccCarry,
+            CxError::Locked => Self::EccLocked,
+            CxError::Unlocked => Self::EccUnlocked,
+            CxError::NotLocked => Self::EccNotLocked,
+            CxError::NotUnlocked => Self::EccNotUnlocked,
+            CxError::InternalError => Self::EccInternalError,
+            CxError::InvalidParameterSize => Self::EccInvalidParameterSize,
+            CxError::InvalidParameterValue => Self::EccInvalidParameterValue,
+            CxError::InvalidParameter => Self::EccInvalidParameter,
+            CxError::NotInvertible => Self::EccNotInvertible,
+            CxError::Overflow => Self::EccOverflow,
+            CxError::MemoryFull => Self::EccMemoryFull,
+            CxError::NoResidue => Self::EccNoResidue,
+            CxError::PointAtInfinity => Self::EccPointAtInfinity,
+            CxError::InvalidPoint => Self::EccInvalidPoint,
+            CxError::InvalidCurve => Self::EccInvalidCurve,
+            CxError::GenericError => Self::EccGenericError,
         }
     }
 }
@@ -192,26 +172,30 @@ impl TryFrom<ApduHeader> for Instruction {
     /// [`sample_main`] to have this verification automatically performed by the SDK.
     fn try_from(value: ApduHeader) -> Result<Self, Self::Error> {
         match (value.ins, value.p1, value.p2) {
-            (3, 0, 0) => Ok(Instruction::GetVersion),
-            (4, 0, 0) => Ok(Instruction::GetAppName),
-            (5, 0 | 1, 0) => Ok(Instruction::GetPubkey {
-                display: value.p1 != 0,
-            }),
-            (6, P1_SIGN_TX_START, P2_SIGN_TX_MORE)
-            | (6, 1..=P1_SIGN_TX_MAX, 1 | 2 | P2_SIGN_TX_LAST | P2_SIGN_TX_MORE) => {
-                Ok(Instruction::SignTx {
-                    p1: value.p1.try_into()?,
-                    more: value.p2 == P2_SIGN_TX_MORE,
+            (Ins::GET_VERSION, P1_GET_VERSION, P2_DONE) => Ok(Instruction::GetVersion),
+            (Ins::APP_NAME, P1_APP_NAME, P2_DONE) => Ok(Instruction::GetAppName),
+            (Ins::PUB_KEY, p1, P2_DONE) => {
+                let p1: PubKeyP1 = p1.try_into()?;
+                Ok(Instruction::GetPubkey {
+                    display: p1.display(),
                 })
             }
-            (7, P1_SIGN_TX_START, P2_SIGN_TX_MORE)
-            | (7, 1..=P1_SIGN_TX_MAX, P2_SIGN_TX_LAST | P2_SIGN_TX_MORE) => {
+            (Ins::SIGN_TX, p1, P2_SIGN_MORE | P2_DONE) => Ok(Instruction::SignTx {
+                p1: p1.try_into()?,
+                more: value.p2 == P2_SIGN_MORE,
+            }),
+            (Ins::SIGN_MSG, P1_SIGN_START, P2_DONE)
+            | (Ins::SIGN_MSG, P1_SIGN_NEXT..=P1_SIGN_MAX_CHUNKS, P2_DONE | P2_SIGN_MORE) => {
                 Ok(Instruction::SignMessage {
                     chunk: value.p1,
-                    more: value.p2 == P2_SIGN_TX_MORE,
+                    more: value.p2 == P2_SIGN_MORE,
                 })
             }
-            (3..=7, _, _) => Err(AppSW::WrongP1P2),
+            (
+                Ins::GET_VERSION | Ins::APP_NAME | Ins::PUB_KEY | Ins::SIGN_TX | Ins::SIGN_MSG,
+                _,
+                _,
+            ) => Err(AppSW::WrongP1P2),
             (_, _, _) => Err(AppSW::InsNotSupported),
         }
     }
@@ -272,15 +256,14 @@ impl Context {
 
 #[no_mangle]
 extern "C" fn sample_main() {
-    // Create the communication manager, and configure it to accept only APDU from the 0xe0 class.
+    // Create the communication manager, and configure it to accept only APDU from the APDU_CLASS.
     // If any APDU with a wrong class value is received, comm will respond automatically with
     // BadCla status word.
-    let mut comm = Comm::new().set_expected_cla(0xe0);
+    let mut comm = Comm::new().set_expected_cla(APDU_CLASS);
 
     let mut tx_ctx = Context::new();
 
-    // Initialize reference to Comm instance for NBGL
-    // API calls.
+    // Initialize reference to Comm instance for NBGL API calls.
     init_comm(&mut comm);
     tx_ctx.home = ui_menu_main(&mut comm);
     tx_ctx.home.show_and_return();
@@ -303,16 +286,49 @@ extern "C" fn sample_main() {
 }
 
 fn handle_apdu(comm: &mut Comm, ins: &Instruction, ctx: &mut Context) -> Result<(), AppSW> {
+    let mut data = comm.get_data().map_err(|_| AppSW::WrongApduLength)?;
     match ins {
         Instruction::GetAppName => {
             comm.append(env!("CARGO_PKG_NAME").as_bytes());
             Ok(())
         }
         Instruction::GetVersion => handler_get_version(comm),
-        Instruction::GetPubkey { display } => handler_get_public_key(comm, *display),
-        Instruction::SignTx { p1, more } => handler_sign_tx(comm, *p1, *more, &mut ctx.data),
+        Instruction::GetPubkey { display } => {
+            let req = PublicKeyReq::decode_all(&mut data).map_err(|_| AppSW::DeserializeFail)?;
+            handler_get_public_key(comm, req, *display)
+        }
+        Instruction::SignTx { p1, more } => {
+            if *p1 == P1SignTx::Metadata {
+                let req =
+                    TxMetadataReq::decode_all(&mut data).map_err(|_| AppSW::DeserializeFail)?;
+                setup_sign_tx(req, &mut ctx.data)
+            } else {
+                let mut data = comm.get_data().map_err(|_| AppSW::WrongApduLength)?;
+
+                let (ctx, review) = match &mut ctx.data {
+                    DataContext::TxContext(ctx, review) => (ctx, review),
+                    _ => return Err(AppSW::WrongContext),
+                };
+
+                ctx.show_spinner();
+                ctx.extend(data)?;
+
+                if *more {
+                    return Ok(());
+                }
+
+                let req = SignTxReq::decode_all(&mut data).map_err(|_| AppSW::DeserializeFail)?;
+                handler_sign_tx(comm, req, ctx, review)
+            }
+        }
         Instruction::SignMessage { chunk, more } => {
-            handler_sign_message(comm, *chunk, *more, &mut ctx.data)
+            if *chunk == 0 {
+                let req =
+                    SignMessageReq::decode_all(&mut data).map_err(|_| AppSW::DeserializeFail)?;
+                setup_sign_message(req, &mut ctx.data)
+            } else {
+                handler_sign_message(comm, *more, &mut ctx.data)
+            }
         }
     }
 }

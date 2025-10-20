@@ -5,18 +5,25 @@ from typing import Any, Generator, List, Optional
 import scalecodec  # type: ignore
 from ragger.backend.interface import RAPDU, BackendInterface
 
-from .boilerplate_transaction import Transaction
+from .mintlayer_transaction import Transaction
 
-MAX_APDU_LEN: int = 255
+tx_metadata_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
+    "TxMetadataReq"
+)
+sign_tx_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
+    "SignTxReq"
+)
 
-CLA: int = 0xE0
+MAX_APDU_LEN: int = 255 - 5  # 255 - CLA, INS, P1, P2, Lc
+
+CLA: int = 0xE2
 
 
 class P1(IntEnum):
     # Parameter 1 for first APDU number.
     P1_START = 0x00
     P1_TX_INPUT = 0x01
-    P1_TX_INPUT_COMMITMENT = 0x02
+    P1_TX_INPUT_ADDITIONAL_INFO = 0x02
     P1_TX_OUTPUT = 0x03
     P1_TX_NEXT_SIG = 0x04
     # Parameter 1 for maximum APDU number.
@@ -42,28 +49,22 @@ class InsType(IntEnum):
 
 class Errors(IntEnum):
     SW_DENY = 0x6985
-    SW_WRONG_P1P2 = 0x6A86
-    SW_INS_NOT_SUPPORTED = 0x6D00
     SW_CLA_NOT_SUPPORTED = 0x6E00
+    SW_INS_NOT_SUPPORTED = 0x6E01
+    SW_WRONG_P1P2 = 0x6E02
     SW_WRONG_APDU_LENGTH = 0x6E03
     SW_WRONG_RESPONSE_LENGTH = 0xB000
     SW_DISPLAY_BIP32_PATH_FAIL = 0xB001
-    SW_DISPLAY_ADDRESS_FAIL = 0xB002
-    SW_DISPLAY_AMOUNT_FAIL = 0xB003
-    SW_WRONG_TX_LENGTH = 0xB004
-    SW_TX_PARSING_FAIL = 0xB005
-    SW_TX_HASH_FAIL = 0xB006
-    SW_BAD_STATE = 0xB007
-    SW_SIGNATURE_FAIL = 0xB008
-    SW_WRONG_CONTEXT = 0xB00B
-    SW_DESERIALIZE_FAIL = 0xB00C
+    SW_WRONG_TX_LENGTH = 0xB002
+    SW_WRONG_CONTEXT = 0xB009
+    SW_DESERIALIZE_FAIL = 0xB00A
 
 
 def split_message(message: bytes, max_size: int) -> List[bytes]:
     return [message[x : x + max_size] for x in range(0, len(message), max_size)]
 
 
-class BoilerplateCommandSender:
+class MintlayerCommandSender:
     def __init__(self, backend: BackendInterface) -> None:
         self.backend = backend
 
@@ -141,18 +142,14 @@ class BoilerplateCommandSender:
 
     @contextmanager
     def sign_tx(self, transaction: Transaction) -> Generator[None, None, None]:
-        metadata = (
-            bytes(
-                [
-                    # 1 + 1 + 4 + 4, # len
-                    transaction.coin,
-                    1,  # version
-                ]
-            )
-            + len(transaction.inputs).to_bytes(byteorder="big", length=4)
-            + len(transaction.outputs).to_bytes(byteorder="big", length=4)
-        )
-        print("metadata ", len(metadata))
+        metadata = tx_metadata_obj.encode(
+            {
+                "coin": transaction.coin,
+                "version": 1,
+                "num_inputs": len(transaction.inputs),
+                "num_outputs": len(transaction.outputs),
+            }
+        ).data
 
         res = self.backend.exchange(
             cla=CLA,
@@ -164,50 +161,85 @@ class BoilerplateCommandSender:
         print("metadata ", res)
 
         for inp in transaction.inputs:
-            res = self.backend.exchange(
-                cla=CLA,
-                ins=InsType.SIGN_TX,
-                p1=P1.P1_TX_INPUT,
-                p2=P2.P2_LAST,
-                data=inp[0],
-            )
-            print("inp M ", res)
+            chunks = split_message(inp, MAX_APDU_LEN)
+            for chunk in chunks[:-1]:
+                res = self.backend.exchange(
+                    cla=CLA,
+                    ins=InsType.SIGN_TX,
+                    p1=P1.P1_TX_INPUT,
+                    p2=P2.P2_MORE,
+                    data=chunk,
+                )
+                print("inp chunk ", res)
 
             res = self.backend.exchange(
                 cla=CLA,
                 ins=InsType.SIGN_TX,
                 p1=P1.P1_TX_INPUT,
                 p2=P2.P2_LAST,
-                data=inp[1],
+                data=chunks[-1],
             )
             print("inp ", res)
 
-        for inpc in transaction.input_commitements:
+        for inpc in transaction.input_additional_data:
+            chunks = split_message(inpc, MAX_APDU_LEN)
+            for chunk in chunks[:-1]:
+                res = self.backend.exchange(
+                    cla=CLA,
+                    ins=InsType.SIGN_TX,
+                    p1=P1.P1_TX_INPUT_ADDITIONAL_INFO,
+                    p2=P2.P2_MORE,
+                    data=chunk,
+                )
+                print("inpC chunk ", res)
+
             res = self.backend.exchange(
                 cla=CLA,
                 ins=InsType.SIGN_TX,
-                p1=P1.P1_TX_INPUT_COMMITMENT,
+                p1=P1.P1_TX_INPUT_ADDITIONAL_INFO,
                 p2=P2.P2_LAST,
-                data=inpc,
+                data=chunks[-1],
             )
             print("inpC ", res)
 
         for out in transaction.outputs[:-1]:
+            chunks = split_message(out, MAX_APDU_LEN)
+            for chunk in chunks[:-1]:
+                res = self.backend.exchange(
+                    cla=CLA,
+                    ins=InsType.SIGN_TX,
+                    p1=P1.P1_TX_OUTPUT,
+                    p2=P2.P2_MORE,
+                    data=chunk,
+                )
+                print("Out chunk ", res)
             res = self.backend.exchange(
                 cla=CLA,
                 ins=InsType.SIGN_TX,
                 p1=P1.P1_TX_OUTPUT,
                 p2=P2.P2_LAST,
-                data=out,
+                data=chunks[-1],
             )
             print("Out ", res)
+
+        chunks = split_message(transaction.outputs[-1], MAX_APDU_LEN)
+
+        for chunk in chunks[:-1]:
+            res = self.backend.exchange(
+                cla=CLA,
+                ins=InsType.SIGN_TX,
+                p1=P1.P1_TX_OUTPUT,
+                p2=P2.P2_MORE,
+                data=chunk,
+            )
+            print("Last Out chunk ", res)
 
         with self.backend.exchange_async(
             cla=CLA,
             ins=InsType.SIGN_TX,
             p1=P1.P1_TX_OUTPUT,
             p2=P2.P2_LAST,
-            data=transaction.outputs[-1],
+            data=chunks[-1],
         ) as response:
             yield response
 
@@ -218,10 +250,15 @@ class BoilerplateCommandSender:
         if self.backend.last_async_response is None:
             raise ValueError("None response")
 
+        next_sig = sign_tx_req_obj.encode({"NextSignature": None}).data
         responses = [self.backend.last_async_response.data]
         for _ in tx.inputs[1:]:
             res = self.backend.exchange(
-                cla=CLA, ins=InsType.SIGN_TX, p1=4, p2=2, data=bytes()
+                cla=CLA,
+                ins=InsType.SIGN_TX,
+                p1=P1.P1_TX_NEXT_SIG,
+                p2=P2.P2_LAST,
+                data=next_sig,
             )
             if res is not None:
                 responses.append(res.data)

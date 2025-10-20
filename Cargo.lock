@@ -661,9 +661,9 @@ checksum = "03087c2bad5e1034e8cace5926dec053fb3790248370865f5117a7d0213354c8"
 
 [[package]]
 name = "ledger_device_sdk"
-version = "1.27.2"
+version = "1.27.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3d0edef82aee970715ac2c2a14aedc9566ed4e55e64be69756330d0d96ae86c"
+checksum = "11fd201290d8fed3839bddff552497d7bfacbd0792a429bc06a1c039491ac8c7"
 dependencies = [
  "const-zero",
  "include_gif",
@@ -676,9 +676,9 @@ dependencies = [
 
 [[package]]
 name = "ledger_secure_sdk_sys"
-version = "1.11.4"
+version = "1.11.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bff34c48f760f8ca001f9301bc79a6a8c8869166cfd99a6026be65d588a5fb7f"
+checksum = "73588e57cee6e8b3224699911cf5fa6684cdceffefa41bb42fbc17b1fe5fd752"
 dependencies = [
  "bindgen",
  "cc",
@@ -763,6 +763,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a282da65faaf38286cf3be983213fcf1d2e2a58700e808f83f4ea9a4804bc0"
 
 [[package]]
+name = "messages"
+version = "0.1.0"
+dependencies = [
+ "num_enum",
+ "parity-scale-codec",
+ "trezor-common",
+]
+
+[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -780,7 +789,7 @@ dependencies = [
 
 [[package]]
 name = "mintlayer-app"
-version = "1.7.1"
+version = "0.1.0"
 dependencies = [
  "bech32",
  "chrono",
@@ -789,6 +798,7 @@ dependencies = [
  "include_gif",
  "ledger_device_sdk",
  "ledger_secure_sdk_sys",
+ "messages",
  "numtoa 0.3.1",
  "parity-scale-codec",
  "serde",
@@ -877,6 +887,27 @@ checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
  "libm",
+]
+
+[[package]]
+name = "num_enum"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1207a7e20ad57b847bbddc6776b968420d38292bbfe2089accff5e19e82454c"
+dependencies = [
+ "num_enum_derive",
+ "rustversion",
+]
+
+[[package]]
+name = "num_enum_derive"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff32365de1b6743cb203b710788263c44a03de03802daf96092f2da4fe6ba4d7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.104",
 ]
 
 [[package]]

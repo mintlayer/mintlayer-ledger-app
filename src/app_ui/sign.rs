@@ -1,6 +1,6 @@
 /*****************************************************************************
- *   Ledger App Boilerplate Rust.
- *   (c) 2023 Ledger SAS.
+ *   Mintlayer Ledger App.
+ *   (c) 2025 RBB S.r.l.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *****************************************************************************/
+
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::{format, string::ToString};
@@ -25,13 +26,14 @@ use crate::{
         utils::{bech32m_encode, to_address},
     },
     handlers::sign_tx::{CoinOrTokenId, TxContext, TxType},
-    utils::{AddrType, CoinType},
     AppSW,
 };
+use messages::{AddrType, CoinType};
 
 use chrono::{TimeZone, Utc};
 use include_gif::include_gif;
 use ledger_device_sdk::{
+    ecc::ECPublicKey,
     hash::{blake2::Blake2b_512, HashInit},
     nbgl::{
         Field, NbglGlyph, NbglReview, NbglStreamingReview, NbglStreamingReviewStatus,
@@ -45,11 +47,16 @@ use ml_common::{
 use parity_scale_codec::Encode;
 
 pub fn new_streaming_review() -> NbglStreamingReview {
-    // Load glyph from 64x64 4bpp gif file with include_gif macro. Creates an NBGL compatible glyph.
+    // Load glyph from file with include_gif macro. Creates an NBGL compatible glyph.
+    #[cfg(target_os = "apex_p")]
+    const FERRIS: NbglGlyph =
+        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_48x48.png", NBGL));
     #[cfg(any(target_os = "stax", target_os = "flex"))]
-    const FERRIS: NbglGlyph = NbglGlyph::from_include(include_gif!("crab_64x64.gif", NBGL));
+    const FERRIS: NbglGlyph =
+        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_64x64.gif", NBGL));
     #[cfg(any(target_os = "nanosplus", target_os = "nanox"))]
-    const FERRIS: NbglGlyph = NbglGlyph::from_include(include_gif!("crab_16x16.gif", NBGL));
+    const FERRIS: NbglGlyph =
+        NbglGlyph::from_include(include_gif!("icons/mintlayer_14x14.gif", NBGL));
 
     NbglStreamingReview::new()
         .glyph(&FERRIS)
@@ -84,15 +91,15 @@ pub fn approve_streaming_review(
     output: &TxOutput,
     ctx: &TxContext,
 ) -> Result<bool, AppSW> {
-    if !streaming_review_show_output(review, output, ctx.coin)? {
+    if !streaming_review_show_output(review, output, ctx.coin())? {
         return Ok(false);
     }
 
-    let fees = ctx.total_inputs.iter().try_fold(
+    let fees = ctx.total_inputs().iter().try_fold(
         String::new(),
         |mut acc, (coin_or_token, amount)| -> Result<_, AppSW> {
             let out = *ctx
-                .total_outputs
+                .total_outputs()
                 .get(coin_or_token)
                 .unwrap_or(&Amount::ZERO);
             let fee: u128 = amount
@@ -104,8 +111,8 @@ pub fn approve_streaming_review(
                 CoinOrTokenId::Coin => writeln!(
                     acc,
                     "{} {}",
-                    format_amount(Amount::from_atoms(fee), ctx.coin),
-                    ctx.coin.coin_ticker()
+                    format_amount(Amount::from_atoms(fee), ctx.coin()),
+                    ctx.coin().coin_ticker()
                 )
                 .map_err(|_| AppSW::TxDisplayFail)?,
                 CoinOrTokenId::TokenId(token_id) => {
@@ -113,7 +120,7 @@ pub fn approve_streaming_review(
                         writeln!(
                             acc,
                             "{fee} {}",
-                            id_to_address(token_id, ctx.coin.token_id_address_prefix())?
+                            id_to_address(token_id, ctx.coin().token_id_address_prefix())?
                         )
                         .map_err(|_| AppSW::TxDisplayFail)?
                     }
@@ -146,11 +153,11 @@ pub fn approve_streaming_review(
 ///
 /// * `ctx` - TxContext to be displayed for validation
 pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, AppSW> {
-    let fees = ctx.total_inputs.iter().try_fold(
+    let fees = ctx.total_inputs().iter().try_fold(
         String::new(),
         |mut acc, (coin_or_token, amount)| -> Result<_, AppSW> {
             let out = *ctx
-                .total_outputs
+                .total_outputs()
                 .get(coin_or_token)
                 .unwrap_or(&Amount::ZERO);
             let fee: u128 = amount
@@ -162,8 +169,8 @@ pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, AppS
                 CoinOrTokenId::Coin => writeln!(
                     acc,
                     "{} {}",
-                    format_amount(Amount::from_atoms(fee), ctx.coin),
-                    ctx.coin.coin_ticker()
+                    format_amount(Amount::from_atoms(fee), ctx.coin()),
+                    ctx.coin().coin_ticker()
                 )
                 .map_err(|_| AppSW::TxDisplayFail)?,
                 CoinOrTokenId::TokenId(token_id) => {
@@ -171,7 +178,7 @@ pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, AppS
                         writeln!(
                             acc,
                             "{fee} {}",
-                            id_to_address(token_id, ctx.coin.token_id_address_prefix())?
+                            id_to_address(token_id, ctx.coin().token_id_address_prefix())?
                         )
                         .map_err(|_| AppSW::TxDisplayFail)?
                     }
@@ -184,7 +191,7 @@ pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, AppS
 
     let formated_outputs: Vec<(&str, String)> = outputs
         .iter()
-        .map(|out| format_output(out, ctx.coin))
+        .map(|out| format_output(out, ctx.coin()))
         .collect::<Result<Vec<_>, _>>()?;
 
     // Define transaction review fields
@@ -199,11 +206,16 @@ pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, AppS
 
     // Create transaction review
 
-    // Load glyph from 64x64 4bpp gif file with include_gif macro. Creates an NBGL compatible glyph.
+    // Load glyph from file with include_gif macro. Creates an NBGL compatible glyph.
+    #[cfg(target_os = "apex_p")]
+    const FERRIS: NbglGlyph =
+        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_48x48.png", NBGL));
     #[cfg(any(target_os = "stax", target_os = "flex"))]
-    const FERRIS: NbglGlyph = NbglGlyph::from_include(include_gif!("crab_64x64.gif", NBGL));
+    const FERRIS: NbglGlyph =
+        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_64x64.gif", NBGL));
     #[cfg(any(target_os = "nanosplus", target_os = "nanox"))]
-    const FERRIS: NbglGlyph = NbglGlyph::from_include(include_gif!("crab_16x16.gif", NBGL));
+    const FERRIS: NbglGlyph =
+        NbglGlyph::from_include(include_gif!("icons/mintlayer_14x14.gif", NBGL));
 
     let title = transaction_title(ctx);
 
@@ -217,7 +229,7 @@ pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, AppS
 }
 
 fn transaction_title(tx: &TxContext) -> &'static str {
-    match tx.tx_type {
+    match tx.tx_type() {
         None | Some(TxType::ComplexTransaction) => "Sign transaction",
         Some(TxType::Transfer) => "Sign transfer transaction",
         Some(TxType::Burn) => "Sign burn transaction",
@@ -258,9 +270,9 @@ fn transaction_title(tx: &TxContext) -> &'static str {
 /// * `Ok(true)` if the user approves the signing.
 /// * `Ok(false)` if the user rejects.
 /// * `Err(AppSW)` on error.
-pub fn ui_display_message(
+pub fn ui_display_message<const T: char>(
     message: &[u8],
-    public_key: &[u8; 65],
+    public_key: &ECPublicKey<65, T>,
     coin_type: CoinType,
     addr_type: AddrType,
 ) -> Result<bool, AppSW> {
@@ -305,12 +317,16 @@ pub fn ui_display_message(
         },
     ];
 
-    // Load a generic icon for signing. You should replace this with your app's icon.
-    // The `include_gif!` macro selects the correct size based on the target device.
+    // Load glyph from file with include_gif macro. Creates an NBGL compatible glyph.
+    #[cfg(target_os = "apex_p")]
+    const FERRIS: NbglGlyph =
+        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_48x48.png", NBGL));
     #[cfg(any(target_os = "stax", target_os = "flex"))]
-    const SIGN_ICON: NbglGlyph = NbglGlyph::from_include(include_gif!("crab_64x64.gif", NBGL));
+    const FERRIS: NbglGlyph =
+        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_64x64.gif", NBGL));
     #[cfg(any(target_os = "nanosplus", target_os = "nanox"))]
-    const SIGN_ICON: NbglGlyph = NbglGlyph::from_include(include_gif!("crab_16x16.gif", NBGL));
+    const FERRIS: NbglGlyph =
+        NbglGlyph::from_include(include_gif!("icons/mintlayer_14x14.gif", NBGL));
 
     // Create the NBGL review flow with titles appropriate for message signing.
     let review: NbglReview = NbglReview::new()
@@ -320,7 +336,7 @@ pub fn ui_display_message(
             "Sign message",     // Final confirmation prompt
         )
         .tx_type(TransactionType::Message)
-        .glyph(&SIGN_ICON);
+        .glyph(&FERRIS);
 
     // Show the review screen with the defined fields and return the user's choice.
     Ok(review.show(&my_fields))

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from hashlib import blake2b
-from typing import List, Tuple
+from typing import List
 
 from scalecodec.types import CompactU32  # type: ignore
 
@@ -12,8 +12,8 @@ class TransactionError(Exception):
 @dataclass
 class Transaction:
     coin: int
-    inputs: List[Tuple[bytes, bytes]]
-    input_commitements: List[bytes]
+    inputs: List[bytes]
+    input_additional_data: List[bytes]
     outputs: List[bytes]
 
     def to_hash(self) -> bytes:
@@ -22,10 +22,10 @@ class Transaction:
         hasher.update(b"\x00" * 16)
         hasher.update(len(self.inputs).to_bytes(4, "little"))
         for inp in self.inputs:
-            hasher.update(inp[1])
+            hasher.update(inp)
 
         hasher.update(len(self.inputs).to_bytes(4, "little"))
-        for inp_com in self.input_commitements:
+        for inp_com in self.input_additional_data:
             hasher.update(inp_com)
 
         hasher.update(CompactU32().encode(len(self.outputs)).data)

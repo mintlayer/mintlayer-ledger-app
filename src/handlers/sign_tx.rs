@@ -1,17 +1,19 @@
-// Copyright (c) 2025 RBB S.r.l
-// opensource@mintlayer.org
-// SPDX-License-Identifier: MIT
-// Licensed under the MIT License;
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// https://github.com/mintlayer/mintlayer-core/blob/master/LICENSE
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*****************************************************************************
+ *   Mintlayer Ledger App.
+ *   (c) 2025 RBB S.r.l.
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *****************************************************************************/
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
@@ -22,8 +24,11 @@ use crate::{
         streaming_review_show_output, ui_display_tx,
     },
     handlers::sign_message::schnorr_sign,
-    utils::{Bip32Path, CoinType},
-    AppSW, DataContext, P1SignTx, P2_SIGN_TX_LAST, P2_SIGN_TX_MORE,
+    AppSW, DataContext, P1SignTx, P2_DONE, P2_SIGN_MORE,
+};
+use messages::{
+    CoinType, InputAdditionalInfoReq, InputAddressPath, SignTxReq, TxInputReq, TxMetadataReq,
+    TxOutputReq,
 };
 
 use ledger_device_sdk::{
@@ -37,7 +42,7 @@ use ml_common::{
     AccountCommand, AccountSpending, Amount, OrderAccountCommand, OutputValue,
     SighashInputCommitment, TxInput, TxOutput, H256,
 };
-use parity_scale_codec::{Compact, Decode, DecodeAll, Encode};
+use parity_scale_codec::{Compact, Encode};
 
 const MAX_TRANSACTION_LEN: usize = 510;
 const BIP44: u32 = 44 + (1 << 31);
@@ -98,17 +103,6 @@ pub struct Signature {
     pub multisig_idx: Option<u32>,
 }
 
-#[derive(Decode)]
-pub struct Input {
-    pub addresses: Vec<InputAddressPath>,
-}
-
-#[derive(Decode)]
-pub struct InputAddressPath {
-    pub path: Bip32Path,
-    pub multisig_idx: Option<u32>,
-}
-
 pub struct InputCompressed {
     pub addresses: Vec<InputAddressPathCompressed>,
 }
@@ -129,7 +123,7 @@ impl InputAddressPathCompressed {
             return Err(AppSW::TxInvalidInputPath);
         }
 
-        if path[1] != coin.coin_path() {
+        if path[1] != coin.bip44_coin_type() {
             return Err(AppSW::TxInvalidInputPath);
         }
 
@@ -160,9 +154,9 @@ pub enum InputData {
 }
 
 #[derive(PartialEq, Eq)]
-pub enum TxParsingState {
+enum TxParsingState {
     Input(usize),
-    InputCommitement(usize),
+    InputAdditionalInfo(usize),
     Output(usize),
     CompleteNotApproved {
         inp_idx: usize,
@@ -189,17 +183,17 @@ pub enum NextTxOutputParsingState {
 
 pub struct TxContext {
     raw_buf: Vec<u8>,
-    pub coin: CoinType,
+    coin: CoinType,
     num_inputs: u32,
     num_outputs: u32,
     review_finished: bool,
     state: TxParsingState,
-    pub tx_type: Option<TxType>,
+    tx_type: Option<TxType>,
 
     tx_hasher: Blake2b_512,
 
-    pub total_inputs: BTreeMap<CoinOrTokenId, Amount>,
-    pub total_outputs: BTreeMap<CoinOrTokenId, Amount>,
+    total_inputs: BTreeMap<CoinOrTokenId, Amount>,
+    total_outputs: BTreeMap<CoinOrTokenId, Amount>,
     inputs: Vec<InputCompressed>,
     inputs_data: Vec<InputData>,
     num_prcessed_input_commitments: u32,
@@ -212,7 +206,7 @@ pub enum Review {
     StreamingReview(NbglStreamingReview),
 }
 
-enum SigningState<'a> {
+pub enum SigningState<'a> {
     StreamingReviewStart(&'a NbglStreamingReview),
     StreamingReviewOutput(&'a NbglStreamingReview, TxOutput),
     StreamingReviewApprove {
@@ -240,10 +234,12 @@ enum SigningState<'a> {
 impl TxContext {
     // Constructor
     pub fn new(
-        coin: CoinType,
-        version: u8,
-        num_inputs: u32,
-        num_outputs: u32,
+        TxMetadataReq {
+            coin,
+            version,
+            num_inputs,
+            num_outputs,
+        }: TxMetadataReq,
     ) -> Result<TxContext, AppSW> {
         let mut tx_hasher = Blake2b_512::new();
         // mode
@@ -274,12 +270,32 @@ impl TxContext {
         })
     }
 
-    // Update the hasher with the contents of the raw_buf (contains an input, input commitment or an output)
-    fn update_hash(&mut self) -> Result<(), AppSW> {
+    pub fn coin(&self) -> CoinType {
+        self.coin
+    }
+
+    pub fn tx_type(&self) -> Option<TxType> {
+        self.tx_type
+    }
+
+    pub fn total_inputs(&self) -> &BTreeMap<CoinOrTokenId, Amount> {
+        &self.total_inputs
+    }
+
+    pub fn total_outputs(&self) -> &BTreeMap<CoinOrTokenId, Amount> {
+        &self.total_outputs
+    }
+
+    fn state(&self) -> &TxParsingState {
+        &self.state
+    }
+
+    fn update_hash<T: Encode>(&mut self, data: &T) -> Result<(), AppSW> {
+        self.raw_buf.clear();
+        data.encode_to(&mut self.raw_buf);
         self.tx_hasher
             .update(self.raw_buf.as_slice())
             .map_err(|_| AppSW::TxHashFail)?;
-
         self.raw_buf.clear();
         Ok(())
     }
@@ -298,19 +314,19 @@ impl TxContext {
         self.state = if num_inp < (self.num_inputs - 1) as usize {
             TxParsingState::Input(num_inp + 1)
         } else {
-            TxParsingState::InputCommitement(0)
+            TxParsingState::InputAdditionalInfo(0)
         };
 
         SigningState::TxParsingNotComplete
     }
 
-    fn advance_next_input_commitment_step<'a>(
+    fn advance_next_input_additional_info_step<'a>(
         &mut self,
         num_inp: usize,
         review: &'a Review,
     ) -> SigningState<'a> {
         self.state = if num_inp < (self.num_inputs - 1) as usize {
-            TxParsingState::InputCommitement(num_inp + 1)
+            TxParsingState::InputAdditionalInfo(num_inp + 1)
         } else {
             self.inputs_data = Vec::new();
             TxParsingState::Output(0)
@@ -417,10 +433,10 @@ impl TxContext {
     }
 
     // Check the state corresponds to the incoming request
-    fn check_state(&self, p1: P1SignTx) -> Result<(), AppSW> {
+    pub fn check_state(&self, p1: P1SignTx) -> Result<(), AppSW> {
         match (p1, &self.state) {
             (P1SignTx::Input, TxParsingState::Input(_))
-            | (P1SignTx::InputCommitement, TxParsingState::InputCommitement(_))
+            | (P1SignTx::InputAdditionalInfo, TxParsingState::InputAdditionalInfo(_))
             | (P1SignTx::Output, TxParsingState::Output(_))
             | (
                 P1SignTx::NextSignature,
@@ -434,8 +450,17 @@ impl TxContext {
         }
     }
 
+    pub fn extend(&mut self, chunk: &[u8]) -> Result<(), AppSW> {
+        if self.raw_buf.len() + chunk.len() > MAX_TRANSACTION_LEN {
+            return Err(AppSW::TxWrongLength);
+        }
+
+        self.raw_buf.extend(chunk);
+        Ok(())
+    }
+
     // show a spinner for bigger transactions
-    fn show_spinner(&mut self) {
+    pub fn show_spinner(&mut self) {
         let is_transaction_big = self.num_inputs * 2 + self.num_outputs > 10;
         let returning_signatures = match self.state {
             TxParsingState::ApprovedNotFinishedSigning {
@@ -450,7 +475,7 @@ impl TxContext {
             } => true,
             TxParsingState::Input(_)
             | TxParsingState::Finished
-            | TxParsingState::InputCommitement(_)
+            | TxParsingState::InputAdditionalInfo(_)
             | TxParsingState::Output(_) => false,
         };
 
@@ -462,215 +487,193 @@ impl TxContext {
     }
 }
 
+pub fn setup_sign_tx(req: TxMetadataReq, ctx: &mut DataContext) -> Result<(), AppSW> {
+    let mut tx_ctx = TxContext::new(req)?;
+
+    tx_ctx.show_spinner();
+
+    // if has many outputs use a streaming review
+    if tx_ctx.num_outputs > 10 {
+        *ctx = DataContext::TxContext(tx_ctx, Review::StreamingReview(new_streaming_review()));
+    } else {
+        *ctx = DataContext::TxContext(tx_ctx, Review::Review(Vec::new()));
+    }
+
+    Ok(())
+}
+
+fn handle_input_req<'a>(
+    req: TxInputReq,
+    input_step: usize,
+    ctx: &mut TxContext,
+) -> Result<SigningState<'a>, AppSW> {
+    let addresses = req
+        .addresses
+        .into_iter()
+        .map(|a| InputAddressPathCompressed::new(a, ctx.coin))
+        .collect::<Result<Vec<_>, AppSW>>()?;
+
+    ctx.inputs.push(InputCompressed { addresses });
+
+    process_input(ctx, &req.inp)?;
+    ctx.update_hash(&req.inp)?;
+    Ok(ctx.advance_next_input_step(input_step))
+}
+
+fn handle_input_additional_info_req<'a>(
+    req: InputAdditionalInfoReq,
+    input_step: usize,
+    ctx: &mut TxContext,
+    review: &'a mut Review,
+) -> Result<SigningState<'a>, AppSW> {
+    let commitment = process_input_additional_info(ctx, req)?;
+    ctx.update_hash(&commitment)?;
+    Ok(ctx.advance_next_input_additional_info_step(input_step, review))
+}
+
+fn handle_output_req<'a>(
+    req: TxOutputReq,
+    output_step: usize,
+    ctx: &mut TxContext,
+    review: &'a mut Review,
+) -> Result<SigningState<'a>, AppSW> {
+    process_output(ctx, &req.out)?;
+    // on the first output add the number of outputs to the hash
+    if output_step == 0 {
+        ctx.tx_hasher
+            .update(&Compact::<u32>::encode(&ctx.num_outputs.into()))
+            .map_err(|_| AppSW::TxHashFail)?;
+    }
+    ctx.update_hash(&req.out)?;
+    let next_step = ctx.advance_next_output_state(output_step)?;
+    let signin_state = match review {
+        Review::Review(outputs) => {
+            outputs.push(req.out);
+            match next_step {
+                NextTxOutputParsingState::Output(_) => SigningState::TxParsingNotComplete,
+                NextTxOutputParsingState::CompleteNotApproved {
+                    inp_idx,
+                    sig_idx,
+                    sighash,
+                } => SigningState::CompleteNotApproved {
+                    inp_idx,
+                    sig_idx,
+                    sighash,
+                    outputs,
+                },
+            }
+        }
+        Review::StreamingReview(review) => {
+            // on last output show it and ask for approval
+            match next_step {
+                NextTxOutputParsingState::Output(_) => {
+                    SigningState::StreamingReviewOutput(review, req.out)
+                }
+                NextTxOutputParsingState::CompleteNotApproved {
+                    inp_idx,
+                    sig_idx,
+                    sighash,
+                } => SigningState::StreamingReviewApprove {
+                    review,
+                    output: req.out,
+                    inp_idx,
+                    sig_idx,
+                    sighash,
+                },
+            }
+        }
+    };
+
+    Ok(signin_state)
+}
+
 pub fn handler_sign_tx(
     comm: &mut Comm,
-    p1: P1SignTx,
-    has_more: bool,
-    ctx: &mut DataContext,
+    req: SignTxReq,
+    ctx: &mut TxContext,
+    review: &mut Review,
 ) -> Result<(), AppSW> {
-    let data = comm.get_data().map_err(|_| AppSW::WrongApduLength)?;
-
-    if p1 == P1SignTx::Metadata {
-        if data.len() != 10 {
-            return Err(AppSW::WrongApduLength);
+    let signing_state = match (req, ctx.state()) {
+        (SignTxReq::Input(req), TxParsingState::Input(n)) => handle_input_req(req, *n, ctx)?,
+        (SignTxReq::InputAdditionalInfo(req), TxParsingState::InputAdditionalInfo(n)) => {
+            handle_input_additional_info_req(req, *n, ctx, review)?
         }
-
-        let coin = data[0].try_into()?;
-        let version = u8::from_be_bytes(data[1..2].try_into().unwrap());
-        let num_inputs = u32::from_be_bytes(data[2..6].try_into().unwrap());
-        let num_outputs = u32::from_be_bytes(data[6..10].try_into().unwrap());
-
-        let mut tx_ctx = TxContext::new(coin, version, num_inputs, num_outputs)?;
-
-        tx_ctx.show_spinner();
-
-        // if has many outputs use a streaming review
-        if num_outputs > 10 {
-            *ctx = DataContext::TxContext(tx_ctx, Review::StreamingReview(new_streaming_review()));
-        } else {
-            *ctx = DataContext::TxContext(tx_ctx, Review::Review(Vec::new()));
+        (SignTxReq::Output(req), TxParsingState::Output(n)) => {
+            handle_output_req(req, *n, ctx, review)?
         }
-
-        Ok(())
-    } else {
-        let (ctx, review) = match ctx {
-            DataContext::TxContext(ctx, review) => (ctx, review),
-            _ => return Err(AppSW::WrongContext),
-        };
-
-        ctx.show_spinner();
-
-        if ctx.raw_buf.len() + data.len() > MAX_TRANSACTION_LEN {
-            return Err(AppSW::TxWrongLength);
-        }
-
-        ctx.raw_buf.extend(data);
-
-        if has_more {
-            return Ok(());
-        }
-
-        ctx.check_state(p1)?;
-
-        let signing_state = match ctx.state {
-            TxParsingState::Input(n) => {
-                if ctx.inputs.len() == n {
-                    let inp = Input::decode_all(&mut ctx.raw_buf.as_slice())
-                        .map_err(|_| AppSW::DeserializeFail)?;
-
-                    let addresses = inp
-                        .addresses
-                        .into_iter()
-                        .map(|a| InputAddressPathCompressed::new(a, ctx.coin))
-                        .collect::<Result<Vec<_>, AppSW>>()?;
-
-                    ctx.inputs.push(InputCompressed { addresses });
-                    ctx.raw_buf.clear();
-                    return Ok(());
-                } else {
-                    process_input(ctx)?;
-                    ctx.update_hash()?;
-                    ctx.advance_next_input_step(n)
-                }
-            }
-            TxParsingState::InputCommitement(n) => {
-                process_input_commitement(ctx)?;
-                ctx.update_hash()?;
-                ctx.advance_next_input_commitment_step(n, review)
-            }
-            TxParsingState::Output(num_out) => {
-                let output = process_output(ctx)?;
-                // on the first output add the number of outputs to the hash
-                if num_out == 0 {
-                    ctx.tx_hasher
-                        .update(&Compact::<u32>::encode(&ctx.num_outputs.into()))
-                        .map_err(|_| AppSW::TxHashFail)?;
-                }
-                ctx.update_hash()?;
-                let next_step = ctx.advance_next_output_state(num_out)?;
-                match review {
-                    Review::Review(outputs) => {
-                        outputs.push(output);
-                        match next_step {
-                            NextTxOutputParsingState::Output(_) => {
-                                SigningState::TxParsingNotComplete
-                            }
-                            NextTxOutputParsingState::CompleteNotApproved {
-                                inp_idx,
-                                sig_idx,
-                                sighash,
-                            } => SigningState::CompleteNotApproved {
-                                inp_idx,
-                                sig_idx,
-                                sighash,
-                                outputs,
-                            },
-                        }
-                    }
-                    Review::StreamingReview(review) => {
-                        // on last output show it and ask for approval
-                        match next_step {
-                            NextTxOutputParsingState::Output(_) => {
-                                SigningState::StreamingReviewOutput(review, output)
-                            }
-                            NextTxOutputParsingState::CompleteNotApproved {
-                                inp_idx,
-                                sig_idx,
-                                sighash,
-                            } => SigningState::StreamingReviewApprove {
-                                review,
-                                output,
-                                inp_idx,
-                                sig_idx,
-                                sighash,
-                            },
-                        }
-                    }
-                }
-            }
-            TxParsingState::CompleteNotApproved {
-                inp_idx: _,
-                sig_idx: _,
-                sighash: _,
-            } => return Err(AppSW::Deny),
+        (
+            SignTxReq::NextSignature,
             TxParsingState::ApprovedNotFinishedSigning {
                 inp_idx,
                 sig_idx,
                 sighash,
-            } => SigningState::ApprovedNotFinishedSigning {
-                inp_idx,
-                sig_idx,
-                sighash,
             },
-            TxParsingState::Finished => return Err(AppSW::TxFinished),
-        };
+        ) => SigningState::ApprovedNotFinishedSigning {
+            inp_idx: *inp_idx,
+            sig_idx: *sig_idx,
+            sighash: *sighash,
+        },
+        (
+            SignTxReq::NextSignature,
+            TxParsingState::CompleteNotApproved {
+                inp_idx: _,
+                sig_idx: _,
+                sighash: _,
+            },
+        ) => return Err(AppSW::Deny),
+        (SignTxReq::NextSignature, TxParsingState::Finished) => {
+            return Err(AppSW::TxAlreadyFinished)
+        }
+        (_, _) => return Err(AppSW::WrongP1P2),
+    };
 
-        match signing_state {
-            SigningState::TxParsingNotComplete => Ok(()),
-            SigningState::StreamingReviewStart(review) => {
-                if start_streaming_review(review) {
-                    Ok(())
-                } else {
-                    ctx.review_finished = true;
-                    Err(AppSW::Deny)
-                }
+    match signing_state {
+        SigningState::TxParsingNotComplete => Ok(()),
+        SigningState::StreamingReviewStart(review) => {
+            if start_streaming_review(review) {
+                Ok(())
+            } else {
+                ctx.review_finished = true;
+                Err(AppSW::Deny)
             }
-            SigningState::StreamingReviewOutput(review, output) => {
-                if streaming_review_show_output(review, &output, ctx.coin)? {
-                    Ok(())
-                } else {
-                    ctx.review_finished = true;
-                    Err(AppSW::Deny)
-                }
+        }
+        SigningState::StreamingReviewOutput(review, output) => {
+            if streaming_review_show_output(review, &output, ctx.coin)? {
+                Ok(())
+            } else {
+                ctx.review_finished = true;
+                Err(AppSW::Deny)
             }
-            SigningState::StreamingReviewApprove {
-                review,
-                output,
-                inp_idx,
-                sig_idx,
-                sighash,
-            } => {
-                if approve_streaming_review(review, &output, ctx)? {
-                    compute_signature_and_append(comm, ctx, inp_idx, sig_idx, &sighash)?;
-                    if ctx.completed_all_signatures() {
-                        ctx.review_finished = true;
-                    } else {
-                        ctx.show_spinner();
-                    }
-                    Ok(())
-                } else {
+        }
+        SigningState::StreamingReviewApprove {
+            review,
+            output,
+            inp_idx,
+            sig_idx,
+            sighash,
+        } => {
+            if approve_streaming_review(review, &output, ctx)? {
+                compute_signature_and_append(comm, ctx, inp_idx, sig_idx, &sighash)?;
+                if ctx.completed_all_signatures() {
                     ctx.review_finished = true;
-                    Err(AppSW::Deny)
-                }
-            }
-            SigningState::CompleteNotApproved {
-                inp_idx,
-                sig_idx,
-                sighash,
-                outputs,
-            } => {
-                // Display transaction. If user approves the transaction, sign it.
-                // Otherwise, return a "deny" status word.
-                if ui_display_tx(ctx, outputs)? {
-                    compute_signature_and_append(comm, ctx, inp_idx, sig_idx, &sighash)?;
-                    if ctx.completed_all_signatures() {
-                        ctx.review_finished = true;
-                    } else {
-                        ctx.show_spinner();
-                    }
-
-                    Ok(())
                 } else {
-                    ctx.review_finished = true;
-                    Err(AppSW::Deny)
+                    ctx.show_spinner();
                 }
+                Ok(())
+            } else {
+                ctx.review_finished = true;
+                Err(AppSW::Deny)
             }
-            SigningState::ApprovedNotFinishedSigning {
-                inp_idx,
-                sig_idx,
-                sighash,
-            } => {
-                // Already approved sign and return the next signature
+        }
+        SigningState::CompleteNotApproved {
+            inp_idx,
+            sig_idx,
+            sighash,
+            outputs,
+        } => {
+            // Display transaction. If user approves the transaction, sign it.
+            // Otherwise, return a "deny" status word.
+            if ui_display_tx(ctx, outputs)? {
                 compute_signature_and_append(comm, ctx, inp_idx, sig_idx, &sighash)?;
                 if ctx.completed_all_signatures() {
                     ctx.review_finished = true;
@@ -679,14 +682,30 @@ pub fn handler_sign_tx(
                 }
 
                 Ok(())
+            } else {
+                ctx.review_finished = true;
+                Err(AppSW::Deny)
             }
+        }
+        SigningState::ApprovedNotFinishedSigning {
+            inp_idx,
+            sig_idx,
+            sighash,
+        } => {
+            // Already approved sign and return the next signature
+            compute_signature_and_append(comm, ctx, inp_idx, sig_idx, &sighash)?;
+            if ctx.completed_all_signatures() {
+                ctx.review_finished = true;
+            } else {
+                ctx.show_spinner();
+            }
+
+            Ok(())
         }
     }
 }
 
-fn process_output(ctx: &mut TxContext) -> Result<TxOutput, AppSW> {
-    let out =
-        TxOutput::decode_all(&mut ctx.raw_buf.as_slice()).map_err(|_| AppSW::DeserializeFail)?;
+fn process_output(ctx: &mut TxContext, out: &TxOutput) -> Result<(), AppSW> {
     match &out {
         TxOutput::Transfer(value, _) | TxOutput::LockThenTransfer(value, _, _) => {
             ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::Transfer);
@@ -733,110 +752,133 @@ fn process_output(ctx: &mut TxContext) -> Result<TxOutput, AppSW> {
         }
     }
 
-    Ok(out)
+    Ok(())
 }
 
-fn process_input_commitement(ctx: &mut TxContext) -> Result<(), AppSW> {
+fn process_input_additional_info(
+    ctx: &mut TxContext,
+    additional_info: InputAdditionalInfoReq,
+) -> Result<SighashInputCommitment, AppSW> {
     let inp_data = ctx
         .inputs_data
         .get(ctx.num_prcessed_input_commitments as usize)
         .ok_or(AppSW::WrongContext)?;
-    let commitment = SighashInputCommitment::decode_all(&mut ctx.raw_buf.as_slice())
-        .map_err(|_| AppSW::DeserializeFail)?;
-    match &commitment {
-        SighashInputCommitment::None => {}
-        SighashInputCommitment::Utxo(utxo) => match &utxo {
-            TxOutput::Transfer(value, _)
-            | TxOutput::LockThenTransfer(value, _, _)
-            | TxOutput::Htlc(value, _) => {
-                let (coin_or_token_id, amount) = into_coin_or_token_id_and_amount(value)?;
-                increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, amount)?;
-            }
-            TxOutput::Burn(_)
-            | TxOutput::ProduceBlockFromStake(_, _)
-            | TxOutput::CreateDelegationId(_, _)
-            | TxOutput::IssueFungibleToken(_)
-            | TxOutput::DataDeposit(_)
-            | TxOutput::DelegateStaking(_, _)
-            | TxOutput::CreateOrder(_) => return Err(AppSW::TxInvalidInputUtxo),
-            TxOutput::CreateStakePool(_, data) => {
-                increase_input_totals(&mut ctx.total_inputs, CoinOrTokenId::Coin, data.pledge)?;
-            }
-            TxOutput::IssueNft(nft_id, _, _) => {
-                increase_input_totals(
-                    &mut ctx.total_inputs,
-                    CoinOrTokenId::TokenId(*nft_id),
-                    Amount::from_atoms(1),
-                )?;
-            }
-        },
-        SighashInputCommitment::ProduceBlockFromStakeUtxo {
-            utxo: _,
+
+    let commitment = match additional_info {
+        InputAdditionalInfoReq::None => SighashInputCommitment::None,
+        InputAdditionalInfoReq::Utxo { utxo } => {
+            match &utxo {
+                TxOutput::Transfer(value, _)
+                | TxOutput::LockThenTransfer(value, _, _)
+                | TxOutput::Htlc(value, _) => {
+                    let (coin_or_token_id, amount) = into_coin_or_token_id_and_amount(value)?;
+                    increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, amount)?;
+                }
+                TxOutput::Burn(_)
+                | TxOutput::ProduceBlockFromStake(_, _)
+                | TxOutput::CreateDelegationId(_, _)
+                | TxOutput::IssueFungibleToken(_)
+                | TxOutput::DataDeposit(_)
+                | TxOutput::DelegateStaking(_, _)
+                | TxOutput::CreateOrder(_) => return Err(AppSW::TxInvalidInputUtxo),
+                TxOutput::CreateStakePool(_, data) => {
+                    increase_input_totals(&mut ctx.total_inputs, CoinOrTokenId::Coin, data.pledge)?;
+                }
+                TxOutput::IssueNft(nft_id, _, _) => {
+                    increase_input_totals(
+                        &mut ctx.total_inputs,
+                        CoinOrTokenId::TokenId(*nft_id),
+                        Amount::from_atoms(1),
+                    )?;
+                }
+            };
+            SighashInputCommitment::Utxo(utxo)
+        }
+        InputAdditionalInfoReq::PoolInfo {
+            utxo,
             staker_balance,
         } => {
-            increase_input_totals(&mut ctx.total_inputs, CoinOrTokenId::Coin, *staker_balance)?;
+            increase_input_totals(&mut ctx.total_inputs, CoinOrTokenId::Coin, staker_balance)?;
+            SighashInputCommitment::ProduceBlockFromStakeUtxo {
+                utxo,
+                staker_balance,
+            }
         }
-        SighashInputCommitment::FillOrderAccountCommand {
-            initially_asked,
-            initially_given,
-        } => match &inp_data {
-            InputData::FillOrderV0(fill_amount) => {
-                let (fill_coin_or_token_id, asked_amount) =
-                    into_coin_or_token_id_and_amount(initially_asked)?;
-                let (given_coin_or_token_id, given_amount) =
-                    into_coin_or_token_id_and_amount(initially_given)?;
-
-                increase_output_totals(
-                    &mut ctx.total_outputs,
-                    fill_coin_or_token_id,
-                    *fill_amount,
-                )?;
-
-                let atoms = given_amount
-                    .into_atoms()
-                    .checked_mul(fill_amount.into_atoms())
-                    .ok_or(AppSW::TxNumericOperationFail)?
-                    .checked_div(asked_amount.into_atoms())
-                    .ok_or(AppSW::TxNumericOperationFail)?;
-                let amount = Amount::from_atoms(atoms);
-                increase_input_totals(&mut ctx.total_inputs, given_coin_or_token_id, amount)?;
-            }
-            InputData::FillOrderV1(fill_amount) => {
-                let (fill_coin_or_token_id, asked_amount) =
-                    into_coin_or_token_id_and_amount(initially_asked)?;
-                let (given_coin_or_token_id, given_amount) =
-                    into_coin_or_token_id_and_amount(initially_given)?;
-
-                increase_output_totals(
-                    &mut ctx.total_outputs,
-                    fill_coin_or_token_id,
-                    *fill_amount,
-                )?;
-
-                let atoms = given_amount
-                    .into_atoms()
-                    .checked_mul(fill_amount.into_atoms())
-                    .ok_or(AppSW::TxNumericOperationFail)?
-                    .checked_div(asked_amount.into_atoms())
-                    .ok_or(AppSW::TxNumericOperationFail)?;
-                let amount = Amount::from_atoms(atoms);
-                increase_input_totals(&mut ctx.total_inputs, given_coin_or_token_id, amount)?;
-            }
-            _ => return Err(AppSW::WrongContext),
-        },
-        SighashInputCommitment::ConcludeOrderAccountCommand {
+        InputAdditionalInfoReq::OrderInfo {
             initially_asked,
             initially_given,
             ask_balance,
             give_balance,
-        } => {
-            let (coin_or_token_id, _) = into_coin_or_token_id_and_amount(initially_asked)?;
-            increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, *ask_balance)?;
+        } => match &inp_data {
+            InputData::FillOrderV0(fill_amount) => {
+                let (fill_coin_or_token_id, asked_amount) = into_coin_or_token_id_and_amount(
+                    &output_value_with_amount(&initially_asked, ask_balance)?,
+                )?;
+                let (given_coin_or_token_id, given_amount) = into_coin_or_token_id_and_amount(
+                    &output_value_with_amount(&initially_given, give_balance)?,
+                )?;
 
-            let (coin_or_token_id, _) = into_coin_or_token_id_and_amount(initially_given)?;
-            increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, *give_balance)?;
-        }
-    }
+                increase_output_totals(
+                    &mut ctx.total_outputs,
+                    fill_coin_or_token_id,
+                    *fill_amount,
+                )?;
+
+                let atoms = given_amount
+                    .into_atoms()
+                    .checked_mul(fill_amount.into_atoms())
+                    .ok_or(AppSW::TxNumericOperationFail)?
+                    .checked_div(asked_amount.into_atoms())
+                    .ok_or(AppSW::TxNumericOperationFail)?;
+                let amount = Amount::from_atoms(atoms);
+                increase_input_totals(&mut ctx.total_inputs, given_coin_or_token_id, amount)?;
+                SighashInputCommitment::FillOrderAccountCommand {
+                    initially_asked,
+                    initially_given,
+                }
+            }
+            InputData::FillOrderV1(fill_amount) => {
+                let (fill_coin_or_token_id, asked_amount) =
+                    into_coin_or_token_id_and_amount(&initially_asked)?;
+                let (given_coin_or_token_id, given_amount) =
+                    into_coin_or_token_id_and_amount(&initially_given)?;
+
+                increase_output_totals(
+                    &mut ctx.total_outputs,
+                    fill_coin_or_token_id,
+                    *fill_amount,
+                )?;
+
+                let atoms = given_amount
+                    .into_atoms()
+                    .checked_mul(fill_amount.into_atoms())
+                    .ok_or(AppSW::TxNumericOperationFail)?
+                    .checked_div(asked_amount.into_atoms())
+                    .ok_or(AppSW::TxNumericOperationFail)?;
+                let amount = Amount::from_atoms(atoms);
+                increase_input_totals(&mut ctx.total_inputs, given_coin_or_token_id, amount)?;
+
+                SighashInputCommitment::FillOrderAccountCommand {
+                    initially_asked,
+                    initially_given,
+                }
+            }
+            InputData::ConcludeOrderV0 | InputData::ConcludeOrderV1 => {
+                let (coin_or_token_id, _) = into_coin_or_token_id_and_amount(&initially_asked)?;
+                increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, ask_balance)?;
+
+                let (coin_or_token_id, _) = into_coin_or_token_id_and_amount(&initially_given)?;
+                increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, give_balance)?;
+                SighashInputCommitment::ConcludeOrderAccountCommand {
+                    initially_asked,
+                    initially_given,
+                    ask_balance,
+                    give_balance,
+                }
+            }
+            _ => return Err(AppSW::WrongContext),
+        },
+    };
 
     // On the first input commitment update the tx_hasher with the number of commitments
     if ctx.num_prcessed_input_commitments == 0 {
@@ -847,12 +889,10 @@ fn process_input_commitement(ctx: &mut TxContext) -> Result<(), AppSW> {
 
     ctx.num_prcessed_input_commitments += 1;
 
-    Ok(())
+    Ok(commitment)
 }
 
-fn process_input(ctx: &mut TxContext) -> Result<(), AppSW> {
-    let inp =
-        TxInput::decode_all(&mut ctx.raw_buf.as_slice()).map_err(|_| AppSW::DeserializeFail)?;
+fn process_input(ctx: &mut TxContext, inp: &TxInput) -> Result<(), AppSW> {
     let input_data = match inp {
         TxInput::Utxo(_) => InputData::Utxo,
         TxInput::Account(acc) => match acc.account {
@@ -867,8 +907,8 @@ fn process_input(ctx: &mut TxContext) -> Result<(), AppSW> {
                 ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::MintTokens);
                 increase_input_totals(
                     &mut ctx.total_inputs,
-                    CoinOrTokenId::TokenId(token_id),
-                    amount,
+                    CoinOrTokenId::TokenId(*token_id),
+                    *amount,
                 )?;
                 InputData::MintTokens
             }
@@ -878,7 +918,7 @@ fn process_input(ctx: &mut TxContext) -> Result<(), AppSW> {
             }
             AccountCommand::FillOrder(_, fill_amount, _) => {
                 ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FillOrder);
-                InputData::FillOrderV0(fill_amount)
+                InputData::FillOrderV0(*fill_amount)
             }
             AccountCommand::UnmintTokens(_) => {
                 ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::UnmintTokens);
@@ -908,7 +948,7 @@ fn process_input(ctx: &mut TxContext) -> Result<(), AppSW> {
         TxInput::OrderAccountCommand(cmd) => match cmd {
             OrderAccountCommand::FillOrder(_, fill_amount) => {
                 ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FillOrder);
-                InputData::FillOrderV1(fill_amount)
+                InputData::FillOrderV1(*fill_amount)
             }
             OrderAccountCommand::ConcludeOrder(_) => {
                 ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ConcludeOrder);
@@ -977,7 +1017,7 @@ fn compute_signature_and_append(
         .ok_or(AppSW::WrongContext)?;
 
     let [p1, p2, p3] = address.path;
-    let addr = [BIP44, ctx.coin.coin_path(), p1, p2, p3];
+    let addr = [BIP44, ctx.coin.bip44_coin_type(), p1, p2, p3];
 
     let private_key = Secp256k1::derive_from_path(&addr);
     let sig = schnorr_sign(&private_key, sighash, hash_algorithm_id, signing_mode)?;
@@ -992,10 +1032,18 @@ fn compute_signature_and_append(
     comm.append(&[inp_idx as u8]);
     comm.append(&sig.encode());
     if ctx.state == TxParsingState::Finished {
-        comm.append(&[P2_SIGN_TX_LAST])
+        comm.append(&[P2_DONE])
     } else {
-        comm.append(&[P2_SIGN_TX_MORE])
+        comm.append(&[P2_SIGN_MORE])
     }
 
     Ok(())
+}
+
+fn output_value_with_amount(value: &OutputValue, new_amount: Amount) -> Result<OutputValue, AppSW> {
+    match value {
+        OutputValue::Coin(_) => Ok(OutputValue::Coin(new_amount)),
+        OutputValue::TokenV0 => Err(AppSW::TxInvalidTokenV0),
+        OutputValue::TokenV1(token_id, _) => Ok(OutputValue::TokenV1(*token_id, new_amount)),
+    }
 }

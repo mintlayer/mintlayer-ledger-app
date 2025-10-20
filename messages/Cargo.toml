@@ -1,0 +1,14 @@
+[package]
+name = "messages"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Fixed in: https://github.com/paritytech/parity-scale-codec/pull/751
+# Should be included in versions after 3.7.5
+parity-scale-codec = { git = "https://github.com/OBorce/parity-scale-codec.git", branch = "fix/missing-target-atomic-ptr", default-features = false, features = [
+  "derive",
+  "chain-error",
+] }
+ml_common = { git = "https://github.com/mintlayer/mintlayer-core", package = "trezor-common", branch = "feature/hardware-wallet-common2" }
+num_enum = { version = "0.7.5", default-features = false }

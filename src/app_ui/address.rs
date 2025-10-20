@@ -1,6 +1,7 @@
 /*****************************************************************************
- *   Ledger App Boilerplate Rust.
+ *   Mintlayer Ledger App.
  *   (c) 2023 Ledger SAS.
+ *   (c) 2025 RBB S.r.l.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,14 +16,21 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use crate::{app_ui::utils::to_address, utils::CoinType, AppSW};
+use crate::{app_ui::utils::to_address, AppSW};
+use messages::CoinType;
 
 use include_gif::include_gif;
-use ledger_device_sdk::nbgl::{NbglAddressReview, NbglGlyph};
+use ledger_device_sdk::{
+    ecc::ECPublicKey,
+    nbgl::{NbglAddressReview, NbglGlyph},
+};
 
-pub fn compress_public_key(uncompressed_key: &[u8; 65]) -> Result<[u8; 33], AppSW> {
+pub fn compress_public_key<const T: char>(
+    public_key: &ECPublicKey<65, T>,
+) -> Result<[u8; 33], AppSW> {
+    let uncompressed_key = &public_key.pubkey;
     if uncompressed_key[0] != 0x04 {
-        return Err(AppSW::AddrDisplayFail);
+        return Err(AppSW::InvalidUncompressedPublicKey);
     }
 
     let mut compressed_key = [0u8; 33];
@@ -42,19 +50,27 @@ pub fn compress_public_key(uncompressed_key: &[u8; 65]) -> Result<[u8; 33], AppS
     Ok(compressed_key)
 }
 
-pub fn ui_display_pk(uncompressed_key: &[u8; 65], coin_type: CoinType) -> Result<bool, AppSW> {
-    let pk = compress_public_key(uncompressed_key)?;
+pub fn ui_display_pk<const T: char>(
+    public_key: &ECPublicKey<65, T>,
+    coin_type: CoinType,
+) -> Result<bool, AppSW> {
+    let pk = compress_public_key(public_key)?;
 
     let dest = ml_common::Destination::PublicKey(ml_common::PublicKeyHolder::Secp256k1Schnorr(
         ml_common::PublicKey(pk),
     ));
     let addr = to_address(&dest, coin_type)?;
 
-    // Load glyph from 64x64 4bpp gif file with include_gif macro. Creates an NBGL compatible glyph.
+    // Load glyph from file with include_gif macro. Creates an NBGL compatible glyph.
+    #[cfg(target_os = "apex_p")]
+    const FERRIS: NbglGlyph =
+        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_48x48.png", NBGL));
     #[cfg(any(target_os = "stax", target_os = "flex"))]
-    const FERRIS: NbglGlyph = NbglGlyph::from_include(include_gif!("crab_64x64.gif", NBGL));
+    const FERRIS: NbglGlyph =
+        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_64x64.gif", NBGL));
     #[cfg(any(target_os = "nanosplus", target_os = "nanox"))]
-    const FERRIS: NbglGlyph = NbglGlyph::from_include(include_gif!("crab_16x16.gif", NBGL));
+    const FERRIS: NbglGlyph =
+        NbglGlyph::from_include(include_gif!("icons/mintlayer_14x14.gif", NBGL));
 
     // Display the address confirmation screen.
     Ok(NbglAddressReview::new()

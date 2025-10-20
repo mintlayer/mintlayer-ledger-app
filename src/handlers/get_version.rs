@@ -1,6 +1,7 @@
 /*****************************************************************************
- *   Ledger App Boilerplate Rust.
+ *   Mintlayer Ledger App.
  *   (c) 2023 Ledger SAS.
+ *   (c) 2025 RBB S.r.l.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -14,6 +15,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *****************************************************************************/
+
 use crate::AppSW;
 use core::str::FromStr;
 use ledger_device_sdk::io;

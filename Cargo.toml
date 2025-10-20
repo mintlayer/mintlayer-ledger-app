@@ -1,12 +1,12 @@
 [package]
 name = "mintlayer-app"
-version = "1.7.1"
-authors = ["Ledger"]
+version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ledger_device_sdk = "1.27.2"
-ledger_secure_sdk_sys = "1.11.4"
+messages = { path = "./messages" }
+ledger_device_sdk = "1.27.3"
+ledger_secure_sdk_sys = "1.11.5"
 include_gif = "1.2.4"
 serde = { version = "1.0.228", default-features = false, features = ["derive"] }
 serde-json-core = { git = "https://github.com/rust-embedded-community/serde-json-core" }
@@ -30,7 +30,7 @@ parity-scale-codec = { git = "https://github.com/OBorce/parity-scale-codec.git",
 ml_common = { git = "https://github.com/mintlayer/mintlayer-core", package = "trezor-common", branch = "feature/hardware-wallet-common2" }
 
 [build-dependencies]
-image = "0.25.7"
+image = "0.25.8"
 
 [profile.release]
 opt-level = 'z'
@@ -47,18 +47,18 @@ path = ["44'/19788'", "44'/1'"]
 name = "Mintlayer"
 
 [package.metadata.ledger.nanox]
-icon = "crab_14x14.gif"
+icon = "icons/mintlayer_14x14.gif"
 
 [package.metadata.ledger.nanosplus]
-icon = "crab_14x14.gif"
+icon = "icons/mintlayer_14x14.gif"
 
 [package.metadata.ledger.stax]
-icon = "crab_32x32.gif"
+icon = "icons/mintlayer_32x32.gif"
 
 [package.metadata.ledger.flex]
-icon = "crab_40x40.gif"
+icon = "icons/mintlayer_40x40.gif"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = [
-    'cfg(target_os, values("stax", "flex", "nanos", "nanox", "nanosplus"))',
+    'cfg(target_os, values("apex_p", "stax", "flex", "nanos", "nanox", "nanosplus"))',
 ] }

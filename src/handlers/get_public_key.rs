@@ -1,6 +1,6 @@
 /*****************************************************************************
- *   Ledger App Boilerplate Rust.
- *   (c) 2023 Ledger SAS.
+ *   Mintlayer Ledger App.
+ *   (c) 2025 RBB S.r.l.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -16,32 +16,30 @@
  *****************************************************************************/
 
 use crate::app_ui::address::ui_display_pk;
-use crate::utils::{Bip32Path, CoinType};
 use crate::AppSW;
-
-use parity_scale_codec::DecodeAll;
+use messages::PublicKeyReq;
 
 use ledger_device_sdk::ecc::{Secp256k1, SeedDerive};
 use ledger_device_sdk::io::Comm;
 
-pub fn handler_get_public_key(comm: &mut Comm, display: bool) -> Result<(), AppSW> {
-    let data = comm.get_data().map_err(|_| AppSW::WrongApduLength)?;
-    let chain_type = CoinType::try_from(*data.first().ok_or(AppSW::WrongApduLength)?)?;
-    let path = Bip32Path::decode_all(&mut &data[1..]).map_err(|_| AppSW::DeserializeFail)?;
-
-    if path.as_ref().len() < 3 {
+pub fn handler_get_public_key(
+    comm: &mut Comm,
+    req: PublicKeyReq,
+    display: bool,
+) -> Result<(), AppSW> {
+    if req.path.as_ref().len() < 3 {
         return Err(AppSW::InvalidPath);
     }
-    if path.as_ref()[1] != chain_type.coin_path() {
+    if req.path.as_ref()[1] != req.coin_type.bip44_coin_type() {
         return Err(AppSW::InvalidPath);
     }
 
-    let (k, cc) = Secp256k1::derive_from(path.as_ref());
+    let (k, cc) = Secp256k1::derive_from(req.path.as_ref());
     let pk = k.public_key().map_err(|_| AppSW::KeyDeriveFail)?;
     let code = cc.ok_or(AppSW::KeyDeriveFail)?;
 
     // Display address on device if requested
-    if display && !ui_display_pk(&pk.pubkey, chain_type)? {
+    if display && !ui_display_pk(&pk, req.coin_type)? {
         return Err(AppSW::Deny);
     }
 
