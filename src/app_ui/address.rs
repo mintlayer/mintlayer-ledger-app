@@ -16,7 +16,7 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use crate::{app_ui::utils::to_address, AppSW};
+use crate::{app_ui::utils::to_address, StatusWord};
 use messages::CoinType;
 
 use include_gif::include_gif;
@@ -27,10 +27,10 @@ use ledger_device_sdk::{
 
 pub fn compress_public_key<const T: char>(
     public_key: &ECPublicKey<65, T>,
-) -> Result<[u8; 33], AppSW> {
+) -> Result<[u8; 33], StatusWord> {
     let uncompressed_key = &public_key.pubkey;
     if uncompressed_key[0] != 0x04 {
-        return Err(AppSW::InvalidUncompressedPublicKey);
+        return Err(StatusWord::InvalidUncompressedPublicKey);
     }
 
     let mut compressed_key = [0u8; 33];
@@ -53,7 +53,7 @@ pub fn compress_public_key<const T: char>(
 pub fn ui_display_pk<const T: char>(
     public_key: &ECPublicKey<65, T>,
     coin_type: CoinType,
-) -> Result<bool, AppSW> {
+) -> Result<bool, StatusWord> {
     let pk = compress_public_key(public_key)?;
 
     let dest = ml_common::Destination::PublicKey(ml_common::PublicKeyHolder::Secp256k1Schnorr(

@@ -24,11 +24,11 @@ use crate::{
         streaming_review_show_output, ui_display_tx,
     },
     handlers::sign_message::schnorr_sign,
-    AppSW, DataContext, P1SignTx, P2_DONE, P2_SIGN_MORE,
+    DataContext, P1SignTx, StatusWord, P2_DONE, P2_SIGN_MORE,
 };
 use messages::{
-    CoinType, InputAdditionalInfoReq, InputAddressPath, SignTxReq, TxInputReq, TxMetadataReq,
-    TxOutputReq,
+    encode, encode_as_compact, encode_to, CoinType, Encode, InputAdditionalInfoReq,
+    InputAddressPath, SignTxReq, Signature, TxInputReq, TxMetadataReq, TxOutputReq,
 };
 
 use ledger_device_sdk::{
@@ -42,7 +42,6 @@ use ml_common::{
     AccountCommand, AccountSpending, Amount, OrderAccountCommand, OutputValue,
     SighashInputCommitment, TxInput, TxOutput, H256,
 };
-use parity_scale_codec::{Compact, Encode};
 
 const MAX_TRANSACTION_LEN: usize = 510;
 const BIP44: u32 = 44 + (1 << 31);
@@ -53,10 +52,12 @@ pub enum CoinOrTokenId {
     TokenId(H256),
 }
 
-fn into_coin_or_token_id_and_amount(value: &OutputValue) -> Result<(CoinOrTokenId, Amount), AppSW> {
+fn into_coin_or_token_id_and_amount(
+    value: &OutputValue,
+) -> Result<(CoinOrTokenId, Amount), StatusWord> {
     match value {
         OutputValue::Coin(amount) => Ok((CoinOrTokenId::Coin, *amount)),
-        OutputValue::TokenV0 => Err(AppSW::TxInvalidTokenV0),
+        OutputValue::TokenV0 => Err(StatusWord::TxInvalidTokenV0),
         OutputValue::TokenV1(token_id, amount) => Ok((CoinOrTokenId::TokenId(*token_id), *amount)),
     }
 }
@@ -97,12 +98,6 @@ fn merge_tx_type(tx_type: Option<TxType>, new_type: TxType) -> Option<TxType> {
     }
 }
 
-#[derive(Encode)]
-pub struct Signature {
-    pub signature: [u8; 64],
-    pub multisig_idx: Option<u32>,
-}
-
 pub struct InputCompressed {
     pub addresses: Vec<InputAddressPathCompressed>,
 }
@@ -113,24 +108,24 @@ pub struct InputAddressPathCompressed {
 }
 
 impl InputAddressPathCompressed {
-    fn new(addr: InputAddressPath, coin: CoinType) -> Result<Self, AppSW> {
+    fn new(addr: InputAddressPath, coin: CoinType) -> Result<Self, StatusWord> {
         let path = addr.path.as_ref();
         if path.len() != 5 {
-            return Err(AppSW::TxInvalidInputPath);
+            return Err(StatusWord::TxInvalidInputPath);
         }
 
         if path[0] != BIP44 {
-            return Err(AppSW::TxInvalidInputPath);
+            return Err(StatusWord::TxInvalidInputPath);
         }
 
         if path[1] != coin.bip44_coin_type() {
-            return Err(AppSW::TxInvalidInputPath);
+            return Err(StatusWord::TxInvalidInputPath);
         }
 
         Ok(Self {
             path: path[2..]
                 .try_into()
-                .map_err(|_| AppSW::TxInvalidInputPath)?,
+                .map_err(|_| StatusWord::TxInvalidInputPath)?,
             multisig_idx: addr.multisig_idx,
         })
     }
@@ -240,16 +235,20 @@ impl TxContext {
             num_inputs,
             num_outputs,
         }: TxMetadataReq,
-    ) -> Result<TxContext, AppSW> {
+    ) -> Result<TxContext, StatusWord> {
         let mut tx_hasher = Blake2b_512::new();
         // mode
-        tx_hasher.update(b"\x01").map_err(|_| AppSW::TxHashFail)?;
+        tx_hasher
+            .update(b"\x01")
+            .map_err(|_| StatusWord::TxHashFail)?;
         // version
         tx_hasher
             .update(&[version])
-            .map_err(|_| AppSW::TxHashFail)?;
+            .map_err(|_| StatusWord::TxHashFail)?;
         // flags
-        tx_hasher.update(&[0; 16]).map_err(|_| AppSW::TxHashFail)?;
+        tx_hasher
+            .update(&[0; 16])
+            .map_err(|_| StatusWord::TxHashFail)?;
 
         Ok(TxContext {
             coin,
@@ -290,12 +289,12 @@ impl TxContext {
         &self.state
     }
 
-    fn update_hash<T: Encode>(&mut self, data: &T) -> Result<(), AppSW> {
+    fn update_hash<T: Encode>(&mut self, data: &T) -> Result<(), StatusWord> {
         self.raw_buf.clear();
-        data.encode_to(&mut self.raw_buf);
+        encode_to(data, &mut self.raw_buf);
         self.tx_hasher
             .update(self.raw_buf.as_slice())
-            .map_err(|_| AppSW::TxHashFail)?;
+            .map_err(|_| StatusWord::TxHashFail)?;
         self.raw_buf.clear();
         Ok(())
     }
@@ -339,7 +338,10 @@ impl TxContext {
     }
 
     // After processing an output advance the internal state
-    fn advance_next_output_state(&mut self, n: usize) -> Result<NextTxOutputParsingState, AppSW> {
+    fn advance_next_output_state(
+        &mut self,
+        n: usize,
+    ) -> Result<NextTxOutputParsingState, StatusWord> {
         let next_state = if n < (self.num_outputs - 1) as usize {
             NextTxOutputParsingState::Output(n + 1)
         } else {
@@ -349,23 +351,23 @@ impl TxContext {
                 let mut message_hash: [u8; 64] = [0u8; 64];
                 self.tx_hasher
                     .finalize(&mut message_hash)
-                    .map_err(|_| AppSW::TxHashFail)?;
+                    .map_err(|_| StatusWord::TxHashFail)?;
 
                 let mut blake2b256 = Blake2b_512::new();
                 let mut message_hash2: [u8; 64] = [0u8; 64];
                 blake2b256
                     .hash(&message_hash[0..32], &mut message_hash2)
-                    .map_err(|_| AppSW::TxHashFail)?;
+                    .map_err(|_| StatusWord::TxHashFail)?;
 
                 NextTxOutputParsingState::CompleteNotApproved {
                     inp_idx,
                     sig_idx,
                     sighash: message_hash2[..32]
                         .try_into()
-                        .map_err(|_| AppSW::TxHashFail)?,
+                        .map_err(|_| StatusWord::TxHashFail)?,
                 }
             } else {
-                return Err(AppSW::NothingToSign);
+                return Err(StatusWord::NothingToSign);
             }
         };
 
@@ -433,7 +435,7 @@ impl TxContext {
     }
 
     // Check the state corresponds to the incoming request
-    pub fn check_state(&self, p1: P1SignTx) -> Result<(), AppSW> {
+    pub fn check_state(&self, p1: P1SignTx) -> Result<(), StatusWord> {
         match (p1, &self.state) {
             (P1SignTx::Input, TxParsingState::Input(_))
             | (P1SignTx::InputAdditionalInfo, TxParsingState::InputAdditionalInfo(_))
@@ -446,13 +448,13 @@ impl TxContext {
                     sighash: _,
                 },
             ) => Ok(()),
-            (_, _) => Err(AppSW::WrongP1P2),
+            (_, _) => Err(StatusWord::WrongP1P2),
         }
     }
 
-    pub fn extend(&mut self, chunk: &[u8]) -> Result<(), AppSW> {
+    pub fn extend(&mut self, chunk: &[u8]) -> Result<(), StatusWord> {
         if self.raw_buf.len() + chunk.len() > MAX_TRANSACTION_LEN {
-            return Err(AppSW::TxWrongLength);
+            return Err(StatusWord::TxWrongLength);
         }
 
         self.raw_buf.extend(chunk);
@@ -487,7 +489,7 @@ impl TxContext {
     }
 }
 
-pub fn setup_sign_tx(req: TxMetadataReq, ctx: &mut DataContext) -> Result<(), AppSW> {
+pub fn setup_sign_tx(req: TxMetadataReq, ctx: &mut DataContext) -> Result<(), StatusWord> {
     let mut tx_ctx = TxContext::new(req)?;
 
     tx_ctx.show_spinner();
@@ -506,12 +508,12 @@ fn handle_input_req<'a>(
     req: TxInputReq,
     input_step: usize,
     ctx: &mut TxContext,
-) -> Result<SigningState<'a>, AppSW> {
+) -> Result<SigningState<'a>, StatusWord> {
     let addresses = req
         .addresses
         .into_iter()
         .map(|a| InputAddressPathCompressed::new(a, ctx.coin))
-        .collect::<Result<Vec<_>, AppSW>>()?;
+        .collect::<Result<Vec<_>, StatusWord>>()?;
 
     ctx.inputs.push(InputCompressed { addresses });
 
@@ -525,7 +527,7 @@ fn handle_input_additional_info_req<'a>(
     input_step: usize,
     ctx: &mut TxContext,
     review: &'a mut Review,
-) -> Result<SigningState<'a>, AppSW> {
+) -> Result<SigningState<'a>, StatusWord> {
     let commitment = process_input_additional_info(ctx, req)?;
     ctx.update_hash(&commitment)?;
     Ok(ctx.advance_next_input_additional_info_step(input_step, review))
@@ -536,13 +538,13 @@ fn handle_output_req<'a>(
     output_step: usize,
     ctx: &mut TxContext,
     review: &'a mut Review,
-) -> Result<SigningState<'a>, AppSW> {
+) -> Result<SigningState<'a>, StatusWord> {
     process_output(ctx, &req.out)?;
     // on the first output add the number of outputs to the hash
     if output_step == 0 {
         ctx.tx_hasher
-            .update(&Compact::<u32>::encode(&ctx.num_outputs.into()))
-            .map_err(|_| AppSW::TxHashFail)?;
+            .update(&encode_as_compact(ctx.num_outputs))
+            .map_err(|_| StatusWord::TxHashFail)?;
     }
     ctx.update_hash(&req.out)?;
     let next_step = ctx.advance_next_output_state(output_step)?;
@@ -587,12 +589,12 @@ fn handle_output_req<'a>(
     Ok(signin_state)
 }
 
-pub fn handler_sign_tx(
+pub fn handle_sign_tx(
     comm: &mut Comm,
     req: SignTxReq,
     ctx: &mut TxContext,
     review: &mut Review,
-) -> Result<(), AppSW> {
+) -> Result<(), StatusWord> {
     let signing_state = match (req, ctx.state()) {
         (SignTxReq::Input(req), TxParsingState::Input(n)) => handle_input_req(req, *n, ctx)?,
         (SignTxReq::InputAdditionalInfo(req), TxParsingState::InputAdditionalInfo(n)) => {
@@ -620,11 +622,11 @@ pub fn handler_sign_tx(
                 sig_idx: _,
                 sighash: _,
             },
-        ) => return Err(AppSW::Deny),
+        ) => return Err(StatusWord::Deny),
         (SignTxReq::NextSignature, TxParsingState::Finished) => {
-            return Err(AppSW::TxAlreadyFinished)
+            return Err(StatusWord::TxAlreadyFinished)
         }
-        (_, _) => return Err(AppSW::WrongP1P2),
+        (_, _) => return Err(StatusWord::WrongP1P2),
     };
 
     match signing_state {
@@ -634,7 +636,7 @@ pub fn handler_sign_tx(
                 Ok(())
             } else {
                 ctx.review_finished = true;
-                Err(AppSW::Deny)
+                Err(StatusWord::Deny)
             }
         }
         SigningState::StreamingReviewOutput(review, output) => {
@@ -642,7 +644,7 @@ pub fn handler_sign_tx(
                 Ok(())
             } else {
                 ctx.review_finished = true;
-                Err(AppSW::Deny)
+                Err(StatusWord::Deny)
             }
         }
         SigningState::StreamingReviewApprove {
@@ -662,7 +664,7 @@ pub fn handler_sign_tx(
                 Ok(())
             } else {
                 ctx.review_finished = true;
-                Err(AppSW::Deny)
+                Err(StatusWord::Deny)
             }
         }
         SigningState::CompleteNotApproved {
@@ -684,7 +686,7 @@ pub fn handler_sign_tx(
                 Ok(())
             } else {
                 ctx.review_finished = true;
-                Err(AppSW::Deny)
+                Err(StatusWord::Deny)
             }
         }
         SigningState::ApprovedNotFinishedSigning {
@@ -705,7 +707,7 @@ pub fn handler_sign_tx(
     }
 }
 
-fn process_output(ctx: &mut TxContext, out: &TxOutput) -> Result<(), AppSW> {
+fn process_output(ctx: &mut TxContext, out: &TxOutput) -> Result<(), StatusWord> {
     match &out {
         TxOutput::Transfer(value, _) | TxOutput::LockThenTransfer(value, _, _) => {
             ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::Transfer);
@@ -758,11 +760,11 @@ fn process_output(ctx: &mut TxContext, out: &TxOutput) -> Result<(), AppSW> {
 fn process_input_additional_info(
     ctx: &mut TxContext,
     additional_info: InputAdditionalInfoReq,
-) -> Result<SighashInputCommitment, AppSW> {
+) -> Result<SighashInputCommitment, StatusWord> {
     let inp_data = ctx
         .inputs_data
         .get(ctx.num_prcessed_input_commitments as usize)
-        .ok_or(AppSW::WrongContext)?;
+        .ok_or(StatusWord::WrongContext)?;
 
     let commitment = match additional_info {
         InputAdditionalInfoReq::None => SighashInputCommitment::None,
@@ -780,7 +782,7 @@ fn process_input_additional_info(
                 | TxOutput::IssueFungibleToken(_)
                 | TxOutput::DataDeposit(_)
                 | TxOutput::DelegateStaking(_, _)
-                | TxOutput::CreateOrder(_) => return Err(AppSW::TxInvalidInputUtxo),
+                | TxOutput::CreateOrder(_) => return Err(StatusWord::TxInvalidInputUtxo),
                 TxOutput::CreateStakePool(_, data) => {
                     increase_input_totals(&mut ctx.total_inputs, CoinOrTokenId::Coin, data.pledge)?;
                 }
@@ -827,9 +829,9 @@ fn process_input_additional_info(
                 let atoms = given_amount
                     .into_atoms()
                     .checked_mul(fill_amount.into_atoms())
-                    .ok_or(AppSW::TxNumericOperationFail)?
+                    .ok_or(StatusWord::TxNumericOperationFail)?
                     .checked_div(asked_amount.into_atoms())
-                    .ok_or(AppSW::TxNumericOperationFail)?;
+                    .ok_or(StatusWord::TxNumericOperationFail)?;
                 let amount = Amount::from_atoms(atoms);
                 increase_input_totals(&mut ctx.total_inputs, given_coin_or_token_id, amount)?;
                 SighashInputCommitment::FillOrderAccountCommand {
@@ -852,9 +854,9 @@ fn process_input_additional_info(
                 let atoms = given_amount
                     .into_atoms()
                     .checked_mul(fill_amount.into_atoms())
-                    .ok_or(AppSW::TxNumericOperationFail)?
+                    .ok_or(StatusWord::TxNumericOperationFail)?
                     .checked_div(asked_amount.into_atoms())
-                    .ok_or(AppSW::TxNumericOperationFail)?;
+                    .ok_or(StatusWord::TxNumericOperationFail)?;
                 let amount = Amount::from_atoms(atoms);
                 increase_input_totals(&mut ctx.total_inputs, given_coin_or_token_id, amount)?;
 
@@ -876,7 +878,7 @@ fn process_input_additional_info(
                     give_balance,
                 }
             }
-            _ => return Err(AppSW::WrongContext),
+            _ => return Err(StatusWord::WrongContext),
         },
     };
 
@@ -884,7 +886,7 @@ fn process_input_additional_info(
     if ctx.num_prcessed_input_commitments == 0 {
         ctx.tx_hasher
             .update(&ctx.num_inputs.to_le_bytes())
-            .map_err(|_| AppSW::TxHashFail)?;
+            .map_err(|_| StatusWord::TxHashFail)?;
     }
 
     ctx.num_prcessed_input_commitments += 1;
@@ -892,7 +894,7 @@ fn process_input_additional_info(
     Ok(commitment)
 }
 
-fn process_input(ctx: &mut TxContext, inp: &TxInput) -> Result<(), AppSW> {
+fn process_input(ctx: &mut TxContext, inp: &TxInput) -> Result<(), StatusWord> {
     let input_data = match inp {
         TxInput::Utxo(_) => InputData::Utxo,
         TxInput::Account(acc) => match acc.account {
@@ -964,7 +966,7 @@ fn process_input(ctx: &mut TxContext, inp: &TxInput) -> Result<(), AppSW> {
     if ctx.inputs.len() == 1 {
         ctx.tx_hasher
             .update(&ctx.num_inputs.to_le_bytes())
-            .map_err(|_| AppSW::TxHashFail)?;
+            .map_err(|_| StatusWord::TxHashFail)?;
     }
 
     Ok(())
@@ -974,12 +976,12 @@ fn increase_input_totals(
     total_inputs: &mut BTreeMap<CoinOrTokenId, Amount>,
     key: CoinOrTokenId,
     amount: Amount,
-) -> Result<(), AppSW> {
+) -> Result<(), StatusWord> {
     let total = total_inputs.entry(key).or_insert(Amount::from_atoms(0));
     let new_total = total
         .into_atoms()
         .checked_add(amount.into_atoms())
-        .ok_or(AppSW::TxNumericOperationFail)?;
+        .ok_or(StatusWord::TxNumericOperationFail)?;
     *total = Amount::from_atoms(new_total);
     Ok(())
 }
@@ -988,12 +990,12 @@ fn increase_output_totals(
     total_outputs: &mut BTreeMap<CoinOrTokenId, Amount>,
     key: CoinOrTokenId,
     amount: Amount,
-) -> Result<(), AppSW> {
+) -> Result<(), StatusWord> {
     let total = total_outputs.entry(key).or_insert(Amount::from_atoms(0));
     let new_total = total
         .into_atoms()
         .checked_add(amount.into_atoms())
-        .ok_or(AppSW::TxNumericOperationFail)?;
+        .ok_or(StatusWord::TxNumericOperationFail)?;
     *total = Amount::from_atoms(new_total);
     Ok(())
 }
@@ -1004,17 +1006,17 @@ fn compute_signature_and_append(
     inp_idx: usize,
     sig_idx: usize,
     sighash: &[u8; 32],
-) -> Result<(), AppSW> {
+) -> Result<(), StatusWord> {
     let hash_algorithm_id = CX_SHA256;
     let signing_mode = CX_ECSCHNORR_BIP0340 | CX_RND_PROVIDED | CX_LAST;
 
     let address = ctx
         .inputs
         .get(inp_idx)
-        .ok_or(AppSW::WrongContext)?
+        .ok_or(StatusWord::WrongContext)?
         .addresses
         .get(sig_idx)
-        .ok_or(AppSW::WrongContext)?;
+        .ok_or(StatusWord::WrongContext)?;
 
     let [p1, p2, p3] = address.path;
     let addr = [BIP44, ctx.coin.bip44_coin_type(), p1, p2, p3];
@@ -1030,7 +1032,7 @@ fn compute_signature_and_append(
     ctx.advance_next_signing_step(inp_idx, sig_idx, sighash);
 
     comm.append(&[inp_idx as u8]);
-    comm.append(&sig.encode());
+    comm.append(&encode(sig));
     if ctx.state == TxParsingState::Finished {
         comm.append(&[P2_DONE])
     } else {
@@ -1040,10 +1042,13 @@ fn compute_signature_and_append(
     Ok(())
 }
 
-fn output_value_with_amount(value: &OutputValue, new_amount: Amount) -> Result<OutputValue, AppSW> {
+fn output_value_with_amount(
+    value: &OutputValue,
+    new_amount: Amount,
+) -> Result<OutputValue, StatusWord> {
     match value {
         OutputValue::Coin(_) => Ok(OutputValue::Coin(new_amount)),
-        OutputValue::TokenV0 => Err(AppSW::TxInvalidTokenV0),
+        OutputValue::TokenV0 => Err(StatusWord::TxInvalidTokenV0),
         OutputValue::TokenV1(token_id, _) => Ok(OutputValue::TokenV1(*token_id, new_amount)),
     }
 }

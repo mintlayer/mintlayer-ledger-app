@@ -26,9 +26,9 @@ use crate::{
         utils::{bech32m_encode, to_address},
     },
     handlers::sign_tx::{CoinOrTokenId, TxContext, TxType},
-    AppSW,
+    StatusWord,
 };
-use messages::{AddrType, CoinType};
+use messages::{encode, AddrType, CoinType};
 
 use chrono::{TimeZone, Utc};
 use include_gif::include_gif;
@@ -44,7 +44,6 @@ use ml_common::{
     Amount, Destination, IsTokenFreezable, NftIssuance, OutputTimeLock, OutputValue, TokenIssuance,
     TokenTotalSupply, TxOutput, VRFPublicKeyHolder, H256,
 };
-use parity_scale_codec::Encode;
 
 pub fn new_streaming_review() -> NbglStreamingReview {
     // Load glyph from file with include_gif macro. Creates an NBGL compatible glyph.
@@ -71,7 +70,7 @@ pub fn streaming_review_show_output(
     review: &NbglStreamingReview,
     output: &TxOutput,
     coin: CoinType,
-) -> Result<bool, AppSW> {
+) -> Result<bool, StatusWord> {
     let (name, value) = format_output(output, coin)?;
     let fields = [Field {
         name,
@@ -90,14 +89,14 @@ pub fn approve_streaming_review(
     review: &NbglStreamingReview,
     output: &TxOutput,
     ctx: &TxContext,
-) -> Result<bool, AppSW> {
+) -> Result<bool, StatusWord> {
     if !streaming_review_show_output(review, output, ctx.coin())? {
         return Ok(false);
     }
 
     let fees = ctx.total_inputs().iter().try_fold(
         String::new(),
-        |mut acc, (coin_or_token, amount)| -> Result<_, AppSW> {
+        |mut acc, (coin_or_token, amount)| -> Result<_, StatusWord> {
             let out = *ctx
                 .total_outputs()
                 .get(coin_or_token)
@@ -105,7 +104,7 @@ pub fn approve_streaming_review(
             let fee: u128 = amount
                 .into_atoms()
                 .checked_sub(out.into_atoms())
-                .ok_or(AppSW::TxNumericOperationFail)?;
+                .ok_or(StatusWord::TxNumericOperationFail)?;
 
             match coin_or_token {
                 CoinOrTokenId::Coin => writeln!(
@@ -114,7 +113,7 @@ pub fn approve_streaming_review(
                     format_amount(Amount::from_atoms(fee), ctx.coin()),
                     ctx.coin().coin_ticker()
                 )
-                .map_err(|_| AppSW::TxDisplayFail)?,
+                .map_err(|_| StatusWord::TxDisplayFail)?,
                 CoinOrTokenId::TokenId(token_id) => {
                     if fee != 0 {
                         writeln!(
@@ -122,7 +121,7 @@ pub fn approve_streaming_review(
                             "{fee} {}",
                             id_to_address(token_id, ctx.coin().token_id_address_prefix())?
                         )
-                        .map_err(|_| AppSW::TxDisplayFail)?
+                        .map_err(|_| StatusWord::TxDisplayFail)?
                     }
                 }
             };
@@ -152,10 +151,10 @@ pub fn approve_streaming_review(
 /// # Arguments
 ///
 /// * `ctx` - TxContext to be displayed for validation
-pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, AppSW> {
+pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, StatusWord> {
     let fees = ctx.total_inputs().iter().try_fold(
         String::new(),
-        |mut acc, (coin_or_token, amount)| -> Result<_, AppSW> {
+        |mut acc, (coin_or_token, amount)| -> Result<_, StatusWord> {
             let out = *ctx
                 .total_outputs()
                 .get(coin_or_token)
@@ -163,7 +162,7 @@ pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, AppS
             let fee: u128 = amount
                 .into_atoms()
                 .checked_sub(out.into_atoms())
-                .ok_or(AppSW::TxNumericOperationFail)?;
+                .ok_or(StatusWord::TxNumericOperationFail)?;
 
             match coin_or_token {
                 CoinOrTokenId::Coin => writeln!(
@@ -172,7 +171,7 @@ pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, AppS
                     format_amount(Amount::from_atoms(fee), ctx.coin()),
                     ctx.coin().coin_ticker()
                 )
-                .map_err(|_| AppSW::TxDisplayFail)?,
+                .map_err(|_| StatusWord::TxDisplayFail)?,
                 CoinOrTokenId::TokenId(token_id) => {
                     if fee != 0 {
                         writeln!(
@@ -180,7 +179,7 @@ pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, AppS
                             "{fee} {}",
                             id_to_address(token_id, ctx.coin().token_id_address_prefix())?
                         )
-                        .map_err(|_| AppSW::TxDisplayFail)?
+                        .map_err(|_| StatusWord::TxDisplayFail)?
                     }
                 }
             };
@@ -275,7 +274,7 @@ pub fn ui_display_message<const T: char>(
     public_key: &ECPublicKey<65, T>,
     coin_type: CoinType,
     addr_type: AddrType,
-) -> Result<bool, AppSW> {
+) -> Result<bool, StatusWord> {
     let pk = compress_public_key(public_key)?;
 
     let dest = match addr_type {
@@ -286,12 +285,14 @@ pub fn ui_display_message<const T: char>(
             let mut blake2b256 = Blake2b_512::new();
             let mut public_key_hash: [u8; 64] = [0u8; 64];
 
-            blake2b256.update(&[0]).map_err(|_| AppSW::TxHashFail)?;
-            blake2b256.update(&pk).map_err(|_| AppSW::TxHashFail)?;
+            blake2b256
+                .update(&[0])
+                .map_err(|_| StatusWord::TxHashFail)?;
+            blake2b256.update(&pk).map_err(|_| StatusWord::TxHashFail)?;
 
             blake2b256
                 .finalize(&mut public_key_hash)
-                .map_err(|_| AppSW::TxHashFail)?;
+                .map_err(|_| StatusWord::TxHashFail)?;
 
             let mut pkh = [0u8; 20];
             pkh.copy_from_slice(&public_key_hash[0..20]);
@@ -342,11 +343,11 @@ pub fn ui_display_message<const T: char>(
     Ok(review.show(&my_fields))
 }
 
-fn vrf_to_address(key: &VRFPublicKeyHolder, coin: CoinType) -> Result<String, AppSW> {
-    bech32m_encode(coin.vrf_public_key_address_prefix(), &key.encode())
+fn vrf_to_address(key: &VRFPublicKeyHolder, coin: CoinType) -> Result<String, StatusWord> {
+    bech32m_encode(coin.vrf_public_key_address_prefix(), &encode(key))
 }
 
-fn id_to_address(id: &H256, hrp: &str) -> Result<String, AppSW> {
+fn id_to_address(id: &H256, hrp: &str) -> Result<String, StatusWord> {
     bech32m_encode(hrp, &id.0)
 }
 
@@ -366,10 +367,10 @@ fn format_atoms(amount: Amount) -> String {
     amount.into_atoms().to_string()
 }
 
-fn format_value(value: &OutputValue, coin: CoinType) -> Result<String, AppSW> {
+fn format_value(value: &OutputValue, coin: CoinType) -> Result<String, StatusWord> {
     match value {
         OutputValue::Coin(amount) => Ok(format!("Coins: {}", format_amount(*amount, coin))),
-        OutputValue::TokenV0 => Err(AppSW::TxInvalidTokenV0),
+        OutputValue::TokenV0 => Err(StatusWord::TxInvalidTokenV0),
         OutputValue::TokenV1(token_id, amount) => Ok(format!(
             "Token: {} {}",
             id_to_address(token_id, coin.token_id_address_prefix())?,
@@ -378,17 +379,19 @@ fn format_value(value: &OutputValue, coin: CoinType) -> Result<String, AppSW> {
     }
 }
 
-fn format_timestamp(seconds_u64: u64) -> Result<String, AppSW> {
-    let seconds_i64: i64 = seconds_u64.try_into().map_err(|_| AppSW::TxDisplayFail)?;
+fn format_timestamp(seconds_u64: u64) -> Result<String, StatusWord> {
+    let seconds_i64: i64 = seconds_u64
+        .try_into()
+        .map_err(|_| StatusWord::TxDisplayFail)?;
     let datetime = Utc
         .timestamp_opt(seconds_i64, 0)
         .earliest()
-        .ok_or(AppSW::TxDisplayFail)?;
+        .ok_or(StatusWord::TxDisplayFail)?;
 
     Ok(datetime.format("%Y-%m-%d %H:%M:%S").to_string())
 }
 
-fn format_lock(lock: &OutputTimeLock) -> Result<String, AppSW> {
+fn format_lock(lock: &OutputTimeLock) -> Result<String, StatusWord> {
     let s = match lock {
         OutputTimeLock::UntilHeight(h) => format!("Lock until block height {h}"),
         OutputTimeLock::UntilTime(t) => format!("Lock until {}", format_timestamp(*t)?),
@@ -406,7 +409,7 @@ fn format_lock(lock: &OutputTimeLock) -> Result<String, AppSW> {
 ///
 /// # Returns
 /// A tuple containing three `String`s: `(short_address, amount, address_label)`.
-pub fn format_output(output: &TxOutput, coin: CoinType) -> Result<(&str, String), AppSW> {
+pub fn format_output(output: &TxOutput, coin: CoinType) -> Result<(&str, String), StatusWord> {
     let res = match output {
         TxOutput::Transfer(value, destination) => (
             "Transfer",

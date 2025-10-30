@@ -16,8 +16,8 @@
  *****************************************************************************/
 
 use crate::app_ui::sign::ui_display_message;
-use crate::{AppSW, DataContext};
-use messages::{AddrType, Bip32Path, CoinType, SignMessageReq};
+use crate::{DataContext, StatusWord};
+use messages::{encode, AddrType, Bip32Path, CoinType, MsgSignature, SignMessageReq};
 
 use alloc::vec::Vec;
 use ledger_device_sdk::{
@@ -54,24 +54,24 @@ impl SignMessageContext {
     }
 }
 
-pub fn setup_sign_message(req: SignMessageReq, ctx: &mut DataContext) -> Result<(), AppSW> {
+pub fn setup_sign_message(req: SignMessageReq, ctx: &mut DataContext) -> Result<(), StatusWord> {
     *ctx = DataContext::SignMessageContext(SignMessageContext::new(req));
     Ok(())
 }
 
-pub fn handler_sign_message(
+pub fn handle_sign_message(
     comm: &mut Comm,
     more: bool,
     ctx: &mut DataContext,
-) -> Result<(), AppSW> {
+) -> Result<(), StatusWord> {
     let ctx = match ctx {
         DataContext::SignMessageContext(ctx) => ctx,
-        _ => return Err(AppSW::WrongContext),
+        _ => return Err(StatusWord::WrongContext),
     };
-    let chunk = comm.get_data().map_err(|_| AppSW::WrongApduLength)?;
+    let chunk = comm.get_data().map_err(|_| StatusWord::WrongApduLength)?;
 
     if ctx.message.len() + chunk.len() > MAX_MESSAGE_LEN {
-        return Err(AppSW::TxWrongLength);
+        return Err(StatusWord::TxWrongLength);
     }
 
     ctx.message.extend(chunk);
@@ -81,7 +81,9 @@ pub fn handler_sign_message(
         Ok(())
     } else {
         let private_key = Secp256k1::derive_from_path(ctx.path.as_ref());
-        let public_key = private_key.public_key().map_err(|_| AppSW::KeyDeriveFail)?;
+        let public_key = private_key
+            .public_key()
+            .map_err(|_| StatusWord::KeyDeriveFail)?;
 
         // Display review. If user approves sign it.
         // Otherwise, return a "deny" status word.
@@ -90,7 +92,7 @@ pub fn handler_sign_message(
             compute_signature_and_append(comm, &private_key, ctx)
         } else {
             ctx.review_finished = true;
-            Err(AppSW::Deny)
+            Err(StatusWord::Deny)
         }
     }
 }
@@ -99,7 +101,7 @@ fn compute_signature_and_append<const N: usize>(
     comm: &mut Comm,
     private_key: &ECPrivateKey<N, 'W'>,
     ctx: &mut SignMessageContext,
-) -> Result<(), AppSW> {
+) -> Result<(), StatusWord> {
     const MESSAGE_MAGIC_PREFIX: &str = "===MINTLAYER MESSAGE BEGIN===\n";
     const MESSAGE_MAGIC_SUFFIX: &str = "\n===MINTLAYER MESSAGE END===";
 
@@ -116,7 +118,7 @@ fn compute_signature_and_append<const N: usize>(
 
     blake2b256
         .hash(&message, &mut message_hash)
-        .map_err(|_| AppSW::TxHashFail)?;
+        .map_err(|_| StatusWord::TxHashFail)?;
     let mut message_hash_32: [u8; 32] = [0u8; 32];
     message_hash_32.copy_from_slice(&message_hash[0..32]);
 
@@ -124,7 +126,7 @@ fn compute_signature_and_append<const N: usize>(
     let mut message_hash2: [u8; 64] = [0u8; 64];
     blake2b256
         .hash(&message_hash_32, &mut message_hash2)
-        .map_err(|_| AppSW::TxHashFail)?;
+        .map_err(|_| StatusWord::TxHashFail)?;
 
     let mut message_hash2_32: [u8; 32] = [0u8; 32];
     message_hash2_32.copy_from_slice(&message_hash2[0..32]);
@@ -139,8 +141,9 @@ fn compute_signature_and_append<const N: usize>(
         signing_mode,
     )?;
 
-    comm.append(&[sig.len() as u8]);
-    comm.append(&sig);
+    let response = MsgSignature { signature: sig };
+
+    comm.append(&encode(response));
     Ok(())
 }
 

@@ -39,28 +39,26 @@ use ledger_device_sdk::{
     io::{ApduHeader, Comm, Reply, StatusWords},
     nbgl::{init_comm, NbglHomeAndSettings, NbglReviewStatus, StatusType},
 };
-use parity_scale_codec::DecodeAll;
 
 use app_ui::menu::ui_menu_main;
 use handlers::{
-    get_public_key::handler_get_public_key,
-    get_version::handler_get_version,
-    sign_message::{handler_sign_message, setup_sign_message, SignMessageContext},
+    get_public_key::handle_get_public_key,
+    get_version::handle_get_version,
+    sign_message::{handle_sign_message, setup_sign_message, SignMessageContext},
     sign_tx::{setup_sign_tx, Review, TxContext},
 };
 use messages::{
-    Ins, P1SignTx, PubKeyP1, PublicKeyReq, SignMessageReq, SignTxReq, TxMetadataReq, WrongP1P2,
-    APDU_CLASS, P1_APP_NAME, P1_GET_VERSION, P1_SIGN_MAX_CHUNKS, P1_SIGN_NEXT, P1_SIGN_START,
-    P2_DONE, P2_SIGN_MORE,
+    decode_all, Ins, P1SignTx, PubKeyP1, WrongP1P2, APDU_CLASS, P1_APP_NAME, P1_GET_VERSION,
+    P1_SIGN_MAX_CHUNKS, P1_SIGN_NEXT, P1_SIGN_START, P2_DONE, P2_SIGN_MORE,
 };
 
-use crate::handlers::sign_tx::handler_sign_tx;
+use crate::handlers::sign_tx::handle_sign_tx;
 
 ledger_device_sdk::set_panic!(ledger_device_sdk::exiting_panic);
 // Required for using String, Vec, format!...
 extern crate alloc;
 
-impl From<WrongP1P2> for AppSW {
+impl From<WrongP1P2> for StatusWord {
     fn from(_: WrongP1P2) -> Self {
         Self::WrongP1P2
     }
@@ -69,7 +67,7 @@ impl From<WrongP1P2> for AppSW {
 // Application status words.
 #[repr(u16)]
 #[derive(Clone, Copy, PartialEq)]
-pub enum AppSW {
+pub enum StatusWord {
     Ok = StatusWords::Ok as u16,
     Deny = StatusWords::UserCancelled as u16,
     ClaNotSupported = StatusWords::BadCla as u16,
@@ -117,7 +115,7 @@ pub enum AppSW {
     EccGenericError = 0xB110,
 }
 
-impl From<CxError> for AppSW {
+impl From<CxError> for StatusWord {
     fn from(value: CxError) -> Self {
         match value {
             CxError::Carry => Self::EccCarry,
@@ -141,8 +139,8 @@ impl From<CxError> for AppSW {
     }
 }
 
-impl From<AppSW> for Reply {
-    fn from(sw: AppSW) -> Reply {
+impl From<StatusWord> for Reply {
+    fn from(sw: StatusWord) -> Reply {
         Reply(sw as u16)
     }
 }
@@ -157,7 +155,7 @@ pub enum Instruction {
 }
 
 impl TryFrom<ApduHeader> for Instruction {
-    type Error = AppSW;
+    type Error = StatusWord;
 
     /// APDU parsing logic.
     ///
@@ -195,28 +193,28 @@ impl TryFrom<ApduHeader> for Instruction {
                 Ins::GET_VERSION | Ins::APP_NAME | Ins::PUB_KEY | Ins::SIGN_TX | Ins::SIGN_MSG,
                 _,
                 _,
-            ) => Err(AppSW::WrongP1P2),
-            (_, _, _) => Err(AppSW::InsNotSupported),
+            ) => Err(StatusWord::WrongP1P2),
+            (_, _, _) => Err(StatusWord::InsNotSupported),
         }
     }
 }
 
-fn show_status_and_home_if_needed(ins: &Instruction, ctx: &mut Context, status: &AppSW) {
+fn show_status_and_home_if_needed(ins: &Instruction, ctx: &mut Context, status: &StatusWord) {
     let (show_status, status_type) = match (ins, status) {
-        (Instruction::GetPubkey { display: true }, AppSW::Deny | AppSW::Ok) => {
+        (Instruction::GetPubkey { display: true }, StatusWord::Deny | StatusWord::Ok) => {
             (true, StatusType::Address)
         }
-        (Instruction::SignTx { .. }, AppSW::Deny | AppSW::Ok) if ctx.finished() => {
+        (Instruction::SignTx { .. }, StatusWord::Deny | StatusWord::Ok) if ctx.finished() => {
             (true, StatusType::Transaction)
         }
-        (Instruction::SignMessage { .. }, AppSW::Deny | AppSW::Ok) if ctx.finished() => {
+        (Instruction::SignMessage { .. }, StatusWord::Deny | StatusWord::Ok) if ctx.finished() => {
             (true, StatusType::Message)
         }
         (_, _) => (false, StatusType::Transaction),
     };
 
     if show_status {
-        let success = *status == AppSW::Ok;
+        let success = *status == StatusWord::Ok;
         NbglReviewStatus::new()
             .status_type(status_type)
             .show(success);
@@ -274,7 +272,7 @@ extern "C" fn sample_main() {
         let _status = match handle_apdu(&mut comm, &ins, &mut tx_ctx) {
             Ok(()) => {
                 comm.reply_ok();
-                AppSW::Ok
+                StatusWord::Ok
             }
             Err(sw) => {
                 comm.reply(sw);
@@ -285,29 +283,28 @@ extern "C" fn sample_main() {
     }
 }
 
-fn handle_apdu(comm: &mut Comm, ins: &Instruction, ctx: &mut Context) -> Result<(), AppSW> {
-    let mut data = comm.get_data().map_err(|_| AppSW::WrongApduLength)?;
+fn handle_apdu(comm: &mut Comm, ins: &Instruction, ctx: &mut Context) -> Result<(), StatusWord> {
+    let mut data = comm.get_data().map_err(|_| StatusWord::WrongApduLength)?;
     match ins {
         Instruction::GetAppName => {
             comm.append(env!("CARGO_PKG_NAME").as_bytes());
             Ok(())
         }
-        Instruction::GetVersion => handler_get_version(comm),
+        Instruction::GetVersion => handle_get_version(comm),
         Instruction::GetPubkey { display } => {
-            let req = PublicKeyReq::decode_all(&mut data).map_err(|_| AppSW::DeserializeFail)?;
-            handler_get_public_key(comm, req, *display)
+            let req = decode_all(&data).ok_or(StatusWord::DeserializeFail)?;
+            handle_get_public_key(comm, req, *display)
         }
         Instruction::SignTx { p1, more } => {
             if *p1 == P1SignTx::Metadata {
-                let req =
-                    TxMetadataReq::decode_all(&mut data).map_err(|_| AppSW::DeserializeFail)?;
+                let req = decode_all(&mut data).ok_or(StatusWord::DeserializeFail)?;
                 setup_sign_tx(req, &mut ctx.data)
             } else {
-                let mut data = comm.get_data().map_err(|_| AppSW::WrongApduLength)?;
+                let mut data = comm.get_data().map_err(|_| StatusWord::WrongApduLength)?;
 
                 let (ctx, review) = match &mut ctx.data {
                     DataContext::TxContext(ctx, review) => (ctx, review),
-                    _ => return Err(AppSW::WrongContext),
+                    _ => return Err(StatusWord::WrongContext),
                 };
 
                 ctx.show_spinner();
@@ -317,17 +314,16 @@ fn handle_apdu(comm: &mut Comm, ins: &Instruction, ctx: &mut Context) -> Result<
                     return Ok(());
                 }
 
-                let req = SignTxReq::decode_all(&mut data).map_err(|_| AppSW::DeserializeFail)?;
-                handler_sign_tx(comm, req, ctx, review)
+                let req = decode_all(&mut data).ok_or(StatusWord::DeserializeFail)?;
+                handle_sign_tx(comm, req, ctx, review)
             }
         }
         Instruction::SignMessage { chunk, more } => {
             if *chunk == 0 {
-                let req =
-                    SignMessageReq::decode_all(&mut data).map_err(|_| AppSW::DeserializeFail)?;
+                let req = decode_all(&mut data).ok_or(StatusWord::DeserializeFail)?;
                 setup_sign_message(req, &mut ctx.data)
             } else {
-                handler_sign_message(comm, *more, &mut ctx.data)
+                handle_sign_message(comm, *more, &mut ctx.data)
             }
         }
     }

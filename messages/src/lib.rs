@@ -30,7 +30,8 @@ pub use ml_common::{
     TxInput, TxOutput, UtxoOutPoint, VRFPublicKeyHolder,
 };
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use parity_scale_codec::{Decode, DecodeAll, Encode};
+pub use parity_scale_codec::Encode;
+use parity_scale_codec::{Decode, DecodeAll};
 
 pub const APDU_CLASS: u8 = 0xE2;
 
@@ -281,10 +282,50 @@ pub struct InputAddressPath {
     pub multisig_idx: Option<u32>,
 }
 
+#[derive(Encode, Decode)]
+pub enum Prerelease {
+    Alpha,
+    Beta,
+}
+
+#[derive(Encode, Decode)]
+pub struct GetVersionRespones {
+    pub major: u8,
+    pub minor: u8,
+    pub patch: u8,
+    pub prerelease_id: Option<Prerelease>,
+    pub build_metadata: Vec<u8>,
+}
+
+#[derive(Encode, Decode)]
+pub struct GetPublicKeyRespones {
+    pub public_key: [u8; 65],
+    pub chain_code: [u8; 32],
+}
+
+#[derive(Encode, Decode)]
+pub struct Signature {
+    pub signature: [u8; 64],
+    pub multisig_idx: Option<u32>,
+}
+
+#[derive(Encode, Decode)]
+pub struct MsgSignature {
+    pub signature: [u8; 64],
+}
+
 pub fn encode<T: Encode>(t: T) -> Vec<u8> {
     t.encode()
 }
 
+pub fn encode_to<T: Encode>(t: T, buf: &mut Vec<u8>) {
+    t.encode_to(buf)
+}
+
 pub fn decode_all<T: Decode>(mut bytes: &[u8]) -> Option<T> {
     T::decode_all(&mut bytes).ok()
+}
+
+pub fn encode_as_compact(num: u32) -> Vec<u8> {
+    parity_scale_codec::Compact::<u32>::encode(&num.into())
 }

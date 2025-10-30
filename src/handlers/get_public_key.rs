@@ -16,38 +16,38 @@
  *****************************************************************************/
 
 use crate::app_ui::address::ui_display_pk;
-use crate::AppSW;
-use messages::PublicKeyReq;
+use crate::StatusWord;
+use messages::{encode, GetPublicKeyRespones, PublicKeyReq};
 
 use ledger_device_sdk::ecc::{Secp256k1, SeedDerive};
 use ledger_device_sdk::io::Comm;
 
-pub fn handler_get_public_key(
+pub fn handle_get_public_key(
     comm: &mut Comm,
     req: PublicKeyReq,
     display: bool,
-) -> Result<(), AppSW> {
+) -> Result<(), StatusWord> {
     if req.path.as_ref().len() < 3 {
-        return Err(AppSW::InvalidPath);
+        return Err(StatusWord::InvalidPath);
     }
     if req.path.as_ref()[1] != req.coin_type.bip44_coin_type() {
-        return Err(AppSW::InvalidPath);
+        return Err(StatusWord::InvalidPath);
     }
 
     let (k, cc) = Secp256k1::derive_from(req.path.as_ref());
-    let pk = k.public_key().map_err(|_| AppSW::KeyDeriveFail)?;
-    let code = cc.ok_or(AppSW::KeyDeriveFail)?;
+    let pk = k.public_key().map_err(|_| StatusWord::KeyDeriveFail)?;
+    let code = cc.ok_or(StatusWord::KeyDeriveFail)?;
 
     // Display address on device if requested
     if display && !ui_display_pk(&pk, req.coin_type)? {
-        return Err(AppSW::Deny);
+        return Err(StatusWord::Deny);
     }
+    let response = GetPublicKeyRespones {
+        public_key: pk.pubkey,
+        chain_code: code.value,
+    };
 
-    comm.append(&[pk.pubkey.len() as u8]);
-    comm.append(&pk.pubkey);
-
-    comm.append(&[code.value.len() as u8]);
-    comm.append(&code.value);
+    comm.append(&encode(response));
 
     Ok(())
 }

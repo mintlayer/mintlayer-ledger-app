@@ -16,16 +16,26 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use crate::AppSW;
+use crate::StatusWord;
 use core::str::FromStr;
 use ledger_device_sdk::io;
 
-pub fn handler_get_version(comm: &mut io::Comm) -> Result<(), AppSW> {
+use messages::{encode, GetVersionRespones};
+
+pub fn handle_get_version(comm: &mut io::Comm) -> Result<(), StatusWord> {
     if let Some((major, minor, patch)) = parse_version_string(env!("CARGO_PKG_VERSION")) {
-        comm.append(&[major, minor, patch]);
+        let response = GetVersionRespones {
+            major,
+            minor,
+            patch,
+            prerelease_id: None,
+            build_metadata: env!("GIT_HASH").as_bytes().to_vec(),
+        };
+
+        comm.append(&encode(response));
         Ok(())
     } else {
-        Err(AppSW::VersionParsingFail)
+        Err(StatusWord::VersionParsingFail)
     }
 }
 

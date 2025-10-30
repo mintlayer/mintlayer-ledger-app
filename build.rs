@@ -1,3 +1,5 @@
+use std::process::Command;
+
 use image::{ImageFormat, ImageReader, Pixel};
 
 fn main() {
@@ -31,4 +33,17 @@ fn main() {
     let glyph_path = std::path::PathBuf::from("glyphs");
     gray.save_with_format(glyph_path.join("home_nano_nbgl.png"), ImageFormat::Png)
         .unwrap();
+
+    let output = Command::new("git")
+        .args(&["rev-parse", "HEAD"])
+        .output()
+        .expect("Failed to execute git command");
+
+    let git_hash = String::from_utf8(output.stdout).expect("Failed to convert git output to UTF-8");
+
+    // Expose the Git hash as an environment variable
+    println!("cargo:rustc-env=GIT_HASH={}", git_hash.trim());
+
+    // Rerun the build script if .git/HEAD changes
+    println!("cargo:rerun-if-changed=.git/HEAD");
 }

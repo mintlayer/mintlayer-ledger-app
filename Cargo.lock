@@ -800,7 +800,6 @@ dependencies = [
  "ledger_secure_sdk_sys",
  "messages",
  "numtoa 0.3.1",
- "parity-scale-codec",
  "serde",
  "serde-json-core",
  "trezor-common",

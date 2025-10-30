@@ -19,14 +19,6 @@ numtoa = "0.3.1"
 bech32 = { version = "0.11", default-features = false, features = ["alloc"] }
 chrono = { version = "0.4", default-features = false, features = ["alloc"] }
 
-# parity-scale-codec = { version = "3.7", default-features = false, features = [
-#     "derive",
-#     "chain-error",
-# ] }
-parity-scale-codec = { git = "https://github.com/OBorce/parity-scale-codec.git", branch = "fix/missing-target-atomic-ptr", default-features = false, features = [
-    "derive",
-    "chain-error",
-] }
 ml_common = { git = "https://github.com/mintlayer/mintlayer-core", package = "trezor-common", branch = "feature/hardware-wallet-common2" }
 
 [build-dependencies]
