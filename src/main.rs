@@ -27,7 +27,6 @@ mod app_ui {
 }
 mod handlers {
     pub mod get_public_key;
-    pub mod get_version;
     pub mod sign_message;
     pub mod sign_tx;
 }
@@ -43,12 +42,11 @@ use ledger_device_sdk::{
 use app_ui::menu::ui_menu_main;
 use handlers::{
     get_public_key::handle_get_public_key,
-    get_version::handle_get_version,
     sign_message::{handle_sign_message, setup_sign_message, SignMessageContext},
     sign_tx::{setup_sign_tx, Review, TxContext},
 };
 use messages::{
-    decode_all, Ins, P1SignTx, PubKeyP1, WrongP1P2, APDU_CLASS, P1_APP_NAME, P1_GET_VERSION,
+    decode_all, Ins, P1SignTx, PubKeyP1, WrongP1P2, APDU_CLASS,
     P1_SIGN_MAX_CHUNKS, P1_SIGN_NEXT, P1_SIGN_START, P2_DONE, P2_SIGN_MORE,
 };
 
@@ -147,8 +145,6 @@ impl From<StatusWord> for Reply {
 
 /// Possible input commands received through APDUs.
 pub enum Instruction {
-    GetVersion,
-    GetAppName,
     GetPubkey { display: bool },
     SignTx { p1: P1SignTx, more: bool },
     SignMessage { chunk: u8, more: bool },
@@ -170,8 +166,6 @@ impl TryFrom<ApduHeader> for Instruction {
     /// [`sample_main`] to have this verification automatically performed by the SDK.
     fn try_from(value: ApduHeader) -> Result<Self, Self::Error> {
         match (value.ins, value.p1, value.p2) {
-            (Ins::GET_VERSION, P1_GET_VERSION, P2_DONE) => Ok(Instruction::GetVersion),
-            (Ins::APP_NAME, P1_APP_NAME, P2_DONE) => Ok(Instruction::GetAppName),
             (Ins::PUB_KEY, p1, P2_DONE) => {
                 let p1: PubKeyP1 = p1.try_into()?;
                 Ok(Instruction::GetPubkey {
@@ -190,7 +184,7 @@ impl TryFrom<ApduHeader> for Instruction {
                 })
             }
             (
-                Ins::GET_VERSION | Ins::APP_NAME | Ins::PUB_KEY | Ins::SIGN_TX | Ins::SIGN_MSG,
+                Ins::PUB_KEY | Ins::SIGN_TX | Ins::SIGN_MSG,
                 _,
                 _,
             ) => Err(StatusWord::WrongP1P2),
@@ -286,11 +280,6 @@ extern "C" fn sample_main() {
 fn handle_apdu(comm: &mut Comm, ins: &Instruction, ctx: &mut Context) -> Result<(), StatusWord> {
     let mut data = comm.get_data().map_err(|_| StatusWord::WrongApduLength)?;
     match ins {
-        Instruction::GetAppName => {
-            comm.append(env!("CARGO_PKG_NAME").as_bytes());
-            Ok(())
-        }
-        Instruction::GetVersion => handle_get_version(comm),
         Instruction::GetPubkey { display } => {
             let req = decode_all(&data).ok_or(StatusWord::DeserializeFail)?;
             handle_get_public_key(comm, req, *display)

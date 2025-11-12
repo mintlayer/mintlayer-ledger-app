@@ -34,6 +34,7 @@ pub use parity_scale_codec::Encode;
 use parity_scale_codec::{Decode, DecodeAll};
 
 pub const APDU_CLASS: u8 = 0xE2;
+pub const MAX_ADPU_DATA_LEN: usize = u8::MAX as usize;
 
 // P2 for last APDU to receive.
 pub const P2_DONE: u8 = 0x00;
@@ -67,11 +68,9 @@ impl PubKeyP1 {
 pub struct Ins {}
 
 impl Ins {
-    pub const GET_VERSION: u8 = 0x00;
-    pub const APP_NAME: u8 = 0x01;
-    pub const PUB_KEY: u8 = 0x02;
-    pub const SIGN_TX: u8 = 0x03;
-    pub const SIGN_MSG: u8 = 0x04;
+    pub const PUB_KEY: u8 = 0x00;
+    pub const SIGN_TX: u8 = 0x01;
+    pub const SIGN_MSG: u8 = 0x02;
 }
 
 pub struct WrongP1P2;
@@ -328,4 +327,72 @@ pub fn decode_all<T: Decode>(mut bytes: &[u8]) -> Option<T> {
 
 pub fn encode_as_compact(num: u32) -> Vec<u8> {
     parity_scale_codec::Compact::<u32>::encode(&num.into())
+}
+
+/// This represents an APDU used in communication with Mintlayer Ledger app.
+///
+/// Note that the class byte is not present here, because it's the same for all our APDUs.
+///
+/// Also, we don't have the second parameter byte here either, because its meaning is the same
+/// across all APDUs - it specifies whether this APDU represents the last chunk of the instruction.
+pub struct Apdu<'a> {
+    instruction_byte: u8,
+    param1_byte: u8,
+    command_data: &'a [u8],
+    is_last_chunk: bool,
+}
+
+impl<'a> Apdu<'a> {
+    /// Create an APDU with data; this will fail if the data length exceeds the allowed maximum.
+    pub fn new_with_data(
+        instruction_byte: u8,
+        param1_byte: u8,
+        command_data: &'a [u8],
+    ) -> Option<Self> {
+        (command_data.len() <= MAX_ADPU_DATA_LEN).then(|| Self {
+            instruction_byte,
+            param1_byte,
+            command_data,
+            is_last_chunk: true,
+        })
+    }
+
+    pub fn new_chunks(instruction_byte: u8, param1_byte: u8, data: &'a [u8]) -> Vec<Self> {
+        let mut adpus = Vec::new();
+        let mut chunks_iter = data.chunks(MAX_ADPU_DATA_LEN).peekable();
+        while let Some(chunk) = chunks_iter.next() {
+            let apdu = Self {
+                instruction_byte,
+                param1_byte,
+                command_data: chunk,
+                is_last_chunk: chunks_iter.peek().is_none(),
+            };
+            adpus.push(apdu);
+        }
+        adpus
+    }
+
+    /// The number of bytes that will be written by `write_bytes`.
+    ///
+    /// This can be used to reserve the required capacity in the destination collection
+    /// (note that `Extend::extend_reserve is` still nightly-only, so we can't use it).
+    pub fn bytes_count(&self) -> usize {
+        // class, instruction, param1 and param2 bytes, then 1 byte for data length, then the
+        // data itself.
+        5 + self.command_data.len()
+    }
+
+    pub fn write_bytes(&self, collection: &mut impl core::iter::Extend<u8>) {
+        let param2_byte = if self.is_last_chunk {
+            P2_DONE
+        } else {
+            P2_SIGN_MORE
+        };
+
+        collection.extend([APDU_CLASS, self.instruction_byte, self.param1_byte, param2_byte]);
+        // Should be true by construction
+        assert!(self.command_data.len() <= u8::MAX as usize);
+        collection.extend(core::iter::once(self.command_data.len() as u8));
+        collection.extend(self.command_data.iter().copied());
+    }
 }
