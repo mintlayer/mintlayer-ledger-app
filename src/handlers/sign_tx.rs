@@ -321,19 +321,21 @@ impl TxContext {
 
     fn advance_next_input_additional_info_step<'a>(
         &mut self,
-        num_inp: usize,
+        current_input_step: usize,
         review: &'a Review,
     ) -> SigningState<'a> {
-        self.state = if num_inp < (self.num_inputs - 1) as usize {
-            TxParsingState::InputAdditionalInfo(num_inp + 1)
-        } else {
-            self.inputs_data = Vec::new();
-            TxParsingState::Output(0)
-        };
+        let finished_with_inputs = current_input_step >= (self.num_inputs - 1) as usize;
 
-        match review {
-            Review::Review(_) => SigningState::TxParsingNotComplete,
-            Review::StreamingReview(review) => SigningState::StreamingReviewStart(review),
+        if finished_with_inputs {
+            self.inputs_data = Vec::new();
+            self.state = TxParsingState::Output(0);
+            match review {
+                Review::Review(_) => SigningState::TxParsingNotComplete,
+                Review::StreamingReview(review) => SigningState::StreamingReviewStart(review),
+            }
+        } else {
+            self.state = TxParsingState::InputAdditionalInfo(current_input_step + 1);
+            SigningState::TxParsingNotComplete
         }
     }
 

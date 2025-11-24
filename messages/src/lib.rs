@@ -357,6 +357,7 @@ impl<'a> Apdu<'a> {
         })
     }
 
+    /// Creates a Vec of APDUs by chunking the data to MAX_ADPU_DATA_LEN
     pub fn new_chunks(instruction_byte: u8, param1_byte: u8, data: &'a [u8]) -> Vec<Self> {
         let mut adpus = Vec::new();
         let mut chunks_iter = data.chunks(MAX_ADPU_DATA_LEN).peekable();
@@ -370,6 +371,10 @@ impl<'a> Apdu<'a> {
             adpus.push(apdu);
         }
         adpus
+    }
+
+    pub fn is_last(&self) -> bool {
+        self.is_last_chunk
     }
 
     /// The number of bytes that will be written by `write_bytes`.

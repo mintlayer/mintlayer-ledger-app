@@ -96,16 +96,18 @@ You can also run the app directly on the [Speculos emulator](https://github.com/
 #### Nano S+ or X
 
 ```bash
-speculos --apdu-port 9999 --api-port 5001 --display headless --model nanosp target/nanosplus/release/mintlayer-app
+speculos --apdu-port 9999 --api-port 5000 --display headless --model nanosp target/nanosplus/release/mintlayer-app
 ```
 
-:warning: UI is displayed on `localhost:5001`
+:warning: UI is displayed on `localhost:5000`
 
 #### Stax or Flex
 
 ```bash
-speculos --apdu-port 9999 --api-port 5001 --model stax target/stax/release/mintlayer-app
+speculos --apdu-port 9999 --api-port 5000 --model stax target/stax/release/mintlayer-app
 ```
+
+You can also specfy the seed phrase with -s "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
 :warning: UI is displayed by your X server
 
