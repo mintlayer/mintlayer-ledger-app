@@ -308,6 +308,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 
 [[package]]
+name = "derive_more"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "093242cf7570c207c83073cf82f79706fe7b8317e98620a47d5be7c3d8497678"
+dependencies = [
+ "derive_more-impl",
+]
+
+[[package]]
+name = "derive_more-impl"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bda628edc44c4bb645fbe0f758797143e4e07926f7ebf4e9bdfbd3d2ce621df3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.104",
+ "unicode-xid",
+]
+
+[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -401,6 +422,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e6853b52649d4ac5c0bd02320cddc5ba956bdb407c4b75a2c6b75bf51500f8c"
 dependencies = [
  "simd-adler32",
+]
+
+[[package]]
+name = "fixed-hash"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "835c052cb0c08c1acf6ffd71c022172e18723949c8282f2b9f27efbc51e64534"
+dependencies = [
+ "static_assertions",
 ]
 
 [[package]]
@@ -714,12 +744,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libm"
-version = "0.2.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
-
-[[package]]
 name = "linked_list_allocator"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -766,9 +790,9 @@ checksum = "32a282da65faaf38286cf3be983213fcf1d2e2a58700e808f83f4ea9a4804bc0"
 name = "messages"
 version = "0.1.0"
 dependencies = [
+ "mintlayer-core-primitives",
  "num_enum",
  "parity-scale-codec",
- "trezor-common",
 ]
 
 [[package]]
@@ -799,10 +823,20 @@ dependencies = [
  "ledger_device_sdk",
  "ledger_secure_sdk_sys",
  "messages",
+ "mintlayer-core-primitives",
  "numtoa 0.3.1",
  "serde",
  "serde-json-core",
- "trezor-common",
+]
+
+[[package]]
+name = "mintlayer-core-primitives"
+version = "1.0.0"
+dependencies = [
+ "derive_more",
+ "fixed-hash",
+ "parity-scale-codec",
+ "strum",
 ]
 
 [[package]]
@@ -885,7 +919,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
- "libm",
 ]
 
 [[package]]
@@ -930,7 +963,7 @@ checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 [[package]]
 name = "parity-scale-codec"
 version = "3.7.5"
-source = "git+https://github.com/OBorce/parity-scale-codec.git?branch=fix%2Fmissing-target-atomic-ptr#b6aafd677f9b83d8bcd0d1a614ed115f7e43568a"
+source = "git+https://github.com/paritytech/parity-scale-codec.git?rev=5021525697edc0661591ebc71392c48d950a10b0#5021525697edc0661591ebc71392c48d950a10b0"
 dependencies = [
  "arrayvec",
  "byte-slice-cast",
@@ -943,7 +976,7 @@ dependencies = [
 [[package]]
 name = "parity-scale-codec-derive"
 version = "3.7.5"
-source = "git+https://github.com/OBorce/parity-scale-codec.git?branch=fix%2Fmissing-target-atomic-ptr#b6aafd677f9b83d8bcd0d1a614ed115f7e43568a"
+source = "git+https://github.com/paritytech/parity-scale-codec.git?rev=5021525697edc0661591ebc71392c48d950a10b0#5021525697edc0661591ebc71392c48d950a10b0"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -1339,24 +1372,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 
 [[package]]
-name = "strum"
-version = "0.26.3"
+name = "static_assertions"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "strum"
+version = "0.27.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
 dependencies = [
  "strum_macros",
 ]
 
 [[package]]
 name = "strum_macros"
-version = "0.26.4"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
 dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "rustversion",
  "syn 2.0.104",
 ]
 
@@ -1478,17 +1516,6 @@ dependencies = [
  "serde_spanned",
  "toml_datetime",
  "winnow",
-]
-
-[[package]]
-name = "trezor-common"
-version = "1.1.0"
-source = "git+https://github.com/mintlayer/mintlayer-core?branch=feature%2Fhardware-wallet-common2#5a2106e456ec767053dc81bbdacc33e8e7537d38"
-dependencies = [
- "num-derive",
- "num-traits",
- "parity-scale-codec",
- "strum",
 ]
 
 [[package]]

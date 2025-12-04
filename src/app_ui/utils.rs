@@ -18,9 +18,7 @@
 use alloc::string::String;
 
 use crate::StatusWord;
-use messages::{encode, CoinType};
-
-use ml_common::Destination;
+use messages::{encode, Destination, PCoinType};
 
 pub fn bech32m_encode(hrp: &str, data: &[u8]) -> Result<String, StatusWord> {
     let parsed_hrp = bech32::Hrp::parse(hrp).map_err(|_| StatusWord::TxAddressFail)?;
@@ -31,7 +29,7 @@ pub fn bech32m_encode(hrp: &str, data: &[u8]) -> Result<String, StatusWord> {
     Ok(encoded)
 }
 
-pub fn to_address(destination: &Destination, coin: CoinType) -> Result<String, StatusWord> {
+pub fn to_address(destination: &Destination, coin: PCoinType) -> Result<String, StatusWord> {
     let hrp = coin.address_prefix(destination);
     bech32m_encode(hrp, &encode(destination))
 }

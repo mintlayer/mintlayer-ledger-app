@@ -17,7 +17,7 @@
 
 use crate::app_ui::address::ui_display_pk;
 use crate::StatusWord;
-use messages::{encode, GetPublicKeyRespones, PublicKeyReq};
+use messages::{encode, GetPublicKeyRespones, PCoinType, PublicKeyReq};
 
 use ledger_device_sdk::ecc::{Secp256k1, SeedDerive};
 use ledger_device_sdk::io::Comm;
@@ -30,7 +30,8 @@ pub fn handle_get_public_key(
     if req.path.as_ref().len() < 3 {
         return Err(StatusWord::InvalidPath);
     }
-    if req.path.as_ref()[1] != req.coin_type.bip44_coin_type() {
+    let coin_type: PCoinType = req.coin_type.into();
+    if req.path.as_ref()[1] != coin_type.bip44_coin_type() {
         return Err(StatusWord::InvalidPath);
     }
 
@@ -39,7 +40,7 @@ pub fn handle_get_public_key(
     let code = cc.ok_or(StatusWord::KeyDeriveFail)?;
 
     // Display address on device if requested
-    if display && !ui_display_pk(&pk, req.coin_type)? {
+    if display && !ui_display_pk(&pk, req.coin_type.into())? {
         return Err(StatusWord::Deny);
     }
     let response = GetPublicKeyRespones {

@@ -28,7 +28,11 @@ use crate::{
     handlers::sign_tx::{CoinOrTokenId, TxContext, TxType},
     StatusWord,
 };
-use messages::{encode, AddrType, CoinType};
+use messages::{
+    encode, AddrType, Amount, Destination, IsTokenFreezable, NftIssuance, OutputTimeLock,
+    OutputValue, PCoinType, PublicKey, PublicKeyHash, Secp256k1PublicKey, TokenIssuance,
+    TokenTotalSupply, TxOutput, VrfPublicKey, H256,
+};
 
 use chrono::{TimeZone, Utc};
 use include_gif::include_gif;
@@ -39,10 +43,6 @@ use ledger_device_sdk::{
         Field, NbglGlyph, NbglReview, NbglStreamingReview, NbglStreamingReviewStatus,
         TransactionType,
     },
-};
-use ml_common::{
-    Amount, Destination, IsTokenFreezable, NftIssuance, OutputTimeLock, OutputValue, TokenIssuance,
-    TokenTotalSupply, TxOutput, VRFPublicKeyHolder, H256,
 };
 
 pub fn new_streaming_review() -> NbglStreamingReview {
@@ -69,7 +69,7 @@ pub fn start_streaming_review(review: &NbglStreamingReview) -> bool {
 pub fn streaming_review_show_output(
     review: &NbglStreamingReview,
     output: &TxOutput,
-    coin: CoinType,
+    coin: PCoinType,
 ) -> Result<bool, StatusWord> {
     let (name, value) = format_output(output, coin)?;
     let fields = [Field {
@@ -272,15 +272,15 @@ fn transaction_title(tx: &TxContext) -> &'static str {
 pub fn ui_display_message<const T: char>(
     message: &[u8],
     public_key: &ECPublicKey<65, T>,
-    coin_type: CoinType,
+    coin_type: PCoinType,
     addr_type: AddrType,
 ) -> Result<bool, StatusWord> {
     let pk = compress_public_key(public_key)?;
 
     let dest = match addr_type {
-        AddrType::PublicKey => ml_common::Destination::PublicKey(
-            ml_common::PublicKeyHolder::Secp256k1Schnorr(ml_common::PublicKey(pk)),
-        ),
+        AddrType::PublicKey => {
+            Destination::PublicKey(PublicKey::Secp256k1Schnorr(Secp256k1PublicKey(pk)))
+        }
         AddrType::PublicKeyHash => {
             let mut blake2b256 = Blake2b_512::new();
             let mut public_key_hash: [u8; 64] = [0u8; 64];
@@ -297,7 +297,7 @@ pub fn ui_display_message<const T: char>(
             let mut pkh = [0u8; 20];
             pkh.copy_from_slice(&public_key_hash[0..20]);
 
-            ml_common::Destination::PublicKeyHash(ml_common::PublicKeyHash(pkh))
+            Destination::PublicKeyHash(PublicKeyHash(pkh))
         }
     };
     let addr = to_address(&dest, coin_type)?;
@@ -343,7 +343,7 @@ pub fn ui_display_message<const T: char>(
     Ok(review.show(&my_fields))
 }
 
-fn vrf_to_address(key: &VRFPublicKeyHolder, coin: CoinType) -> Result<String, StatusWord> {
+fn vrf_to_address(key: &VrfPublicKey, coin: PCoinType) -> Result<String, StatusWord> {
     bech32m_encode(coin.vrf_public_key_address_prefix(), &encode(key))
 }
 
@@ -351,7 +351,7 @@ fn id_to_address(id: &H256, hrp: &str) -> Result<String, StatusWord> {
     bech32m_encode(hrp, &id.0)
 }
 
-fn format_amount(amount: Amount, coin: CoinType) -> String {
+fn format_amount(amount: Amount, coin: PCoinType) -> String {
     let decimals = coin.coin_decimals() as usize;
     let mantissa = amount.into_atoms();
 
@@ -367,13 +367,12 @@ fn format_atoms(amount: Amount) -> String {
     amount.into_atoms().to_string()
 }
 
-fn format_value(value: &OutputValue, coin: CoinType) -> Result<String, StatusWord> {
+fn format_value(value: &OutputValue, coin: PCoinType) -> Result<String, StatusWord> {
     match value {
         OutputValue::Coin(amount) => Ok(format!("Coins: {}", format_amount(*amount, coin))),
-        OutputValue::TokenV0 => Err(StatusWord::TxInvalidTokenV0),
         OutputValue::TokenV1(token_id, amount) => Ok(format!(
             "Token: {} {}",
-            id_to_address(token_id, coin.token_id_address_prefix())?,
+            id_to_address(token_id.hash(), coin.token_id_address_prefix())?,
             format_atoms(*amount)
         )),
     }
@@ -393,10 +392,10 @@ fn format_timestamp(seconds_u64: u64) -> Result<String, StatusWord> {
 
 fn format_lock(lock: &OutputTimeLock) -> Result<String, StatusWord> {
     let s = match lock {
-        OutputTimeLock::UntilHeight(h) => format!("Lock until block height {h}"),
-        OutputTimeLock::UntilTime(t) => format!("Lock until {}", format_timestamp(*t)?),
-        OutputTimeLock::ForBlockCount(b) => format!("Lock for {b} blocks"),
-        OutputTimeLock::ForSeconds(s) => format!("Lock for {s} seconds"),
+        OutputTimeLock::UntilHeight(h) => format!("Lock until block height {}", h.0),
+        OutputTimeLock::UntilTime(t) => format!("Lock until {}", format_timestamp(t.0 .0)?),
+        OutputTimeLock::ForBlockCount(b) => format!("Lock for {} blocks", b.0),
+        OutputTimeLock::ForSeconds(s) => format!("Lock for {} seconds", s.0),
     };
     Ok(s)
 }
@@ -409,7 +408,7 @@ fn format_lock(lock: &OutputTimeLock) -> Result<String, StatusWord> {
 ///
 /// # Returns
 /// A tuple containing three `String`s: `(short_address, amount, address_label)`.
-pub fn format_output(output: &TxOutput, coin: CoinType) -> Result<(&str, String), StatusWord> {
+pub fn format_output(output: &TxOutput, coin: PCoinType) -> Result<(&str, String), StatusWord> {
     let res = match output {
         TxOutput::Transfer(value, destination) => (
             "Transfer",
@@ -435,7 +434,7 @@ pub fn format_output(output: &TxOutput, coin: CoinType) -> Result<(&str, String)
         TxOutput::CreateStakePool(pool_id, data) => {
             let address_short = format!(
                 "Pool ID: {}\nStaker key: {}\nDecommission key: {}\nVRF public key: {}\nMargin ratio per thousand: {}\nCost per block: {}\nPledge{}\n",
-                id_to_address(pool_id, coin.pool_id_address_prefix())?, to_address(&data.staker, coin)?, to_address(&data.decommission_key, coin)?, vrf_to_address(&data.vrf_public_key, coin)?, data.margin_ratio_per_thousand, format_amount(data.cost_per_block, coin),
+                id_to_address(pool_id.hash(), coin.pool_id_address_prefix())?, to_address(&data.staker, coin)?, to_address(&data.decommission_key, coin)?, vrf_to_address(&data.vrf_public_key, coin)?, data.margin_ratio_per_thousand.0, format_amount(data.cost_per_block, coin),
                 format_amount(data.pledge, coin));
             ("Create staking pool", address_short)
         }
@@ -449,7 +448,7 @@ pub fn format_output(output: &TxOutput, coin: CoinType) -> Result<(&str, String)
             let address_short = format!(
                 "Address: {}\nPoolId: {}",
                 to_address(destination, coin)?,
-                id_to_address(pool_id, coin.pool_id_address_prefix())?
+                id_to_address(pool_id.hash(), coin.pool_id_address_prefix())?
             );
             ("Create delegation", address_short)
         }
@@ -458,7 +457,7 @@ pub fn format_output(output: &TxOutput, coin: CoinType) -> Result<(&str, String)
             "Delegate staking",
             format!(
                 "{}\n{}",
-                id_to_address(delegation_id, coin.delegation_id_address_prefix())?,
+                id_to_address(delegation_id.hash(), coin.delegation_id_address_prefix())?,
                 format_value(&OutputValue::Coin(*amount), coin)?
             ),
         ),
@@ -491,7 +490,7 @@ pub fn format_output(output: &TxOutput, coin: CoinType) -> Result<(&str, String)
 
         TxOutput::IssueNft(_nft_id, data, destination) => {
             let data = match data {
-                NftIssuance::V0(data) => &data.metadata,
+                NftIssuance::V0(data) => data,
             };
             let address_short = format!(
                 "Name: {}\nCreator: {}\nTicker: {}\nAddress: {}\nIcon URI: {}\nAdditional medatada URI: {}\nMedia URI: {}",

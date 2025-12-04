@@ -33,6 +33,10 @@ mod handlers {
 
 mod settings;
 
+// Required for using String, Vec, format!...
+extern crate alloc;
+use alloc::vec::Vec;
+
 use ledger_device_sdk::{
     ecc::CxError,
     io::{ApduHeader, Comm, Reply, StatusWords},
@@ -46,15 +50,15 @@ use handlers::{
     sign_tx::{setup_sign_tx, Review, TxContext},
 };
 use messages::{
-    decode_all, Ins, P1SignTx, PubKeyP1, WrongP1P2, APDU_CLASS,
-    P1_SIGN_MAX_CHUNKS, P1_SIGN_NEXT, P1_SIGN_START, P2_DONE, P2_SIGN_MORE,
+    decode_all, Ins, P1SignTx, PubKeyP1, WrongP1P2, APDU_CLASS, MAX_ADPU_DATA_LEN, P1_SIGN_START,
+    P2_DONE, P2_MORE,
 };
 
 use crate::handlers::sign_tx::handle_sign_tx;
 
 ledger_device_sdk::set_panic!(ledger_device_sdk::exiting_panic);
-// Required for using String, Vec, format!...
-extern crate alloc;
+
+pub const MAX_BUFFER_LEN: usize = 4 * MAX_ADPU_DATA_LEN;
 
 impl From<WrongP1P2> for StatusWord {
     fn from(_: WrongP1P2) -> Self {
@@ -93,7 +97,9 @@ pub enum StatusWord {
     TxAlreadyFinished = 0xB011,
     InvalidPath = 0xB012,
     InvalidUncompressedPublicKey = 0xB013,
+    MaxBufferLenExceeded = 0xB014,
 
+    // The fallowing errors come from ecc::CxError
     EccCarry = 0xB100,
     EccLocked = 0xB101,
     EccUnlocked = 0xB102,
@@ -143,68 +149,130 @@ impl From<StatusWord> for Reply {
     }
 }
 
-/// Possible input commands received through APDUs.
-pub enum Instruction {
-    GetPubkey { display: bool },
-    SignTx { p1: P1SignTx, more: bool },
-    SignMessage { chunk: u8, more: bool },
+/// Represents a fully assembled Low-Level Instruction.
+/// Contains the aggregated data from one or more APDUs (if P2 indicated more data).
+pub struct RawInstruction {
+    pub ins: u8,
+    pub p1: u8,
+    pub data: Vec<u8>,
 }
 
-impl TryFrom<ApduHeader> for Instruction {
+/// State machine to handle APDU packet chaining (P2_MORE / P2_DONE).
+pub struct ApduTransport {
+    buffer: Vec<u8>,
+    current_ins: Option<u8>,
+    current_p1: Option<u8>,
+}
+
+impl ApduTransport {
+    pub fn new() -> Self {
+        Self {
+            buffer: Vec::with_capacity(255), // Pre-alloc for at least one standard APDU
+            current_ins: None,
+            current_p1: None,
+        }
+    }
+
+    /// Reads the next APDU from `comm`.
+    ///
+    /// - If `P2 == P2_MORE`, it accumulates the data and returns `Ok(None)`.
+    ///   It also sends a `StatusWord::Ok` to the host to request the next chunk.
+    /// - If `P2 == P2_DONE`, it finishes accumulation and returns `Ok(Some(RawInstruction))`.
+    pub fn receive(&mut self, comm: &mut Comm) -> Result<Option<RawInstruction>, StatusWord> {
+        let header: ApduHeader = comm.next_command();
+        let data = comm.get_data().map_err(|_| StatusWord::WrongApduLength)?;
+
+        // Validation: If we are in the middle of a stream, INS and P1 must match
+        if let (Some(curr_ins), Some(curr_p1)) = (self.current_ins, self.current_p1) {
+            if header.ins != curr_ins || header.p1 != curr_p1 {
+                self.reset();
+                return Err(StatusWord::WrongP1P2);
+            }
+        } else {
+            // New command sequence starting
+            self.current_ins = Some(header.ins);
+            self.current_p1 = Some(header.p1);
+        }
+
+        if self.buffer.len() + data.len() > MAX_BUFFER_LEN {
+            return Err(StatusWord::MaxBufferLenExceeded);
+        }
+
+        self.buffer.extend_from_slice(data);
+
+        match header.p2 {
+            P2_MORE => {
+                // Signal host that we received the chunk and are waiting for more
+                comm.reply(StatusWord::Ok);
+                Ok(None)
+            }
+            P2_DONE => {
+                // Construct the full instruction
+                let raw = RawInstruction {
+                    ins: header.ins,
+                    p1: header.p1,
+                    data: core::mem::take(&mut self.buffer),
+                };
+                self.reset();
+                Ok(Some(raw))
+            }
+            _ => {
+                self.reset();
+                Err(StatusWord::WrongP1P2)
+            }
+        }
+    }
+
+    fn reset(&mut self) {
+        self.buffer.clear();
+        self.current_ins = None;
+        self.current_p1 = None;
+    }
+}
+
+pub enum Command {
+    GetPubkey { display: bool, data: Vec<u8> },
+    SignTx { p1: P1SignTx, data: Vec<u8> },
+    SignMessage { p1: u8, data: Vec<u8> },
+}
+
+impl TryFrom<RawInstruction> for Command {
     type Error = StatusWord;
 
-    /// APDU parsing logic.
-    ///
-    /// Parses INS, P1 and P2 bytes to build an [`Instruction`]. P1 and P2 are translated to
-    /// strongly typed variables depending on the APDU instruction code. Invalid INS, P1 or P2
-    /// values result in errors with a status word, which are automatically sent to the host by the
-    /// SDK.
-    ///
-    /// This design allows a clear separation of the APDU parsing logic and commands handling.
-    ///
-    /// Note that CLA is not checked here. Instead the method [`Comm::set_expected_cla`] is used in
-    /// [`sample_main`] to have this verification automatically performed by the SDK.
-    fn try_from(value: ApduHeader) -> Result<Self, Self::Error> {
-        match (value.ins, value.p1, value.p2) {
-            (Ins::PUB_KEY, p1, P2_DONE) => {
-                let p1: PubKeyP1 = p1.try_into()?;
-                Ok(Instruction::GetPubkey {
+    fn try_from(raw: RawInstruction) -> Result<Self, Self::Error> {
+        match raw.ins {
+            Ins::PUB_KEY => {
+                let p1: PubKeyP1 = raw.p1.try_into()?;
+                Ok(Command::GetPubkey {
                     display: p1.display(),
+                    data: raw.data,
                 })
             }
-            (Ins::SIGN_TX, p1, P2_SIGN_MORE | P2_DONE) => Ok(Instruction::SignTx {
-                p1: p1.try_into()?,
-                more: value.p2 == P2_SIGN_MORE,
-            }),
-            (Ins::SIGN_MSG, P1_SIGN_START, P2_DONE)
-            | (Ins::SIGN_MSG, P1_SIGN_NEXT..=P1_SIGN_MAX_CHUNKS, P2_DONE | P2_SIGN_MORE) => {
-                Ok(Instruction::SignMessage {
-                    chunk: value.p1,
-                    more: value.p2 == P2_SIGN_MORE,
-                })
+            Ins::SIGN_TX => {
+                let p1: P1SignTx = raw.p1.try_into()?;
+                Ok(Command::SignTx { p1, data: raw.data })
             }
-            (
-                Ins::PUB_KEY | Ins::SIGN_TX | Ins::SIGN_MSG,
-                _,
-                _,
-            ) => Err(StatusWord::WrongP1P2),
-            (_, _, _) => Err(StatusWord::InsNotSupported),
+            Ins::SIGN_MSG => {
+                let p1 = raw.p1;
+                Ok(Command::SignMessage { p1, data: raw.data })
+            }
+            _ => Err(StatusWord::InsNotSupported),
         }
     }
 }
 
-fn show_status_and_home_if_needed(ins: &Instruction, ctx: &mut Context, status: &StatusWord) {
-    let (show_status, status_type) = match (ins, status) {
-        (Instruction::GetPubkey { display: true }, StatusWord::Deny | StatusWord::Ok) => {
+fn show_status_and_home_if_needed(cmd: &Command, ctx: &mut Context, status: &StatusWord) {
+    let (show_status, status_type) = match (cmd, status) {
+        (Command::GetPubkey { display: true, .. }, StatusWord::Deny | StatusWord::Ok) => {
             (true, StatusType::Address)
         }
-        (Instruction::SignTx { .. }, StatusWord::Deny | StatusWord::Ok) if ctx.finished() => {
+        (Command::SignTx { .. }, StatusWord::Deny | StatusWord::Ok) if ctx.finished() => {
             (true, StatusType::Transaction)
         }
-        (Instruction::SignMessage { .. }, StatusWord::Deny | StatusWord::Ok) if ctx.finished() => {
+        (Command::SignMessage { .. }, StatusWord::Deny | StatusWord::Ok) if ctx.finished() => {
             (true, StatusType::Message)
         }
-        (_, _) => (false, StatusType::Transaction),
+        (_, _) => (false, StatusType::Transaction), // Default fallback
     };
 
     if show_status {
@@ -248,9 +316,6 @@ impl Context {
 
 #[no_mangle]
 extern "C" fn sample_main() {
-    // Create the communication manager, and configure it to accept only APDU from the APDU_CLASS.
-    // If any APDU with a wrong class value is received, comm will respond automatically with
-    // BadCla status word.
     let mut comm = Comm::new().set_expected_cla(APDU_CLASS);
 
     let mut tx_ctx = Context::new();
@@ -260,10 +325,27 @@ extern "C" fn sample_main() {
     tx_ctx.home = ui_menu_main(&mut comm);
     tx_ctx.home.show_and_return();
 
-    loop {
-        let ins: Instruction = comm.next_command();
+    let mut transport = ApduTransport::new();
 
-        let _status = match handle_apdu(&mut comm, &ins, &mut tx_ctx) {
+    loop {
+        let raw_instruction = match transport.receive(&mut comm) {
+            Ok(Some(raw)) => raw,
+            Ok(None) => continue, // Waiting for more chunks, loop around
+            Err(sw) => {
+                comm.reply(sw);
+                continue;
+            }
+        };
+
+        let command = match Command::try_from(raw_instruction) {
+            Ok(cmd) => cmd,
+            Err(sw) => {
+                comm.reply(sw);
+                continue;
+            }
+        };
+
+        let status = match handle_command(&mut comm, &command, &mut tx_ctx) {
             Ok(()) => {
                 comm.reply_ok();
                 StatusWord::Ok
@@ -273,46 +355,39 @@ extern "C" fn sample_main() {
                 sw
             }
         };
-        show_status_and_home_if_needed(&ins, &mut tx_ctx, &_status);
+
+        show_status_and_home_if_needed(&command, &mut tx_ctx, &status);
     }
 }
 
-fn handle_apdu(comm: &mut Comm, ins: &Instruction, ctx: &mut Context) -> Result<(), StatusWord> {
-    let mut data = comm.get_data().map_err(|_| StatusWord::WrongApduLength)?;
-    match ins {
-        Instruction::GetPubkey { display } => {
-            let req = decode_all(&data).ok_or(StatusWord::DeserializeFail)?;
+fn handle_command(comm: &mut Comm, cmd: &Command, ctx: &mut Context) -> Result<(), StatusWord> {
+    match cmd {
+        Command::GetPubkey { display, data } => {
+            let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
             handle_get_public_key(comm, req, *display)
         }
-        Instruction::SignTx { p1, more } => {
+        Command::SignTx { p1, data } => {
             if *p1 == P1SignTx::Metadata {
-                let req = decode_all(&mut data).ok_or(StatusWord::DeserializeFail)?;
+                let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
                 setup_sign_tx(req, &mut ctx.data)
             } else {
-                let mut data = comm.get_data().map_err(|_| StatusWord::WrongApduLength)?;
-
-                let (ctx, review) = match &mut ctx.data {
-                    DataContext::TxContext(ctx, review) => (ctx, review),
+                let (tx_ctx, review) = match &mut ctx.data {
+                    DataContext::TxContext(c, r) => (c, r),
                     _ => return Err(StatusWord::WrongContext),
                 };
 
-                ctx.show_spinner();
-                ctx.extend(data)?;
+                tx_ctx.show_spinner();
 
-                if *more {
-                    return Ok(());
-                }
-
-                let req = decode_all(&mut data).ok_or(StatusWord::DeserializeFail)?;
-                handle_sign_tx(comm, req, ctx, review)
+                let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
+                handle_sign_tx(comm, req, tx_ctx, review)
             }
         }
-        Instruction::SignMessage { chunk, more } => {
-            if *chunk == 0 {
-                let req = decode_all(&mut data).ok_or(StatusWord::DeserializeFail)?;
+        Command::SignMessage { p1, data } => {
+            if *p1 == P1_SIGN_START {
+                let req = decode_all(&data).ok_or(StatusWord::DeserializeFail)?;
                 setup_sign_message(req, &mut ctx.data)
             } else {
-                handle_sign_message(comm, *more, &mut ctx.data)
+                handle_sign_message(comm, false, &mut ctx.data)
             }
         }
     }

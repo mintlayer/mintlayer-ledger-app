@@ -6,9 +6,10 @@ edition = "2024"
 [dependencies]
 # Fixed in: https://github.com/paritytech/parity-scale-codec/pull/751
 # Should be included in versions after 3.7.5
-parity-scale-codec = { git = "https://github.com/OBorce/parity-scale-codec.git", branch = "fix/missing-target-atomic-ptr", default-features = false, features = [
+parity-scale-codec = { git = "https://github.com/paritytech/parity-scale-codec.git", rev = "5021525697edc0661591ebc71392c48d950a10b0", default-features = false, features = [
   "derive",
   "chain-error",
 ] }
-ml_common = { git = "https://github.com/mintlayer/mintlayer-core", package = "trezor-common", branch = "feature/hardware-wallet-common2" }
+# ml_common = { git = "https://github.com/mintlayer/mintlayer-core", package = "trezor-common", branch = "feature/hardware-wallet-common2" }
+mintlayer-core-primitives = { path = "../../mintlayer-core-primitives" }
 num_enum = { version = "0.7.5", default-features = false }

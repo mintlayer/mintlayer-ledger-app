@@ -17,7 +17,7 @@
 
 use crate::app_ui::sign::ui_display_message;
 use crate::{DataContext, StatusWord};
-use messages::{encode, AddrType, Bip32Path, CoinType, MsgSignature, SignMessageReq};
+use messages::{encode, AddrType, Bip32Path, MsgSignature, PCoinType, SignMessageReq};
 
 use alloc::vec::Vec;
 use ledger_device_sdk::{
@@ -33,7 +33,7 @@ const MAX_MESSAGE_LEN: usize = 510;
 pub struct SignMessageContext {
     message: Vec<u8>,
     path: Bip32Path,
-    coin: CoinType,
+    coin: PCoinType,
     addr_type: AddrType,
     review_finished: bool,
 }
@@ -43,7 +43,7 @@ impl SignMessageContext {
         Self {
             message: Vec::new(),
             path: req.path,
-            coin: req.coin,
+            coin: req.coin.into(),
             addr_type: req.addr_type,
             review_finished: false,
         }

@@ -24,11 +24,13 @@ use crate::{
         streaming_review_show_output, ui_display_tx,
     },
     handlers::sign_message::schnorr_sign,
-    DataContext, P1SignTx, StatusWord, P2_DONE, P2_SIGN_MORE,
+    DataContext, P1SignTx, StatusWord, P2_DONE, P2_MORE,
 };
 use messages::{
-    encode, encode_as_compact, encode_to, CoinType, Encode, InputAdditionalInfoReq,
-    InputAddressPath, SignTxReq, Signature, TxInputReq, TxMetadataReq, TxOutputReq,
+    encode, encode_as_compact, encode_to, AccountCommand, AccountSpending, Amount, Encode,
+    InputAdditionalInfoReq, InputAddressPath, OrderAccountCommand, OutputValue, PCoinType,
+    SighashInputCommitment, SignTxReq, Signature, TxInput, TxInputReq, TxMetadataReq, TxOutput,
+    TxOutputReq, H256,
 };
 
 use ledger_device_sdk::{
@@ -38,13 +40,13 @@ use ledger_device_sdk::{
     nbgl::{NbglSpinner, NbglStreamingReview},
 };
 use ledger_secure_sdk_sys::*;
-use ml_common::{
-    AccountCommand, AccountSpending, Amount, OrderAccountCommand, OutputValue,
-    SighashInputCommitment, TxInput, TxOutput, H256,
-};
 
-const MAX_TRANSACTION_LEN: usize = 510;
 const BIP44: u32 = 44 + (1 << 31);
+
+// BIP44/COIN/ACCOUNT/PURPOSE/INDEX
+const DERIVATION_PATH_LEN: usize = 5;
+// DERIVATION_PATH_LEN without the BIP44 and COIN as they are the same for all
+const COMPRESSED_DERIVATION_PATH_LEN: usize = 3;
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 pub enum CoinOrTokenId {
@@ -57,8 +59,9 @@ fn into_coin_or_token_id_and_amount(
 ) -> Result<(CoinOrTokenId, Amount), StatusWord> {
     match value {
         OutputValue::Coin(amount) => Ok((CoinOrTokenId::Coin, *amount)),
-        OutputValue::TokenV0 => Err(StatusWord::TxInvalidTokenV0),
-        OutputValue::TokenV1(token_id, amount) => Ok((CoinOrTokenId::TokenId(*token_id), *amount)),
+        OutputValue::TokenV1(token_id, amount) => {
+            Ok((CoinOrTokenId::TokenId(*token_id.hash()), *amount))
+        }
     }
 }
 
@@ -103,14 +106,14 @@ pub struct InputCompressed {
 }
 
 pub struct InputAddressPathCompressed {
-    pub path: [u32; 3],
+    pub path: [u32; COMPRESSED_DERIVATION_PATH_LEN],
     pub multisig_idx: Option<u32>,
 }
 
 impl InputAddressPathCompressed {
-    fn new(addr: InputAddressPath, coin: CoinType) -> Result<Self, StatusWord> {
+    fn new(addr: InputAddressPath, coin: PCoinType) -> Result<Self, StatusWord> {
         let path = addr.path.as_ref();
-        if path.len() != 5 {
+        if path.len() != DERIVATION_PATH_LEN {
             return Err(StatusWord::TxInvalidInputPath);
         }
 
@@ -142,10 +145,9 @@ pub enum InputData {
     ChangeTokenAuthority,
     ChangeTokenMetadataUri,
     FillOrderV0(Amount),
-    ConcludeOrderV0,
     FillOrderV1(Amount),
     FreezeOrderV1,
-    ConcludeOrderV1,
+    ConcludeOrder,
 }
 
 #[derive(PartialEq, Eq)]
@@ -178,7 +180,7 @@ pub enum NextTxOutputParsingState {
 
 pub struct TxContext {
     raw_buf: Vec<u8>,
-    coin: CoinType,
+    coin: PCoinType,
     num_inputs: u32,
     num_outputs: u32,
     review_finished: bool,
@@ -191,7 +193,7 @@ pub struct TxContext {
     total_outputs: BTreeMap<CoinOrTokenId, Amount>,
     inputs: Vec<InputCompressed>,
     inputs_data: Vec<InputData>,
-    num_prcessed_input_commitments: u32,
+    num_processed_input_commitments: u32,
 
     spinner: NbglSpinner,
 }
@@ -251,7 +253,7 @@ impl TxContext {
             .map_err(|_| StatusWord::TxHashFail)?;
 
         Ok(TxContext {
-            coin,
+            coin: coin.into(),
             raw_buf: Vec::with_capacity(251),
             num_inputs,
             num_outputs,
@@ -264,12 +266,12 @@ impl TxContext {
             total_outputs: Default::default(),
             inputs: Vec::with_capacity(20),
             inputs_data: Vec::with_capacity(20),
-            num_prcessed_input_commitments: 0,
+            num_processed_input_commitments: 0,
             spinner: NbglSpinner::new(),
         })
     }
 
-    pub fn coin(&self) -> CoinType {
+    pub fn coin(&self) -> PCoinType {
         self.coin
     }
 
@@ -452,15 +454,6 @@ impl TxContext {
             ) => Ok(()),
             (_, _) => Err(StatusWord::WrongP1P2),
         }
-    }
-
-    pub fn extend(&mut self, chunk: &[u8]) -> Result<(), StatusWord> {
-        if self.raw_buf.len() + chunk.len() > MAX_TRANSACTION_LEN {
-            return Err(StatusWord::TxWrongLength);
-        }
-
-        self.raw_buf.extend(chunk);
-        Ok(())
     }
 
     // show a spinner for bigger transactions
@@ -765,7 +758,7 @@ fn process_input_additional_info(
 ) -> Result<SighashInputCommitment, StatusWord> {
     let inp_data = ctx
         .inputs_data
-        .get(ctx.num_prcessed_input_commitments as usize)
+        .get(ctx.num_processed_input_commitments as usize)
         .ok_or(StatusWord::WrongContext)?;
 
     let commitment = match additional_info {
@@ -791,7 +784,7 @@ fn process_input_additional_info(
                 TxOutput::IssueNft(nft_id, _, _) => {
                     increase_input_totals(
                         &mut ctx.total_inputs,
-                        CoinOrTokenId::TokenId(*nft_id),
+                        CoinOrTokenId::TokenId(*nft_id.hash()),
                         Amount::from_atoms(1),
                     )?;
                 }
@@ -867,7 +860,7 @@ fn process_input_additional_info(
                     initially_given,
                 }
             }
-            InputData::ConcludeOrderV0 | InputData::ConcludeOrderV1 => {
+            InputData::ConcludeOrder => {
                 let (coin_or_token_id, _) = into_coin_or_token_id_and_amount(&initially_asked)?;
                 increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, ask_balance)?;
 
@@ -885,13 +878,13 @@ fn process_input_additional_info(
     };
 
     // On the first input commitment update the tx_hasher with the number of commitments
-    if ctx.num_prcessed_input_commitments == 0 {
+    if ctx.num_processed_input_commitments == 0 {
         ctx.tx_hasher
             .update(&ctx.num_inputs.to_le_bytes())
             .map_err(|_| StatusWord::TxHashFail)?;
     }
 
-    ctx.num_prcessed_input_commitments += 1;
+    ctx.num_processed_input_commitments += 1;
 
     Ok(commitment)
 }
@@ -899,7 +892,7 @@ fn process_input_additional_info(
 fn process_input(ctx: &mut TxContext, inp: &TxInput) -> Result<(), StatusWord> {
     let input_data = match inp {
         TxInput::Utxo(_) => InputData::Utxo,
-        TxInput::Account(acc) => match acc.account {
+        TxInput::Account(acc) => match acc.spending {
             AccountSpending::DelegationBalance(_, amount) => {
                 ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::DelegationWithdrawl);
                 increase_input_totals(&mut ctx.total_inputs, CoinOrTokenId::Coin, amount)?;
@@ -911,14 +904,14 @@ fn process_input(ctx: &mut TxContext, inp: &TxInput) -> Result<(), StatusWord> {
                 ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::MintTokens);
                 increase_input_totals(
                     &mut ctx.total_inputs,
-                    CoinOrTokenId::TokenId(*token_id),
+                    CoinOrTokenId::TokenId(*token_id.hash()),
                     *amount,
                 )?;
                 InputData::MintTokens
             }
             AccountCommand::ConcludeOrder(_) => {
                 ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ConcludeOrder);
-                InputData::ConcludeOrderV0
+                InputData::ConcludeOrder
             }
             AccountCommand::FillOrder(_, fill_amount, _) => {
                 ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FillOrder);
@@ -956,7 +949,7 @@ fn process_input(ctx: &mut TxContext, inp: &TxInput) -> Result<(), StatusWord> {
             }
             OrderAccountCommand::ConcludeOrder(_) => {
                 ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ConcludeOrder);
-                InputData::ConcludeOrderV1
+                InputData::ConcludeOrder
             }
             OrderAccountCommand::FreezeOrder(_) => {
                 ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FreezeOrder);
@@ -1038,7 +1031,7 @@ fn compute_signature_and_append(
     if ctx.state == TxParsingState::Finished {
         comm.append(&[P2_DONE])
     } else {
-        comm.append(&[P2_SIGN_MORE])
+        comm.append(&[P2_MORE])
     }
 
     Ok(())
@@ -1050,7 +1043,6 @@ fn output_value_with_amount(
 ) -> Result<OutputValue, StatusWord> {
     match value {
         OutputValue::Coin(_) => Ok(OutputValue::Coin(new_amount)),
-        OutputValue::TokenV0 => Err(StatusWord::TxInvalidTokenV0),
         OutputValue::TokenV1(token_id, _) => Ok(OutputValue::TokenV1(*token_id, new_amount)),
     }
 }

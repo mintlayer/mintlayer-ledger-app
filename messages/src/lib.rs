@@ -22,30 +22,28 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-pub use ml_common::{
-    AccountCommand, AccountOutPoint, AccountSpending, Amount, Destination, H256,
-    HashedTimelockContract, HtlcSecretHash, IsTokenFreezable, IsTokenUnfreezable, NftIssuance,
-    OrderAccountCommand, OrderData, OutPointSourceId, OutputTimeLock, OutputValue, PublicKeyHash,
-    PublicKeyHolder, SighashInputCommitment, StakePoolData, TokenIssuance, TokenTotalSupply,
-    TxInput, TxOutput, UtxoOutPoint, VRFPublicKeyHolder,
+pub use mintlayer_core_primitives::{
+    AccountCommand, AccountOutPoint, AccountSpending, Amount, CoinType as PCoinType, Destination,
+    H256, HashedTimelockContract, HtlcSecretHash, IsTokenFreezable, IsTokenUnfreezable,
+    NftIssuance, OrderAccountCommand, OrderData, OutPointSourceId, OutputTimeLock, OutputValue,
+    PublicKey, PublicKeyHash, SchnorrkelPublicKey, Secp256k1PublicKey, SighashInputCommitment,
+    StakePoolData, TokenIssuance, TokenTotalSupply, TxInput, TxOutput, UtxoOutPoint, VrfPublicKey,
 };
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 pub use parity_scale_codec::Encode;
 use parity_scale_codec::{Decode, DecodeAll};
 
-pub const APDU_CLASS: u8 = 0xE2;
+pub const APDU_CLASS: u8 = 0xE1;
 pub const MAX_ADPU_DATA_LEN: usize = u8::MAX as usize;
 
 // P2 for last APDU to receive.
 pub const P2_DONE: u8 = 0x00;
 // P2 for more APDU to receive.
-pub const P2_SIGN_MORE: u8 = 0x80;
+pub const P2_MORE: u8 = 0x80;
 // P1 for first APDU number.
 pub const P1_SIGN_START: u8 = 0x00;
 // P1 for next APDU number.
 pub const P1_SIGN_NEXT: u8 = 0x01;
-// P1 for maximum APDU number.
-pub const P1_SIGN_MAX_CHUNKS: u8 = 0x04;
 // P1 for the GET VERSION INS
 pub const P1_GET_VERSION: u8 = 0x00;
 // P1 for the APP NAME INS
@@ -156,103 +154,13 @@ pub enum CoinType {
     Signet = 3,
 }
 
-impl CoinType {
-    pub const fn coin_ticker(&self) -> &'static str {
-        match self {
-            Self::Mainnet => "ML",
-            Self::Testnet => "TML",
-            Self::Regtest => "RML",
-            Self::Signet => "SML",
-        }
-    }
-
-    pub const fn bip44_coin_type(&self) -> u32 {
-        let hardened_bit = 1 << 31;
-        match self {
-            Self::Mainnet => 19788 + hardened_bit,
-            Self::Testnet | Self::Regtest | Self::Signet => 1 + hardened_bit,
-        }
-    }
-
-    pub const fn coin_decimals(&self) -> u8 {
-        11
-    }
-
-    pub const fn address_prefix(&self, destination: &Destination) -> &'static str {
-        match self {
-            Self::Mainnet => match destination {
-                Destination::AnyoneCanSpend => "mxanyonecanspend",
-                Destination::PublicKeyHash(_) => "mtc",
-                Destination::PublicKey(_) => "mptc",
-                Destination::ScriptHash(_) => "mstc",
-                Destination::ClassicMultisig(_) => "mmtc",
-            },
-            Self::Testnet => match destination {
-                Destination::AnyoneCanSpend => "txanyonecanspend",
-                Destination::PublicKeyHash(_) => "tmt",
-                Destination::PublicKey(_) => "tpmt",
-                Destination::ScriptHash(_) => "tstc",
-                Destination::ClassicMultisig(_) => "tmtc",
-            },
-            Self::Regtest => match destination {
-                Destination::AnyoneCanSpend => "rxanyonecanspend",
-                Destination::PublicKeyHash(_) => "rmt",
-                Destination::PublicKey(_) => "rpmt",
-                Destination::ScriptHash(_) => "rstc",
-                Destination::ClassicMultisig(_) => "rmtc",
-            },
-            Self::Signet => match destination {
-                Destination::AnyoneCanSpend => "sxanyonecanspend",
-                Destination::PublicKeyHash(_) => "smt",
-                Destination::PublicKey(_) => "spmt",
-                Destination::ScriptHash(_) => "sstc",
-                Destination::ClassicMultisig(_) => "smtc",
-            },
-        }
-    }
-
-    pub const fn pool_id_address_prefix(&self) -> &'static str {
-        match self {
-            Self::Mainnet => "mpool",
-            Self::Testnet => "tpool",
-            Self::Regtest => "rpool",
-            Self::Signet => "spool",
-        }
-    }
-
-    pub const fn delegation_id_address_prefix(&self) -> &'static str {
-        match self {
-            Self::Mainnet => "mdelg",
-            Self::Testnet => "tdelg",
-            Self::Regtest => "rdelg",
-            Self::Signet => "sdelg",
-        }
-    }
-
-    pub const fn token_id_address_prefix(&self) -> &'static str {
-        match self {
-            Self::Mainnet => "mmltk",
-            Self::Testnet => "tmltk",
-            Self::Regtest => "rmltk",
-            Self::Signet => "smltk",
-        }
-    }
-
-    pub const fn order_id_address_prefix(&self) -> &'static str {
-        match self {
-            Self::Mainnet => "mordr",
-            Self::Testnet => "tordr",
-            Self::Regtest => "rordr",
-            Self::Signet => "sordr",
-        }
-    }
-
-    pub const fn vrf_public_key_address_prefix(&self) -> &'static str {
-        match self {
-            Self::Mainnet => "mvrfpk",
-            Self::Testnet => "tvrfpk",
-            Self::Regtest => "rvrfpk",
-            Self::Signet => "svrfpk",
+impl From<CoinType> for PCoinType {
+    fn from(value: CoinType) -> Self {
+        match value {
+            CoinType::Mainnet => Self::Mainnet,
+            CoinType::Testnet => Self::Testnet,
+            CoinType::Regtest => Self::Regtest,
+            CoinType::Signet => Self::Signet,
         }
     }
 }
@@ -388,13 +296,14 @@ impl<'a> Apdu<'a> {
     }
 
     pub fn write_bytes(&self, collection: &mut impl core::iter::Extend<u8>) {
-        let param2_byte = if self.is_last_chunk {
-            P2_DONE
-        } else {
-            P2_SIGN_MORE
-        };
+        let param2_byte = if self.is_last_chunk { P2_DONE } else { P2_MORE };
 
-        collection.extend([APDU_CLASS, self.instruction_byte, self.param1_byte, param2_byte]);
+        collection.extend([
+            APDU_CLASS,
+            self.instruction_byte,
+            self.param1_byte,
+            param2_byte,
+        ]);
         // Should be true by construction
         assert!(self.command_data.len() <= u8::MAX as usize);
         collection.extend(core::iter::once(self.command_data.len() as u8));

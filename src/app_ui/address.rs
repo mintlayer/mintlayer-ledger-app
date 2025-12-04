@@ -17,7 +17,7 @@
  *****************************************************************************/
 
 use crate::{app_ui::utils::to_address, StatusWord};
-use messages::CoinType;
+use messages::{Destination, PCoinType, PublicKey, Secp256k1PublicKey};
 
 use include_gif::include_gif;
 use ledger_device_sdk::{
@@ -52,13 +52,11 @@ pub fn compress_public_key<const T: char>(
 
 pub fn ui_display_pk<const T: char>(
     public_key: &ECPublicKey<65, T>,
-    coin_type: CoinType,
+    coin_type: PCoinType,
 ) -> Result<bool, StatusWord> {
     let pk = compress_public_key(public_key)?;
 
-    let dest = ml_common::Destination::PublicKey(ml_common::PublicKeyHolder::Secp256k1Schnorr(
-        ml_common::PublicKey(pk),
-    ));
+    let dest = Destination::PublicKey(PublicKey::Secp256k1Schnorr(Secp256k1PublicKey(pk)));
     let addr = to_address(&dest, coin_type)?;
 
     // Load glyph from file with include_gif macro. Creates an NBGL compatible glyph.
