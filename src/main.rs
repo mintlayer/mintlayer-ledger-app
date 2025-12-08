@@ -99,7 +99,7 @@ pub enum StatusWord {
     InvalidUncompressedPublicKey = 0xB013,
     MaxBufferLenExceeded = 0xB014,
 
-    // The fallowing errors come from ecc::CxError
+    // The following errors come from ecc::CxError
     EccCarry = 0xB100,
     EccLocked = 0xB101,
     EccUnlocked = 0xB102,

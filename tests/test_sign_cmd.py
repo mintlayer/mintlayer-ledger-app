@@ -29,25 +29,7 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
     print("pk", len(public_key))
 
     h = 1 << 31
-    inp = sign_tx_req_obj.encode(
-        {
-            "Input": 
-                {
-                    "addresses": [
-                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-                    ],
-                    "inp": {
-                        "Utxo": {
-                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
-                            "index": 1,
-                        }
-                    }
-                }
-            }
-        ).data
-
-    additional_data = sign_tx_req_obj.encode(
-        {
+    additional_info = {
             "InputAdditionalInfo": {
                 "Utxo": {
                     "Transfer": [
@@ -63,7 +45,25 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
                 }
             }
         }
-    ).data
+    inp = sign_tx_req_obj.encode(
+        {
+            "Input": 
+                {
+                    "addresses": [
+                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
+                    ],
+                    "inp": {
+                        "Utxo": {
+                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                            "index": 1,
+                        }
+                    },
+                    "additional_info": additional_info,
+                }
+            }
+        ).data
+
+    additional_data = sign_tx_req_obj.encode(additional_info).data
 
     output = sign_tx_req_obj.encode(
         {
@@ -133,7 +133,8 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
                             "nonce": 1,
                             "account": {"Delegation": [[0] * 32, 11]},
                         }
-                    }
+                    },
+                    "additional_info": {"InputAdditionalInfo":{"None": None}}
                 }
             }
     ).data
@@ -200,25 +201,7 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
 
     h = 1 << 31
 
-    inp = sign_tx_req_obj.encode(
-        {
-            "Input": 
-                {
-                    "addresses": [
-                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-                    ],
-                    "inp": {
-                        "Utxo": {
-                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
-                            "index": 1,
-                        }
-                    }
-                }
-            }
-    ).data
-
-    additional_data = sign_tx_req_obj.encode(
-        {
+    additional_info = {
             "InputAdditionalInfo": {
                 "Utxo": {
                     "Transfer": [
@@ -234,6 +217,26 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
                 }
             }
         }
+    inp = sign_tx_req_obj.encode(
+        {
+            "Input": 
+                {
+                    "addresses": [
+                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
+                    ],
+                    "inp": {
+                        "Utxo": {
+                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                            "index": 1,
+                        }
+                    },
+                    "additional_info": additional_info
+                }
+            }
+    ).data
+
+    additional_data = sign_tx_req_obj.encode(
+        additional_info
     ).data
 
     output = sign_tx_req_obj.encode(
@@ -292,25 +295,7 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
 
     h = 1 << 31
 
-    inp = sign_tx_req_obj.encode(
-        {
-            "Input": 
-                {
-                    "addresses": [
-                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-                    ],
-                    "inp": {
-                        "Utxo": {
-                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
-                            "index": 1,
-                        }
-                    }
-                }
-            }
-    ).data
-
-    additional_data = sign_tx_req_obj.encode(
-        {
+    additional_info = {
             "InputAdditionalInfo": {
                 "Utxo": {
                     "Transfer": [
@@ -326,6 +311,26 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
                 }
             }
         }
+    inp = sign_tx_req_obj.encode(
+        {
+            "Input": 
+                {
+                    "addresses": [
+                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
+                    ],
+                    "inp": {
+                        "Utxo": {
+                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                            "index": 1,
+                        }
+                    },
+                    "additional_info": additional_info
+                }
+            }
+    ).data
+
+    additional_data = sign_tx_req_obj.encode(
+        additional_info
     ).data
 
     output = sign_tx_req_obj.encode(
@@ -376,25 +381,7 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
 
     h = 1 << 31
     
-    inp = sign_tx_req_obj.encode(
-        {
-            "Input": 
-                {
-                    "addresses": [
-                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-                    ],
-                    "inp": {
-                        "Utxo": {
-                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
-                            "index": 1,
-                        }
-                    }
-                }
-            }
-    ).data
-
-    additional_data = sign_tx_req_obj.encode(
-        {
+    additional_info = {
             "InputAdditionalInfo": {
                 "Utxo": {
                     "Transfer": [
@@ -410,6 +397,26 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
                 }
             }
         }
+    inp = sign_tx_req_obj.encode(
+        {
+            "Input": 
+                {
+                    "addresses": [
+                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
+                    ],
+                    "inp": {
+                        "Utxo": {
+                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                            "index": 1,
+                        }
+                    },
+                    "additional_info": additional_info
+                }
+            }
+    ).data
+
+    additional_data = sign_tx_req_obj.encode(
+        additional_info
     ).data
 
     output = sign_tx_req_obj.encode(
@@ -480,25 +487,7 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
     path: str = "m/44'/19788'/0'/0/0"
 
     h = 1 << 31
-    inp = sign_tx_req_obj.encode(
-        {
-            "Input": 
-                {
-                    "addresses": [
-                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-                    ],
-                    "inp": {
-                        "Utxo": {
-                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
-                            "index": 1,
-                        }
-                    }
-                }
-            }
-    ).data
-
-    additional_data = sign_tx_req_obj.encode(
-        {
+    additional_info = {
             "InputAdditionalInfo": {
                 "Utxo": {
                     "Transfer": [
@@ -514,6 +503,26 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
                 }
             }
         }
+    inp = sign_tx_req_obj.encode(
+        {
+            "Input": 
+                {
+                    "addresses": [
+                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
+                    ],
+                    "inp": {
+                        "Utxo": {
+                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                            "index": 1,
+                        }
+                    },
+                    "additional_info": additional_info
+                }
+            }
+    ).data
+
+    additional_data = sign_tx_req_obj.encode(
+        additional_info
     ).data
 
     output = sign_tx_req_obj.encode(
@@ -563,25 +572,7 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
     path: str = "m/44'/19788'/0'/0/0"
 
     h = 1 << 31
-    inp = sign_tx_req_obj.encode(
-        {
-            "Input": 
-                {
-                    "addresses": [
-                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-                    ],
-                    "inp": {
-                        "Utxo": {
-                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
-                            "index": 1,
-                        }
-                    }
-                }
-            }
-    ).data
-
-    additional_data = sign_tx_req_obj.encode(
-        {
+    additional_info = {
             "InputAdditionalInfo": {
                 "Utxo": {
                     "Transfer": [
@@ -597,6 +588,26 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
                 }
             }
         }
+    inp = sign_tx_req_obj.encode(
+        {
+            "Input": 
+                {
+                    "addresses": [
+                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
+                    ],
+                    "inp": {
+                        "Utxo": {
+                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                            "index": 1,
+                        }
+                    },
+                    "additional_info": additional_info
+                }
+            }
+    ).data
+
+    additional_data = sign_tx_req_obj.encode(
+        additional_info
     ).data
 
     # This is the new output for issuing an NFT.
@@ -668,24 +679,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
-    utxo_input = sign_tx_req_obj.encode(
-        {
-            "Input": {
-                "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
-                }
-            }
-        }
-    ).data
-
-    # The utxo (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        {
+    additional_info = {
             "InputAdditionalInfo": {
                 "Utxo": {
                     "Transfer": [
@@ -701,6 +695,25 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
                 }
             }
         }
+    utxo_input = sign_tx_req_obj.encode(
+        {
+            "Input": {
+                "addresses": [{"path": bip44_path, "multisig_idx": None}],
+                "inp": {
+                    "Utxo": {
+                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "index": 0,
+                    }
+                },
+                "additional_info": additional_info
+            }
+        }
+    ).data
+
+    # The utxo (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
+    utxo_additional_info = sign_tx_req_obj.encode(
+        additional_info
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
@@ -718,7 +731,8 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
                             ]
                         },
                     ]
-                }
+                },
+                "additional_info": {"InputAdditionalInfo":{"None": None}}
             }
         }
     ).data
@@ -780,38 +794,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
-    utxo_input = sign_tx_req_obj.encode(
-        {
-            "Input": {
-                "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
-                }
-            }
-        }
-    ).data
-
-    utxo_input2 = sign_tx_req_obj.encode(
-        {
-            "Input": {
-                "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 2,
-                    }
-                }
-            }
-        }
-    ).data
-
-    # The additional data (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        {
+    additional_info = {
             "InputAdditionalInfo": {
                 "Utxo": {
                     "Transfer": [
@@ -827,10 +810,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
                 }
             }
         }
-    ).data
-
-    utxo_additional_info2 = sign_tx_req_obj.encode(
-        {
+    additional_info2 = {
             "InputAdditionalInfo": {
                 "Utxo": {
                     "Transfer": [
@@ -846,6 +826,44 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
                 }
             }
         }
+    utxo_input = sign_tx_req_obj.encode(
+        {
+            "Input": {
+                "addresses": [{"path": bip44_path, "multisig_idx": None}],
+                "inp": {
+                    "Utxo": {
+                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "index": 0,
+                    }
+                },
+                "additional_info": additional_info
+            }
+        }
+    ).data
+
+    utxo_input2 = sign_tx_req_obj.encode(
+        {
+            "Input": {
+                "addresses": [{"path": bip44_path, "multisig_idx": None}],
+                "inp": {
+                    "Utxo": {
+                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "index": 2,
+                    }
+                },
+                "additional_info": additional_info2
+            }
+        }
+    ).data
+
+    # The additional data (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
+    utxo_additional_info = sign_tx_req_obj.encode(
+        additional_info
+    ).data
+
+    utxo_additional_info2 = sign_tx_req_obj.encode(
+        additional_info2
     ).data
 
     account_input = sign_tx_req_obj.encode(
@@ -859,7 +877,8 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
                             "UnmintTokens": f"0x{bytes([0]*32).hex()}",  # TokenId
                         },
                     ]
-                }
+                },
+                "additional_info": {"InputAdditionalInfo":{"None": None}}
             }
         }
     ).data
@@ -921,24 +940,7 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
-    utxo_input = sign_tx_req_obj.encode(
-        {
-            "Input": {
-                "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
-                }
-            }
-        }
-    ).data
-
-    # The additional info (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        {
+    additional_info = {
             "InputAdditionalInfo": {
                 "Utxo": {
                     "Transfer": [
@@ -954,6 +956,26 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
                 }
             }
         }
+
+    utxo_input = sign_tx_req_obj.encode(
+        {
+            "Input": {
+                "addresses": [{"path": bip44_path, "multisig_idx": None}],
+                "inp": {
+                    "Utxo": {
+                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "index": 0,
+                    }
+                },
+                "additional_info": additional_info
+            }
+        }
+    ).data
+
+    # The additional info (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
+    utxo_additional_info = sign_tx_req_obj.encode(
+        additional_info
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
@@ -966,7 +988,8 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
                         1,  # AccountNonce
                         {"FreezeToken": [f"0x{bytes([0]*32).hex()}", {"No": None}]},  # TokenId
                     ]
-                }
+                },
+                "additional_info": {"InputAdditionalInfo":{"None": None}}
             }
         }
     ).data
@@ -1027,23 +1050,7 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
-    utxo_input = sign_tx_req_obj.encode(
-        {
-            "Input": {
-                "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
-                }
-            }
-        }).data
-
-    # The additional data (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        {
+    additional_info = {
             "InputAdditionalInfo": {
                 "Utxo": {
                     "Transfer": [
@@ -1058,7 +1065,24 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
                     ],
                 }
             }
+        }
+    utxo_input = sign_tx_req_obj.encode(
+        {
+            "Input": {
+                "addresses": [{"path": bip44_path, "multisig_idx": None}],
+                "inp": {
+                    "Utxo": {
+                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "index": 0,
+                    }
+                },
+                "additional_info": additional_info
+            }
         }).data
+
+    # The additional data (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
+    utxo_additional_info = sign_tx_req_obj.encode( additional_info).data
 
 
     # This is the AccountCommand to mint 1000 units of a new token
@@ -1073,7 +1097,8 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
                             "UnfreezeToken": f"0x{bytes([0]*32).hex()}",  # TokenId
                         },
                     ]
-                }
+                },
+                "additional_info": {"InputAdditionalInfo":{"None": None}}
             }
         }
     ).data
@@ -1134,23 +1159,7 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
-    utxo_input = sign_tx_req_obj.encode(
-        {
-            "Input": {
-                "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
-                }
-            }
-        }).data
-
-    # The additional data (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        {
+    additional_info = {
             "InputAdditionalInfo": {
                 "Utxo": {
                     "Transfer": [
@@ -1166,6 +1175,24 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
                 }
             }
         }
+    utxo_input = sign_tx_req_obj.encode(
+        {
+            "Input": {
+                "addresses": [{"path": bip44_path, "multisig_idx": None}],
+                "inp": {
+                    "Utxo": {
+                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "index": 0,
+                    }
+                },
+                "additional_info": additional_info
+            }
+        }).data
+
+    # The additional data (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
+    utxo_additional_info = sign_tx_req_obj.encode(
+        additional_info
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
@@ -1189,7 +1216,8 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
                             ]
                         },
                     ]
-                }
+                },
+                "additional_info": {"InputAdditionalInfo":{"None": None}}
             }
         }
     ).data
@@ -1252,24 +1280,7 @@ def test_sign_tx_change_token_metadata_uri(
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
-    utxo_input = sign_tx_req_obj.encode(
-        {
-            "Input": {
-                "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
-                }
-            }
-        }
-    ).data
-
-    # The additional info (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        {
+    additional_info = {
             "InputAdditionalInfo": {
                 "Utxo": {
                     "Transfer": [
@@ -1285,6 +1296,25 @@ def test_sign_tx_change_token_metadata_uri(
                 }
             }
         }
+    utxo_input = sign_tx_req_obj.encode(
+        {
+            "Input": {
+                "addresses": [{"path": bip44_path, "multisig_idx": None}],
+                "inp": {
+                    "Utxo": {
+                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "index": 0,
+                    }
+                },
+                "additional_info": additional_info
+            }
+        }
+    ).data
+
+    # The additional info (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
+    utxo_additional_info = sign_tx_req_obj.encode(
+        additional_info
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
@@ -1302,7 +1332,8 @@ def test_sign_tx_change_token_metadata_uri(
                             ]
                         },
                     ]
-                }
+                },
+                "additional_info": {"InputAdditionalInfo":{"None": None}}
             }
         }
     ).data
@@ -1364,24 +1395,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
-    utxo_input = sign_tx_req_obj.encode(
-        {
-            "Input": {
-                "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
-                }
-            }
-        }
-    ).data
-
-    # The additionl info (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        {
+    additional_info = {
             "InputAdditionalInfo": {
                 "Utxo": {
                     "Transfer": [
@@ -1397,6 +1411,25 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
                 }
             }
         }
+    utxo_input = sign_tx_req_obj.encode(
+        {
+            "Input": {
+                "addresses": [{"path": bip44_path, "multisig_idx": None}],
+                "inp": {
+                    "Utxo": {
+                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "index": 0,
+                    }
+                },
+                "additional_info": additional_info
+            }
+        }
+    ).data
+
+    # The additionl info (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
+    utxo_additional_info = sign_tx_req_obj.encode(
+        additional_info
     ).data
 
     fill_amount = 10
@@ -1412,7 +1445,8 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
                             fill_amount,
                         ]
                     }
-                }
+                },
+                "additional_info": {"InputAdditionalInfo":{"None": None}}
             }
         }
     ).data
@@ -1506,24 +1540,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
-    utxo_input = sign_tx_req_obj.encode(
-        {
-            "Input": {
-                "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
-                }
-            }
-        }
-    ).data
-
-    # The additional_data (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        {
+    additional_info = {
             "InputAdditionalInfo": {
                 "Utxo": {
                     "Transfer": [
@@ -1539,6 +1556,25 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
                 }
             }
         }
+    utxo_input = sign_tx_req_obj.encode(
+        {
+            "Input": {
+                "addresses": [{"path": bip44_path, "multisig_idx": None}],
+                "inp": {
+                    "Utxo": {
+                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "index": 0,
+                    }
+                },
+                "additional_info": additional_info
+            }
+        }
+    ).data
+
+    # The additional_data (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
+    utxo_additional_info = sign_tx_req_obj.encode(
+        additional_info
     ).data
 
     # This is the OrderAccountCommand to fill 10 units
@@ -1550,7 +1586,8 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
                     "OrderAccountCommand": {
                         "ConcludeOrder": f"0x{bytes([0]*32).hex()}",  # OrderId
                     }
-                }
+                },
+                "additional_info": {"InputAdditionalInfo":{"None": None}}
             }
         }
     ).data
@@ -1641,24 +1678,7 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
-    utxo_input = sign_tx_req_obj.encode(
-        {
-            "Input": {
-                "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
-                }
-            }
-        }
-    ).data
-
-    # The additional info (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        {
+    additional_info = {
             "InputAdditionalInfo": {
                 "Utxo": {
                     "Transfer": [
@@ -1674,6 +1694,25 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
                 }
             }
         }
+    utxo_input = sign_tx_req_obj.encode(
+        {
+            "Input": {
+                "addresses": [{"path": bip44_path, "multisig_idx": None}],
+                "inp": {
+                    "Utxo": {
+                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "index": 0,
+                    }
+                },
+                "additional_info": additional_info
+            }
+        }
+    ).data
+
+    # The additional info (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
+    utxo_additional_info = sign_tx_req_obj.encode(
+        additional_info
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
@@ -1691,7 +1730,8 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
                             ]
                         },
                     ]
-                }
+                },
+                "additional_info": {"InputAdditionalInfo":{"None": None}}
             }
         }
     ).data

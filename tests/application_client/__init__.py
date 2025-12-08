@@ -397,6 +397,7 @@ def init_mintlayer_types():
                 "type_mapping": [
                     ["addresses", "Vec<InputAddressPath>"],
                     ["inp", "TxInput"],
+                    ["additional_info", "InputAdditionalInfoReq"],
                 ],
             },
             "InputAdditionalInfoReq": {

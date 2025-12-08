@@ -120,6 +120,7 @@ pub struct TxMetadataReq {
 pub struct TxInputReq {
     pub addresses: Vec<InputAddressPath>,
     pub inp: TxInput,
+    pub additional_info: InputAdditionalInfoReq,
 }
 
 #[derive(Encode, Decode)]

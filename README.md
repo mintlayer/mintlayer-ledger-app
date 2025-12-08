@@ -107,7 +107,7 @@ speculos --apdu-port 9999 --api-port 5000 --display headless --model nanosp targ
 speculos --apdu-port 9999 --api-port 5000 --model stax target/stax/release/mintlayer-app
 ```
 
-You can also specfy the seed phrase with -s "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+You can also specify the seed phrase with -s "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
 :warning: UI is displayed by your X server
 
