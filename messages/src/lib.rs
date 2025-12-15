@@ -24,7 +24,7 @@ use alloc::vec::Vec;
 
 pub use mintlayer_core_primitives::{
     AccountCommand, AccountOutPoint, AccountSpending, Amount, CoinType as PCoinType, Destination,
-    H256, HashedTimelockContract, HtlcSecretHash, IsTokenFreezable, IsTokenUnfreezable,
+    H256, HashedTimelockContract, HtlcSecretHash, Id, IsTokenFreezable, IsTokenUnfreezable,
     NftIssuance, OrderAccountCommand, OrderData, OutPointSourceId, OutputTimeLock, OutputValue,
     PublicKey, PublicKeyHash, SchnorrkelPublicKey, Secp256k1PublicKey, SighashInputCommitment,
     StakePoolData, TokenIssuance, TokenTotalSupply, TxInput, TxOutput, UtxoOutPoint, VrfPublicKey,
@@ -82,9 +82,8 @@ fn wrong_p1p2(_: u8) -> WrongP1P2 {
 pub enum P1SignTx {
     Metadata = 0,
     Input = 1,
-    InputAdditionalInfo = 2,
-    Output = 3,
-    NextSignature = 4,
+    Output = 2,
+    NextSignature = 3,
 }
 
 #[derive(Encode, Decode)]
@@ -103,7 +102,6 @@ pub struct SignMessageReq {
 #[derive(Encode, Decode)]
 pub enum SignTxReq {
     Input(TxInputReq),
-    InputAdditionalInfo(InputAdditionalInfoReq),
     Output(TxOutputReq),
     NextSignature,
 }
@@ -120,11 +118,11 @@ pub struct TxMetadataReq {
 pub struct TxInputReq {
     pub addresses: Vec<InputAddressPath>,
     pub inp: TxInput,
-    pub additional_info: InputAdditionalInfoReq,
+    pub additional_info: InputAdditionalInfo,
 }
 
 #[derive(Encode, Decode)]
-pub enum InputAdditionalInfoReq {
+pub enum InputAdditionalInfo {
     None,
     Utxo {
         utxo: TxOutput,

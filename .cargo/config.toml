@@ -12,4 +12,4 @@ build-std-features = ["compiler-builtins-mem"]
 # Authorized values are [2048, 4096, 8192, 16384, 24576]
 # Uncomment the following lines to set the heap size to 4096 bytes for instance
 [env]
-HEAP_SIZE = "16384"
+HEAP_SIZE = "24576"

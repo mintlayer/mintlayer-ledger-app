@@ -83,7 +83,7 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
     ).data
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_additional_data=[additional_data], outputs=[output]
+        coin=MAINNET, inputs=[inp], outputs=[output]
     )
 
     # Enable display of transaction memo (NBGL devices only)
@@ -165,7 +165,7 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_additional_data=[additional_data], outputs=[output]
+        coin=MAINNET, inputs=[inp], outputs=[output]
     )
 
     # Enable display of transaction memo (NBGL devices only)
@@ -258,7 +258,7 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_additional_data=[additional_data], outputs=[output]
+        coin=MAINNET, inputs=[inp], outputs=[output]
     )
 
     # Enable display of transaction memo (NBGL devices only)
@@ -345,7 +345,7 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_additional_data=[additional_data], outputs=[output]
+        coin=MAINNET, inputs=[inp], outputs=[output]
     )
 
     # Enable display of transaction memo (NBGL devices only)
@@ -452,7 +452,7 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
     ).data
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_additional_data=[additional_data], outputs=[output]
+        coin=MAINNET, inputs=[inp], outputs=[output]
     )
 
     # Enable display of transaction memo (NBGL devices only)
@@ -552,7 +552,7 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_additional_data=[additional_data], outputs=[output]
+        coin=MAINNET, inputs=[inp], outputs=[output]
     )
 
     # Send the sign device instruction
@@ -653,7 +653,7 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_additional_data=[additional_data], outputs=[output]
+        coin=MAINNET, inputs=[inp], outputs=[output]
     )
 
     # Send the sign device instruction
@@ -757,10 +757,6 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input],
-        input_additional_data=[
-            utxo_additional_info,
-            sign_tx_req_obj.encode({"InputAdditionalInfo":{"None": None}}).data,
-        ],
         outputs=[mint_output],
     )
 
@@ -903,11 +899,6 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input, utxo_input2],
-        input_additional_data=[
-            utxo_additional_info,
-            sign_tx_req_obj.encode({"InputAdditionalInfo": {"None": None}}).data,
-            utxo_additional_info2,
-        ],
         outputs=[change_output],
     )
 
@@ -1014,10 +1005,6 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input],
-        input_additional_data=[
-            utxo_additional_info,
-            sign_tx_req_obj.encode({"InputAdditionalInfo": {"None": None}}).data,
-        ],
         outputs=[change_output],
     )
 
@@ -1123,10 +1110,6 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input],
-        input_additional_data=[
-            utxo_additional_info,
-            sign_tx_req_obj.encode({"InputAdditionalInfo": {"None": None}}).data,
-        ],
         outputs=[change_output],
     )
 
@@ -1242,10 +1225,6 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input],
-        input_additional_data=[
-            utxo_additional_info,
-            sign_tx_req_obj.encode({"InputAdditionalInfo": {"None": None}}).data,
-        ],
         outputs=[change_output],
     )
 
@@ -1358,10 +1337,6 @@ def test_sign_tx_change_token_metadata_uri(
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input],
-        input_additional_data=[
-            utxo_additional_info,
-            sign_tx_req_obj.encode({"InputAdditionalInfo": {"None": None}}).data,
-        ],
         outputs=[change_output],
     )
 
@@ -1507,7 +1482,6 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input],
-        input_additional_data=[utxo_additional_info, order_additional_info],
         outputs=[change_output, fill_output],
     )
 
@@ -1646,7 +1620,6 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input],
-        input_additional_data=[utxo_additional_info, order_additional_info],
         outputs=[change_output, conclude_output],
     )
 
@@ -1786,10 +1759,6 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input],
-        input_additional_data=[
-            utxo_additional_info,
-            sign_tx_req_obj.encode({"InputAdditionalInfo": {"None": None}}).data,
-        ],
         outputs=[htlc_output, change_output],
     )
 
