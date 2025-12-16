@@ -425,9 +425,21 @@ def init_mintlayer_types():
                 "type": "enum",
                 "type_mapping": [
                     ["Input", "TxInputReq"],
-                    ["InputAdditionalInfo", "InputAdditionalInfoReq"],
                     ["Output", "TxOutputReq"],
                     ["NextSignature", "()"],
+                ],
+            },
+            "MsgSignature": {
+                "type": "struct",
+                "type_mapping": [
+                    ["signature", "[u8; 64]"],
+                ],
+            },
+            "GetPublicKeyRespones": {
+                "type": "struct",
+                "type_mapping": [
+                    ["public_key", "[u8; 65]"],
+                    ["chain_code", "[u8; 32]"],
                 ],
             },
             "SemVer": {

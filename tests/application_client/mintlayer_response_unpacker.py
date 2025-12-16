@@ -1,5 +1,6 @@
 from typing import Tuple
 from struct import unpack
+import scalecodec  # type: ignore
 
 # remainder, data_len, data
 def pop_sized_buf_from_buffer(buffer:bytes, size:int) -> Tuple[bytes, bytes]:
@@ -48,12 +49,22 @@ def unpack_get_app_and_version_response(response: bytes) -> Tuple[str, str]:
 #            chain_code_len (1)
 #            chain_code (var)
 def unpack_get_public_key_response(response: bytes) -> Tuple[int, bytes, int, bytes]:
-    response, pub_key_len, pub_key = pop_size_prefixed_buf_from_buf(response)
-    response, chain_code_len, chain_code = pop_size_prefixed_buf_from_buf(response)
+    response_bytes = scalecodec.base.ScaleBytes(response)
+    msg_signature_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("GetPublicKeyRespones", data=response_bytes)
+    sig = msg_signature_obj.decode()
+
+    print(sig)
+
+    pub_key = bytes.fromhex(sig['public_key'][2:])
+    pub_key_len = len(pub_key)
+    chain_code = bytes.fromhex(sig['chain_code'][2:])
+    chain_code_len = len(chain_code)
+
+    print(pub_key_len, pub_key)
+    print(chain_code_len, chain_code)
 
     assert pub_key_len == 65
     assert chain_code_len == 32
-    assert len(response) == 0
     return pub_key_len, pub_key, chain_code_len, chain_code
 
 # Unpack from response:

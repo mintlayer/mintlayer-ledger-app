@@ -12,7 +12,7 @@ sign_tx_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("Si
 # Ensure the app returns an error when a bad CLA is used
 def test_bad_cla(backend):
     with pytest.raises(ExceptionRAPDU) as e:
-        backend.exchange(cla=CLA + 1, ins=InsType.GET_VERSION)
+        backend.exchange(cla=CLA + 1, ins=InsType.GET_PUBLIC_KEY)
     assert e.value.status == Errors.SW_CLA_NOT_SUPPORTED
 
 
@@ -25,24 +25,21 @@ def test_bad_ins(backend):
 
 # Ensure the app returns an error when a bad P1 or P2 is used
 def test_wrong_p1p2(backend):
+    # Wrong P2
     with pytest.raises(ExceptionRAPDU) as e:
         backend.exchange(
-            cla=CLA, ins=InsType.GET_VERSION, p1=P1.P1_START + 1, p2=P2.P2_LAST
+            cla=CLA, ins=InsType.GET_PUBLIC_KEY, p1=P1.P1_START, p2=123
         )
     assert e.value.status == Errors.SW_WRONG_P1P2
-    with pytest.raises(ExceptionRAPDU) as e:
-        backend.exchange(
-            cla=CLA, ins=InsType.GET_VERSION, p1=P1.P1_START, p2=P2.P2_MORE
+
+    backend.exchange(
+            cla=CLA, ins=InsType.GET_PUBLIC_KEY, p1=P1.P1_START, p2=P2.P2_MORE
         )
-    assert e.value.status == Errors.SW_WRONG_P1P2
+    
+    # Wrong P1 after sending MORE
     with pytest.raises(ExceptionRAPDU) as e:
         backend.exchange(
-            cla=CLA, ins=InsType.GET_APP_NAME, p1=P1.P1_START + 1, p2=P2.P2_LAST
-        )
-    assert e.value.status == Errors.SW_WRONG_P1P2
-    with pytest.raises(ExceptionRAPDU) as e:
-        backend.exchange(
-            cla=CLA, ins=InsType.GET_APP_NAME, p1=P1.P1_START, p2=P2.P2_MORE
+            cla=CLA, ins=InsType.GET_PUBLIC_KEY, p1=P1.P1_START + 1, p2=P2.P2_MORE
         )
     assert e.value.status == Errors.SW_WRONG_P1P2
 
@@ -66,7 +63,7 @@ def test_invalid_state(backend):
             cla=CLA,
             ins=InsType.SIGN_TX,
             p1=P1.P1_TX_INPUT,  # Try to continue a flow instead of start a new one
-            p2=P2.P2_MORE,
+            p2=P2.P2_LAST,
         )
     assert e.value.status == Errors.SW_WRONG_CONTEXT
 
@@ -89,7 +86,7 @@ def test_sign_tx_invalid_coin(backend, scenario_navigator, device, navigator):
             cla=CLA,
             ins=InsType.SIGN_TX,
             p1=P1.P1_START,
-            p2=P2.P2_MORE,
+            p2=P2.P2_LAST,
             data=bytes(metadata),
         )
 
@@ -98,7 +95,7 @@ def test_sign_tx_invalid_coin(backend, scenario_navigator, device, navigator):
 
 def test_sign_tx_invalid_P2_for_input(backend, scenario_navigator, device, navigator):
     """
-    After metadata try to pass input commitment instead of the input
+    After metadata try to pass an output instead of the input
     expect an error for wrong P1/P2
     """
     num_inputs = 2
@@ -116,7 +113,7 @@ def test_sign_tx_invalid_P2_for_input(backend, scenario_navigator, device, navig
         cla=CLA,
         ins=InsType.SIGN_TX,
         p1=P1.P1_START,
-        p2=P2.P2_MORE,
+        p2=P2.P2_LAST,
         data=bytes(metadata),
     )
 
@@ -126,9 +123,24 @@ def test_sign_tx_invalid_P2_for_input(backend, scenario_navigator, device, navig
         res = backend.exchange(
             cla=CLA,
             ins=InsType.SIGN_TX,
-            p1=P1.P1_TX_INPUT_ADDITIONAL_INFO,
+            p1=P1.P1_TX_OUTPUT,
             p2=P2.P2_LAST,
-            data=sign_tx_req_obj.encode({"InputAdditionalInfo": {"None": None}}).data,
+            data=sign_tx_req_obj.encode(
+                {
+                    "Output": {
+                        "out": {
+                            "Transfer": [
+                                {"Coin": 10},
+                                {
+                                    "PublicKey": {
+                                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
+                                    }
+                                },
+                            ],
+                        }
+                    }
+                }
+            ).data,
         )
     assert e.value.status == Errors.SW_WRONG_P1P2
 
@@ -149,7 +161,7 @@ def test_sign_tx_invalid_input(backend, scenario_navigator, device, navigator):
         cla=CLA,
         ins=InsType.SIGN_TX,
         p1=P1.P1_START,
-        p2=P2.P2_MORE,
+        p2=P2.P2_LAST,
         data=bytes(metadata),
     )
 
@@ -184,7 +196,7 @@ def test_sign_tx_too_large_data(backend, scenario_navigator, device, navigator):
         cla=CLA,
         ins=InsType.SIGN_TX,
         p1=P1.P1_START,
-        p2=P2.P2_MORE,
+        p2=P2.P2_LAST,
         data=bytes(metadata),
     )
 
@@ -197,7 +209,7 @@ def test_sign_tx_too_large_data(backend, scenario_navigator, device, navigator):
                 ins=InsType.SIGN_TX,
                 p1=P1.P1_TX_INPUT,
                 p2=P2.P2_MORE,
-                data=b"big_input",
+                data=b"big_input_data",
             )
 
-    assert e.value.status == Errors.SW_WRONG_TX_LENGTH
+    assert e.value.status == Errors.SW_MAX_BUFFER_LEN_EXCEEDED

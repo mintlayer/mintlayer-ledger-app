@@ -30,19 +30,17 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
 
     h = 1 << 31
     additional_info = {
-            "InputAdditionalInfo": {
-                "Utxo": {
-                    "Transfer": [
-                        {"Coin": 10},
-                        {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                                }
+            "Utxo": {
+                "Transfer": [
+                    {"Coin": 10},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
                             }
-                        },
-                    ],
-                }
+                        }
+                    },
+                ],
             }
         }
     inp = sign_tx_req_obj.encode(
@@ -62,8 +60,6 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
                 }
             }
         ).data
-
-    additional_data = sign_tx_req_obj.encode(additional_info).data
 
     output = sign_tx_req_obj.encode(
         {
@@ -134,15 +130,9 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
                             "account": {"Delegation": [[0] * 32, 11]},
                         }
                     },
-                    "additional_info": {"InputAdditionalInfo":{"None": None}}
+                    "additional_info": {"None": None}
                 }
             }
-    ).data
-
-    additional_data = sign_tx_req_obj.encode(
-        {
-            "InputAdditionalInfo": {"None": None}
-        }
     ).data
 
     output = sign_tx_req_obj.encode(
@@ -202,19 +192,17 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
     h = 1 << 31
 
     additional_info = {
-            "InputAdditionalInfo": {
-                "Utxo": {
-                    "Transfer": [
-                        {"Coin": 10},
-                        {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                                }
+            "Utxo": {
+                "Transfer": [
+                    {"Coin": 10},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
                             }
-                        },
-                    ],
-                }
+                        }
+                    },
+                ],
             }
         }
     inp = sign_tx_req_obj.encode(
@@ -233,10 +221,6 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
                     "additional_info": additional_info
                 }
             }
-    ).data
-
-    additional_data = sign_tx_req_obj.encode(
-        additional_info
     ).data
 
     output = sign_tx_req_obj.encode(
@@ -296,19 +280,17 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
     h = 1 << 31
 
     additional_info = {
-            "InputAdditionalInfo": {
-                "Utxo": {
-                    "Transfer": [
-                        {"Coin": 10},
-                        {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                                }
+            "Utxo": {
+                "Transfer": [
+                    {"Coin": 10},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
                             }
-                        },
-                    ],
-                }
+                        }
+                    },
+                ],
             }
         }
     inp = sign_tx_req_obj.encode(
@@ -327,10 +309,6 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
                     "additional_info": additional_info
                 }
             }
-    ).data
-
-    additional_data = sign_tx_req_obj.encode(
-        additional_info
     ).data
 
     output = sign_tx_req_obj.encode(
@@ -382,19 +360,17 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
     h = 1 << 31
     
     additional_info = {
-            "InputAdditionalInfo": {
-                "Utxo": {
-                    "Transfer": [
-                        {"Coin": 40001},
-                        {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                                }
+            "Utxo": {
+                "Transfer": [
+                    {"Coin": 40001},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
                             }
-                        },
-                    ],
-                }
+                        }
+                    },
+                ],
             }
         }
     inp = sign_tx_req_obj.encode(
@@ -413,10 +389,6 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
                     "additional_info": additional_info
                 }
             }
-    ).data
-
-    additional_data = sign_tx_req_obj.encode(
-        additional_info
     ).data
 
     output = sign_tx_req_obj.encode(
@@ -488,19 +460,17 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
 
     h = 1 << 31
     additional_info = {
-            "InputAdditionalInfo": {
-                "Utxo": {
-                    "Transfer": [
-                        {"Coin": 10},
-                        {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                                }
+            "Utxo": {
+                "Transfer": [
+                    {"Coin": 10},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
                             }
-                        },
-                    ],
-                }
+                        }
+                    },
+                ],
             }
         }
     inp = sign_tx_req_obj.encode(
@@ -519,10 +489,6 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
                     "additional_info": additional_info
                 }
             }
-    ).data
-
-    additional_data = sign_tx_req_obj.encode(
-        additional_info
     ).data
 
     output = sign_tx_req_obj.encode(
@@ -573,19 +539,17 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
 
     h = 1 << 31
     additional_info = {
-            "InputAdditionalInfo": {
-                "Utxo": {
-                    "Transfer": [
-                        {"Coin": 2000},
-                        {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                                }
+            "Utxo": {
+                "Transfer": [
+                    {"Coin": 2000},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
                             }
-                        },
-                    ],
-                }
+                        }
+                    },
+                ],
             }
         }
     inp = sign_tx_req_obj.encode(
@@ -604,10 +568,6 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
                     "additional_info": additional_info
                 }
             }
-    ).data
-
-    additional_data = sign_tx_req_obj.encode(
-        additional_info
     ).data
 
     # This is the new output for issuing an NFT.
@@ -679,20 +639,20 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
+    # The utxo (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
     additional_info = {
-            "InputAdditionalInfo": {
-                "Utxo": {
-                    "Transfer": [
-                        {"Coin": 100},
-                        {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                                }
+            "Utxo": {
+                "Transfer": [
+                    {"Coin": 100},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                             }
-                        },
-                    ],
-                }
+                        }
+                    },
+                ],
             }
         }
     utxo_input = sign_tx_req_obj.encode(
@@ -710,11 +670,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    # The utxo (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        additional_info
-    ).data
+    
 
     # This is the AccountCommand to mint 1000 units of a new token
     account_input = sign_tx_req_obj.encode(
@@ -732,7 +688,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
                         },
                     ]
                 },
-                "additional_info": {"InputAdditionalInfo":{"None": None}}
+                "additional_info": {"None": None}
             }
         }
     ).data
@@ -790,36 +746,34 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
+    # The additional data (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
     additional_info = {
-            "InputAdditionalInfo": {
-                "Utxo": {
-                    "Transfer": [
-                        {"Coin": 100},
-                        {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                                }
+            "Utxo": {
+                "Transfer": [
+                    {"Coin": 100},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                             }
-                        },
-                    ],
-                }
+                        }
+                    },
+                ],
             }
         }
     additional_info2 = {
-            "InputAdditionalInfo": {
-                "Utxo": {
-                    "Transfer": [
-                        {"TokenV1": [f"0x{bytes([0]*32).hex()}", 1000]},
-                        {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                                }
+            "Utxo": {
+                "Transfer": [
+                    {"TokenV1": [f"0x{bytes([0]*32).hex()}", 1000]},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                             }
-                        },
-                    ],
-                }
+                        }
+                    },
+                ],
             }
         }
     utxo_input = sign_tx_req_obj.encode(
@@ -852,15 +806,6 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    # The additional data (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        additional_info
-    ).data
-
-    utxo_additional_info2 = sign_tx_req_obj.encode(
-        additional_info2
-    ).data
 
     account_input = sign_tx_req_obj.encode(
         {
@@ -874,7 +819,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
                         },
                     ]
                 },
-                "additional_info": {"InputAdditionalInfo":{"None": None}}
+                "additional_info": {"None": None}
             }
         }
     ).data
@@ -931,20 +876,20 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
+    # The additional info (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
     additional_info = {
-            "InputAdditionalInfo": {
-                "Utxo": {
-                    "Transfer": [
-                        {"Coin": 100},
-                        {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                                }
+            "Utxo": {
+                "Transfer": [
+                    {"Coin": 100},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                             }
-                        },
-                    ],
-                }
+                        }
+                    },
+                ],
             }
         }
 
@@ -963,12 +908,6 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    # The additional info (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        additional_info
-    ).data
-
     # This is the AccountCommand to mint 1000 units of a new token
     account_input = sign_tx_req_obj.encode(
         {
@@ -980,7 +919,7 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
                         {"FreezeToken": [f"0x{bytes([0]*32).hex()}", {"No": None}]},  # TokenId
                     ]
                 },
-                "additional_info": {"InputAdditionalInfo":{"None": None}}
+                "additional_info": {"None": None}
             }
         }
     ).data
@@ -1037,20 +976,20 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
+    # The additional data (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
     additional_info = {
-            "InputAdditionalInfo": {
-                "Utxo": {
-                    "Transfer": [
-                        {"Coin": 100},
-                        {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                                }
+            "Utxo": {
+                "Transfer": [
+                    {"Coin": 100},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                             }
-                        },  
-                    ],
-                }
+                        }
+                    },  
+                ],
             }
         }
     utxo_input = sign_tx_req_obj.encode(
@@ -1067,11 +1006,6 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
             }
         }).data
 
-    # The additional data (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode( additional_info).data
-
-
     # This is the AccountCommand to mint 1000 units of a new token
     account_input = sign_tx_req_obj.encode(
         {
@@ -1085,7 +1019,7 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
                         },
                     ]
                 },
-                "additional_info": {"InputAdditionalInfo":{"None": None}}
+                "additional_info": {"None": None}
             }
         }
     ).data
@@ -1142,20 +1076,20 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
+    # The additional data (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
     additional_info = {
-            "InputAdditionalInfo": {
-                "Utxo": {
-                    "Transfer": [
-                        {"Coin": 100},
-                        {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                                }
+            "Utxo": {
+                "Transfer": [
+                    {"Coin": 100},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                             }
-                        },
-                    ],
-                }
+                        }
+                    },
+                ],
             }
         }
     utxo_input = sign_tx_req_obj.encode(
@@ -1171,12 +1105,6 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
                 "additional_info": additional_info
             }
         }).data
-
-    # The additional data (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        additional_info
-    ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
     account_input = sign_tx_req_obj.encode(
@@ -1200,7 +1128,7 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
                         },
                     ]
                 },
-                "additional_info": {"InputAdditionalInfo":{"None": None}}
+                "additional_info": {"None": None}
             }
         }
     ).data
@@ -1259,20 +1187,20 @@ def test_sign_tx_change_token_metadata_uri(
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
+    # The additional info (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
     additional_info = {
-            "InputAdditionalInfo": {
-                "Utxo": {
-                    "Transfer": [
-                        {"Coin": 100},
-                        {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                                }
+            "Utxo": {
+                "Transfer": [
+                    {"Coin": 100},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                             }
-                        },
-                    ],
-                }
+                        }
+                    },
+                ],
             }
         }
     utxo_input = sign_tx_req_obj.encode(
@@ -1288,12 +1216,6 @@ def test_sign_tx_change_token_metadata_uri(
                 "additional_info": additional_info
             }
         }
-    ).data
-
-    # The additional info (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        additional_info
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
@@ -1312,7 +1234,7 @@ def test_sign_tx_change_token_metadata_uri(
                         },
                     ]
                 },
-                "additional_info": {"InputAdditionalInfo":{"None": None}}
+                "additional_info": {"None": None}
             }
         }
     ).data
@@ -1370,20 +1292,20 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
+    # The additionl info (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
     additional_info = {
-            "InputAdditionalInfo": {
-                "Utxo": {
-                    "Transfer": [
-                        {"Coin": 100},
-                        {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                                }
+            "Utxo": {
+                "Transfer": [
+                    {"Coin": 100},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                             }
-                        },
-                    ],
-                }
+                        }
+                    },
+                ],
             }
         }
     utxo_input = sign_tx_req_obj.encode(
@@ -1401,13 +1323,17 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    # The additionl info (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        additional_info
-    ).data
-
     fill_amount = 10
+    fill_ask = 100
+    fill_give = 1000
+    order_additional_info = {
+            "OrderInfo": [
+                {"Coin": fill_ask},
+                {"TokenV1": [f"0x{bytes([0]*32).hex()}", fill_give]},
+                0,
+                0,
+            ]
+        }
     # This is the OrderAccountCommand to fill 10 units
     account_input = sign_tx_req_obj.encode(
         {
@@ -1421,24 +1347,10 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
                         ]
                     }
                 },
-                "additional_info": {"InputAdditionalInfo":{"None": None}}
+                "additional_info": order_additional_info
             }
         }
     ).data
-
-    fill_ask = 100
-    fill_give = 1000
-    order_additional_info = sign_tx_req_obj.encode(
-        {
-            "InputAdditionalInfo": {
-                "OrderInfo": [
-                    {"Coin": fill_ask},
-                {"TokenV1": [f"0x{bytes([0]*32).hex()}", fill_give]},
-                0,
-                0,
-                ]
-            }
-        }).data
 
     change_output = sign_tx_req_obj.encode(
         {
@@ -1514,20 +1426,20 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
+    # The additional_data (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
     additional_info = {
-            "InputAdditionalInfo": {
-                "Utxo": {
-                    "Transfer": [
-                        {"Coin": 100},
-                        {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                                }
+            "Utxo": {
+                "Transfer": [
+                    {"Coin": 100},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                             }
-                        },
-                    ],
-                }
+                        }
+                    },
+                ],
             }
         }
     utxo_input = sign_tx_req_obj.encode(
@@ -1545,11 +1457,10 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    # The additional_data (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        additional_info
-    ).data
+    initial_ask = 100
+    initial_give = 1000
+    ask_balance = 10
+    give_balance = 900
 
     # This is the OrderAccountCommand to fill 10 units
     account_input = sign_tx_req_obj.encode(
@@ -1561,24 +1472,14 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
                         "ConcludeOrder": f"0x{bytes([0]*32).hex()}",  # OrderId
                     }
                 },
-                "additional_info": {"InputAdditionalInfo":{"None": None}}
-            }
-        }
-    ).data
-
-    initial_ask = 100
-    initial_give = 1000
-    ask_balance = 10
-    give_balance = 900
-    order_additional_info = sign_tx_req_obj.encode(
-        {
-            "InputAdditionalInfo": {
-                "OrderInfo": [
-                    {"Coin": initial_ask},
-                    {"TokenV1": [f"0x{bytes([0]*32).hex()}", initial_give]},
-                    ask_balance,
-                    give_balance,
-                ]
+                "additional_info": {
+                    "OrderInfo": [
+                        {"Coin": initial_ask},
+                        {"TokenV1": [f"0x{bytes([0]*32).hex()}", initial_give]},
+                        ask_balance,
+                        give_balance,
+                    ]
+                }
             }
         }
     ).data
@@ -1651,20 +1552,20 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
+    # The additional info (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
     additional_info = {
-            "InputAdditionalInfo": {
-                "Utxo": {
-                    "Transfer": [
-                        {"Coin": 100},
-                        {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                                }
+            "Utxo": {
+                "Transfer": [
+                    {"Coin": 100},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                             }
-                        },
-                    ],
-                }
+                        }
+                    },
+                ],
             }
         }
     utxo_input = sign_tx_req_obj.encode(
@@ -1680,12 +1581,6 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
                 "additional_info": additional_info
             }
         }
-    ).data
-
-    # The additional info (the previous TxOutput that this UTXO input spends)
-    # This represents an output of 100 coins owned by our key
-    utxo_additional_info = sign_tx_req_obj.encode(
-        additional_info
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
@@ -1704,7 +1599,7 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
                         },
                     ]
                 },
-                "additional_info": {"InputAdditionalInfo":{"None": None}}
+                "additional_info": {"None": None}
             }
         }
     ).data

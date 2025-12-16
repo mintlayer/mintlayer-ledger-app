@@ -1,4 +1,5 @@
 import pytest
+import scalecodec  # type: ignore
 from ragger.bip import CurveChoice, calculate_public_key_and_chaincode
 from ragger.error import ExceptionRAPDU
 from ragger.navigator import NavIns, NavInsID
@@ -21,9 +22,9 @@ def test_sign_message(backend, scenario_navigator):
     with client.sign_message(coin=MAINNET, addr_type=0, path=path, message=message):
         scenario_navigator.review_approve()
 
-    response = client.get_async_response().data
-    _, sig = unpack_sign_message_response(response)
-
+    response = scalecodec.base.ScaleBytes(client.get_async_response().data)
+    msg_signature_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("MsgSignature", data=response)
+    sig = msg_signature_obj.decode()
 
 def test_sign_message_pkh(backend, scenario_navigator):
     path = "m/44'/19788'/0'/0/0"
@@ -32,8 +33,9 @@ def test_sign_message_pkh(backend, scenario_navigator):
     with client.sign_message(coin=MAINNET, addr_type=1, path=path, message=message):
         scenario_navigator.review_approve()
 
-    response = client.get_async_response().data
-    _, sig = unpack_sign_message_response(response)
+    response = scalecodec.base.ScaleBytes(client.get_async_response().data)
+    msg_signature_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("MsgSignature", data=response)
+    sig = msg_signature_obj.decode()
 
 
 # Message signing refused test

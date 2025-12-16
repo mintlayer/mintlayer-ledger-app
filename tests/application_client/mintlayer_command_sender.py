@@ -16,7 +16,7 @@ sign_tx_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
 
 MAX_APDU_LEN: int = 255 - 5  # 255 - CLA, INS, P1, P2, Lc
 
-CLA: int = 0xE2
+CLA: int = 0xE1
 
 
 class P1(IntEnum):
@@ -39,11 +39,9 @@ class P2(IntEnum):
 
 
 class InsType(IntEnum):
-    GET_VERSION = 0x03
-    GET_APP_NAME = 0x04
-    GET_PUBLIC_KEY = 0x05
-    SIGN_TX = 0x06
-    SIGN_MESSAGE = 0x07
+    GET_PUBLIC_KEY = 0x00
+    SIGN_TX = 0x01
+    SIGN_MESSAGE = 0x02
 
 
 class Errors(IntEnum):
@@ -57,6 +55,7 @@ class Errors(IntEnum):
     SW_WRONG_TX_LENGTH = 0xB002
     SW_WRONG_CONTEXT = 0xB009
     SW_DESERIALIZE_FAIL = 0xB00A
+    SW_MAX_BUFFER_LEN_EXCEEDED = 0xB014
 
 
 def split_message(message: bytes, max_size: int) -> List[bytes]:
@@ -74,16 +73,6 @@ class MintlayerCommandSender:
             p1=P1.P1_START,
             p2=P2.P2_LAST,
             data=b"",
-        )
-
-    def get_version(self) -> RAPDU:
-        return self.backend.exchange(
-            cla=CLA, ins=InsType.GET_VERSION, p1=P1.P1_START, p2=P2.P2_LAST, data=b""
-        )
-
-    def get_app_name(self) -> RAPDU:
-        return self.backend.exchange(
-            cla=CLA, ins=InsType.GET_APP_NAME, p1=P1.P1_START, p2=P2.P2_LAST, data=b""
         )
 
     def get_public_key(self, coin: int, path: str) -> RAPDU:
@@ -123,7 +112,7 @@ class MintlayerCommandSender:
         )
 
         self.backend.exchange(
-            cla=CLA, ins=InsType.SIGN_MESSAGE, p1=P1.P1_START, p2=P2.P2_MORE, data=data
+            cla=CLA, ins=InsType.SIGN_MESSAGE, p1=P1.P1_START, p2=P2.P2_LAST, data=data
         )
         messages = split_message(message, MAX_APDU_LEN)
         idx: int = P1.P1_START + 1
@@ -132,7 +121,6 @@ class MintlayerCommandSender:
             self.backend.exchange(
                 cla=CLA, ins=InsType.SIGN_MESSAGE, p1=idx, p2=P2.P2_MORE, data=msg
             )
-            idx += 1
 
         with self.backend.exchange_async(
             cla=CLA, ins=InsType.SIGN_MESSAGE, p1=idx, p2=P2.P2_LAST, data=messages[-1]
@@ -154,7 +142,7 @@ class MintlayerCommandSender:
             cla=CLA,
             ins=InsType.SIGN_TX,
             p1=P1.P1_START,
-            p2=P2.P2_MORE,
+            p2=P2.P2_LAST,
             data=bytes(metadata),
         )
         print("metadata ", res)
