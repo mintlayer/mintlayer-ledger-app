@@ -107,11 +107,12 @@ pub struct InputCompressed {
 
 pub struct InputAddressPathCompressed {
     pub path: [u32; COMPRESSED_DERIVATION_PATH_LEN],
+    pub input_idx: usize,
     pub multisig_idx: Option<u32>,
 }
 
 impl InputAddressPathCompressed {
-    fn new(addr: InputAddressPath, coin: PCoinType) -> Result<Self, StatusWord> {
+    fn new(addr: InputAddressPath, input_idx: usize, coin: PCoinType) -> Result<Self, StatusWord> {
         let path = addr.path.as_ref();
         if path.len() != DERIVATION_PATH_LEN {
             return Err(StatusWord::TxInvalidInputPath);
@@ -129,6 +130,7 @@ impl InputAddressPathCompressed {
             path: path[2..]
                 .try_into()
                 .map_err(|_| StatusWord::TxInvalidInputPath)?,
+            input_idx,
             multisig_idx: addr.multisig_idx,
         })
     }
@@ -154,27 +156,15 @@ pub enum InputData {
 enum TxParsingState {
     Input(usize),
     Output(usize),
-    CompleteNotApproved {
-        inp_idx: usize,
-        sig_idx: usize,
-        sighash: [u8; 32],
-    },
-    ApprovedNotFinishedSigning {
-        inp_idx: usize,
-        sig_idx: usize,
-        sighash: [u8; 32],
-    },
+    CompleteNotApproved { inp_idx: usize, sighash: [u8; 32] },
+    ApprovedNotFinishedSigning { inp_idx: usize, sighash: [u8; 32] },
     Finished,
 }
 
 #[derive(PartialEq, Eq)]
 pub enum NextTxOutputParsingState {
     Output(usize),
-    CompleteNotApproved {
-        inp_idx: usize,
-        sig_idx: usize,
-        sighash: [u8; 32],
-    },
+    CompleteNotApproved { inp_idx: usize, sighash: [u8; 32] },
 }
 
 pub struct TxContext {
@@ -190,7 +180,7 @@ pub struct TxContext {
 
     total_inputs: BTreeMap<CoinOrTokenId, Amount>,
     total_outputs: BTreeMap<CoinOrTokenId, Amount>,
-    inputs: Vec<InputCompressed>,
+    inputs: Vec<InputAddressPathCompressed>,
     input_commitments: Vec<SighashInputCommitment>,
 
     spinner: NbglSpinner,
@@ -208,19 +198,16 @@ pub enum SigningState<'a> {
         review: &'a NbglStreamingReview,
         output: TxOutput,
         inp_idx: usize,
-        sig_idx: usize,
         sighash: [u8; 32],
     },
     TxParsingNotComplete,
     CompleteNotApproved {
         inp_idx: usize,
-        sig_idx: usize,
         sighash: [u8; 32],
         outputs: &'a [TxOutput],
     },
     ApprovedNotFinishedSigning {
         inp_idx: usize,
-        sig_idx: usize,
         sighash: [u8; 32],
     },
 }
@@ -346,93 +333,47 @@ impl TxContext {
         let next_state = if n < (self.num_outputs - 1) as usize {
             NextTxOutputParsingState::Output(n + 1)
         } else {
-            let next = self.next_input_idx_to_sign(0, None);
-            if let Some((inp_idx, sig_idx)) = next {
-                // Finalize the tx hash for signing
-                let mut message_hash: [u8; 64] = [0u8; 64];
-                self.tx_hasher
-                    .finalize(&mut message_hash)
-                    .map_err(|_| StatusWord::TxHashFail)?;
+            let inp_idx = 0;
+            // Finalize the tx hash for signing
+            let mut message_hash: [u8; 64] = [0u8; 64];
+            self.tx_hasher
+                .finalize(&mut message_hash)
+                .map_err(|_| StatusWord::TxHashFail)?;
 
-                let mut blake2b256 = Blake2b_512::new();
-                let mut message_hash2: [u8; 64] = [0u8; 64];
-                blake2b256
-                    .hash(&message_hash[0..32], &mut message_hash2)
-                    .map_err(|_| StatusWord::TxHashFail)?;
+            let mut blake2b256 = Blake2b_512::new();
+            let mut message_hash2: [u8; 64] = [0u8; 64];
+            blake2b256
+                .hash(&message_hash[0..32], &mut message_hash2)
+                .map_err(|_| StatusWord::TxHashFail)?;
 
-                NextTxOutputParsingState::CompleteNotApproved {
-                    inp_idx,
-                    sig_idx,
-                    sighash: message_hash2[..32]
-                        .try_into()
-                        .map_err(|_| StatusWord::TxHashFail)?,
-                }
-            } else {
-                return Err(StatusWord::NothingToSign);
+            NextTxOutputParsingState::CompleteNotApproved {
+                inp_idx,
+                sighash: message_hash2[..32]
+                    .try_into()
+                    .map_err(|_| StatusWord::TxHashFail)?,
             }
         };
 
         self.state = match next_state {
             NextTxOutputParsingState::Output(out) => TxParsingState::Output(out),
-            NextTxOutputParsingState::CompleteNotApproved {
-                inp_idx,
-                sig_idx,
-                sighash,
-            } => TxParsingState::CompleteNotApproved {
-                inp_idx,
-                sig_idx,
-                sighash,
-            },
+            NextTxOutputParsingState::CompleteNotApproved { inp_idx, sighash } => {
+                TxParsingState::CompleteNotApproved { inp_idx, sighash }
+            }
         };
 
         Ok(next_state)
     }
 
     // After processing a signature advance the internal state
-    fn advance_next_signing_step(&mut self, inp_idx: usize, sig_idx: usize, sighash: &[u8; 32]) {
-        let next = self.next_input_idx_to_sign(inp_idx, Some(sig_idx));
-        self.state = if let Some((inp_idx, sig_idx)) = next {
+    fn advance_next_signing_step(&mut self, inp_idx: usize, sighash: &[u8; 32]) {
+        self.state = if (inp_idx + 1) < self.inputs.len() {
             TxParsingState::ApprovedNotFinishedSigning {
-                inp_idx,
-                sig_idx,
+                inp_idx: inp_idx + 1,
                 sighash: *sighash,
             }
         } else {
             TxParsingState::Finished
         };
-    }
-
-    // As some inputs don't need signing and some multisig inputs can be signed multiple times
-    // find the next input index to sign.
-    //
-    // Returns the Tx input index and the index of the path/destination
-    fn next_input_idx_to_sign(
-        &mut self,
-        current_inp_idx: usize,
-        current_sig_idx: Option<usize>,
-    ) -> Option<(usize, usize)> {
-        let next = self
-            .inputs
-            .iter()
-            .enumerate()
-            .flat_map(|(inp_idx, inp)| {
-                inp.addresses
-                    .iter()
-                    .enumerate()
-                    .map(move |(sig_idx, _)| (inp_idx, sig_idx))
-            })
-            .find_map(|(inp_idx, sig_idx)| {
-                let is_next_input = inp_idx > current_inp_idx;
-                let is_next_sig_for_same_input =
-                    inp_idx == current_inp_idx && current_sig_idx.is_none_or(|idx| sig_idx > idx);
-
-                if is_next_input || is_next_sig_for_same_input {
-                    Some((inp_idx, sig_idx))
-                } else {
-                    None
-                }
-            });
-        next
     }
 
     // Check the state corresponds to the incoming request
@@ -444,7 +385,6 @@ impl TxContext {
                 P1SignTx::NextSignature,
                 TxParsingState::ApprovedNotFinishedSigning {
                     inp_idx: _,
-                    sig_idx: _,
                     sighash: _,
                 },
             ) => Ok(()),
@@ -458,12 +398,10 @@ impl TxContext {
         let returning_signatures = match self.state {
             TxParsingState::ApprovedNotFinishedSigning {
                 inp_idx: _,
-                sig_idx: _,
                 sighash: _,
             }
             | TxParsingState::CompleteNotApproved {
                 inp_idx: _,
-                sig_idx: _,
                 sighash: _,
             } => true,
             TxParsingState::Input(_) | TxParsingState::Finished | TxParsingState::Output(_) => {
@@ -503,16 +441,20 @@ fn handle_input_req<'a>(
     let addresses = req
         .addresses
         .into_iter()
-        .map(|a| InputAddressPathCompressed::new(a, ctx.coin))
+        .map(|a| InputAddressPathCompressed::new(a, input_step, ctx.coin))
         .collect::<Result<Vec<_>, StatusWord>>()?;
-
-    ctx.inputs.push(InputCompressed { addresses });
+    ctx.inputs.extend(addresses);
 
     let input_data = process_input(ctx, &req.inp, &req.additional_info)?;
 
     let commitment = into_input_commitment(input_data, req.additional_info)?;
     ctx.input_commitments.push(commitment);
 
+    if input_step == 0 {
+        ctx.tx_hasher
+            .update(&ctx.num_inputs.to_le_bytes())
+            .map_err(|_| StatusWord::TxHashFail)?;
+    }
     ctx.update_hash(&req.inp)?;
     ctx.advance_next_input_additional_info_step(input_step, review)
 }
@@ -537,16 +479,13 @@ fn handle_output_req<'a>(
             outputs.push(req.out);
             match next_step {
                 NextTxOutputParsingState::Output(_) => SigningState::TxParsingNotComplete,
-                NextTxOutputParsingState::CompleteNotApproved {
-                    inp_idx,
-                    sig_idx,
-                    sighash,
-                } => SigningState::CompleteNotApproved {
-                    inp_idx,
-                    sig_idx,
-                    sighash,
-                    outputs,
-                },
+                NextTxOutputParsingState::CompleteNotApproved { inp_idx, sighash } => {
+                    SigningState::CompleteNotApproved {
+                        inp_idx,
+                        sighash,
+                        outputs,
+                    }
+                }
             }
         }
         Review::StreamingReview(review) => {
@@ -555,17 +494,14 @@ fn handle_output_req<'a>(
                 NextTxOutputParsingState::Output(_) => {
                     SigningState::StreamingReviewOutput(review, req.out)
                 }
-                NextTxOutputParsingState::CompleteNotApproved {
-                    inp_idx,
-                    sig_idx,
-                    sighash,
-                } => SigningState::StreamingReviewApprove {
-                    review,
-                    output: req.out,
-                    inp_idx,
-                    sig_idx,
-                    sighash,
-                },
+                NextTxOutputParsingState::CompleteNotApproved { inp_idx, sighash } => {
+                    SigningState::StreamingReviewApprove {
+                        review,
+                        output: req.out,
+                        inp_idx,
+                        sighash,
+                    }
+                }
             }
         }
     };
@@ -588,21 +524,15 @@ pub fn handle_sign_tx(
         }
         (
             SignTxReq::NextSignature,
-            TxParsingState::ApprovedNotFinishedSigning {
-                inp_idx,
-                sig_idx,
-                sighash,
-            },
+            TxParsingState::ApprovedNotFinishedSigning { inp_idx, sighash },
         ) => SigningState::ApprovedNotFinishedSigning {
             inp_idx: *inp_idx,
-            sig_idx: *sig_idx,
             sighash: *sighash,
         },
         (
             SignTxReq::NextSignature,
             TxParsingState::CompleteNotApproved {
                 inp_idx: _,
-                sig_idx: _,
                 sighash: _,
             },
         ) => return Err(StatusWord::Deny),
@@ -634,11 +564,10 @@ pub fn handle_sign_tx(
             review,
             output,
             inp_idx,
-            sig_idx,
             sighash,
         } => {
             if approve_streaming_review(review, &output, ctx)? {
-                compute_signature_and_append(comm, ctx, inp_idx, sig_idx, &sighash)?;
+                compute_signature_and_append(comm, ctx, inp_idx, &sighash)?;
                 if ctx.completed_all_signatures() {
                     ctx.review_finished = true;
                 } else {
@@ -652,14 +581,13 @@ pub fn handle_sign_tx(
         }
         SigningState::CompleteNotApproved {
             inp_idx,
-            sig_idx,
             sighash,
             outputs,
         } => {
             // Display transaction. If user approves the transaction, sign it.
             // Otherwise, return a "deny" status word.
             if ui_display_tx(ctx, outputs)? {
-                compute_signature_and_append(comm, ctx, inp_idx, sig_idx, &sighash)?;
+                compute_signature_and_append(comm, ctx, inp_idx, &sighash)?;
                 if ctx.completed_all_signatures() {
                     ctx.review_finished = true;
                 } else {
@@ -672,13 +600,9 @@ pub fn handle_sign_tx(
                 Err(StatusWord::Deny)
             }
         }
-        SigningState::ApprovedNotFinishedSigning {
-            inp_idx,
-            sig_idx,
-            sighash,
-        } => {
+        SigningState::ApprovedNotFinishedSigning { inp_idx, sighash } => {
             // Already approved sign and return the next signature
-            compute_signature_and_append(comm, ctx, inp_idx, sig_idx, &sighash)?;
+            compute_signature_and_append(comm, ctx, inp_idx, &sighash)?;
             if ctx.completed_all_signatures() {
                 ctx.review_finished = true;
             } else {
@@ -983,12 +907,6 @@ fn process_input(
         _ => return Err(StatusWord::WrongContext),
     };
 
-    if ctx.inputs.len() == 1 {
-        ctx.tx_hasher
-            .update(&ctx.num_inputs.to_le_bytes())
-            .map_err(|_| StatusWord::TxHashFail)?;
-    }
-
     Ok(input_data)
 }
 
@@ -1024,19 +942,12 @@ fn compute_signature_and_append(
     comm: &mut Comm,
     ctx: &mut TxContext,
     inp_idx: usize,
-    sig_idx: usize,
     sighash: &[u8; 32],
 ) -> Result<(), StatusWord> {
     let hash_algorithm_id = CX_SHA256;
     let signing_mode = CX_ECSCHNORR_BIP0340 | CX_RND_PROVIDED | CX_LAST;
 
-    let address = ctx
-        .inputs
-        .get(inp_idx)
-        .ok_or(StatusWord::WrongContext)?
-        .addresses
-        .get(sig_idx)
-        .ok_or(StatusWord::WrongContext)?;
+    let address = ctx.inputs.get(inp_idx).ok_or(StatusWord::WrongContext)?;
 
     let [p1, p2, p3] = address.path;
     let addr = [BIP44, ctx.coin.bip44_coin_type(), p1, p2, p3];
@@ -1048,10 +959,11 @@ fn compute_signature_and_append(
         signature: sig,
         multisig_idx: address.multisig_idx,
     };
+    let input_idx = address.input_idx as u8;
 
-    ctx.advance_next_signing_step(inp_idx, sig_idx, sighash);
+    ctx.advance_next_signing_step(inp_idx, sighash);
 
-    comm.append(&[inp_idx as u8]);
+    comm.append(&[input_idx]);
     comm.append(&encode(sig));
     if ctx.state == TxParsingState::Finished {
         comm.append(&[P2_DONE])
