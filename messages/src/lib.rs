@@ -23,11 +23,12 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 pub use mintlayer_core_primitives::{
-    AccountCommand, AccountOutPoint, AccountSpending, Amount, CoinType as PCoinType, Destination,
-    H256, HashedTimelockContract, HtlcSecretHash, Id, IsTokenFreezable, IsTokenUnfreezable,
-    NftIssuance, OrderAccountCommand, OrderData, OutPointSourceId, OutputTimeLock, OutputValue,
-    PublicKey, PublicKeyHash, SchnorrkelPublicKey, Secp256k1PublicKey, SighashInputCommitment,
-    StakePoolData, TokenIssuance, TokenTotalSupply, TxInput, TxOutput, UtxoOutPoint, VrfPublicKey,
+    AccountCommand, AccountNonce, AccountOutPoint, AccountSpending, Amount, CoinType as PCoinType,
+    Destination, H256, HashedTimelockContract, HtlcSecretHash, Id, IsTokenFreezable,
+    IsTokenUnfreezable, NftIssuance, OrderAccountCommand, OrderData, OutPointSourceId,
+    OutputTimeLock, OutputValue, PublicKey, PublicKeyHash, SchnorrkelPublicKey, Secp256k1PublicKey,
+    SighashInputCommitment, StakePoolData, TokenIssuance, TokenTotalSupply, TxInput, TxOutput,
+    UtxoOutPoint, VrfPublicKey,
 };
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 pub use parity_scale_codec::Encode;
@@ -82,8 +83,9 @@ fn wrong_p1p2(_: u8) -> WrongP1P2 {
 pub enum P1SignTx {
     Metadata = 0,
     Input = 1,
-    Output = 2,
-    NextSignature = 3,
+    InputAdditionalInfo = 2,
+    Output = 3,
+    NextSignature = 4,
 }
 
 #[derive(Encode, Decode)]
@@ -102,6 +104,7 @@ pub struct SignMessageReq {
 #[derive(Encode, Decode)]
 pub enum SignTxReq {
     Input(TxInputReq),
+    InputCommitment(SighashInputCommitment),
     Output(TxOutputReq),
     NextSignature,
 }
@@ -117,26 +120,89 @@ pub struct TxMetadataReq {
 #[derive(Encode, Decode)]
 pub struct TxInputReq {
     pub addresses: Vec<InputAddressPath>,
-    pub inp: TxInput,
-    pub additional_info: InputAdditionalInfo,
+    pub inp: TxInputWithAdditionalInfo,
 }
 
-#[derive(Encode, Decode)]
-pub enum InputAdditionalInfo {
-    None,
-    Utxo {
-        utxo: TxOutput,
-    },
-    PoolInfo {
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+pub struct AdditionalOrderInfo {
+    pub initially_asked: OutputValue,
+    pub initially_given: OutputValue,
+    pub ask_balance: Amount,
+    pub give_balance: Amount,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+pub enum AdditionalUtxoInfo {
+    Utxo(TxOutput),
+    PoolData {
         utxo: TxOutput,
         staker_balance: Amount,
     },
-    OrderInfo {
-        initially_asked: OutputValue,
-        initially_given: OutputValue,
-        ask_balance: Amount,
-        give_balance: Amount,
-    },
+}
+
+impl From<AdditionalUtxoInfo> for SighashInputCommitment {
+    fn from(value: AdditionalUtxoInfo) -> Self {
+        match value {
+            AdditionalUtxoInfo::Utxo(output) => SighashInputCommitment::Utxo(output),
+            AdditionalUtxoInfo::PoolData {
+                utxo,
+                staker_balance,
+            } => SighashInputCommitment::ProduceBlockFromStakeUtxo {
+                utxo,
+                staker_balance,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+pub enum TxInputWithAdditionalInfo {
+    #[codec(index = 0)]
+    Utxo(UtxoOutPoint, AdditionalUtxoInfo),
+
+    #[codec(index = 1)]
+    Account(AccountOutPoint),
+
+    #[codec(index = 2)]
+    AccountCommand(AccountNonce, AccountCommand),
+
+    #[codec(index = 3)]
+    OrderAccountCommand(OrderAccountCommand, AdditionalOrderInfo),
+}
+
+impl TxInputWithAdditionalInfo {
+    pub fn into_input_and_commitment(self) -> (TxInput, SighashInputCommitment) {
+        match self {
+            TxInputWithAdditionalInfo::Utxo(utxo, info) => (TxInput::Utxo(utxo), info.into()),
+            TxInputWithAdditionalInfo::Account(acc) => {
+                (TxInput::Account(acc), SighashInputCommitment::None)
+            }
+            TxInputWithAdditionalInfo::AccountCommand(nonce, cmd) => (
+                TxInput::AccountCommand(nonce, cmd),
+                SighashInputCommitment::None,
+            ),
+            TxInputWithAdditionalInfo::OrderAccountCommand(cmd, info) => {
+                let commitment = match &cmd {
+                    OrderAccountCommand::FillOrder(_, _) => {
+                        SighashInputCommitment::FillOrderAccountCommand {
+                            initially_asked: info.initially_asked,
+                            initially_given: info.initially_given,
+                        }
+                    }
+                    OrderAccountCommand::ConcludeOrder(_) => {
+                        SighashInputCommitment::ConcludeOrderAccountCommand {
+                            initially_asked: info.initially_asked,
+                            initially_given: info.initially_given,
+                            ask_balance: info.ask_balance,
+                            give_balance: info.give_balance,
+                        }
+                    }
+                    OrderAccountCommand::FreezeOrder(_) => SighashInputCommitment::None,
+                };
+                (TxInput::OrderAccountCommand(cmd), commitment)
+            }
+        }
+    }
 }
 
 #[derive(Encode, Decode)]

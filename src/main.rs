@@ -98,6 +98,8 @@ pub enum StatusWord {
     InvalidPath = 0xB012,
     InvalidUncompressedPublicKey = 0xB013,
     MaxBufferLenExceeded = 0xB014,
+    DifferentInputCommitmentHash = 0xB015,
+    OrdersV0NotSupported = 0xB016,
 
     // The following errors come from ecc::CxError
     EccCarry = 0xB100,

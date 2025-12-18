@@ -27,10 +27,10 @@ use crate::{
     DataContext, P1SignTx, StatusWord, P2_DONE, P2_MORE,
 };
 use messages::{
-    encode, encode_as_compact, encode_to, AccountCommand, AccountSpending, Amount, Encode,
-    InputAdditionalInfo, InputAddressPath, OrderAccountCommand, OutputValue, PCoinType,
-    SighashInputCommitment, SignTxReq, Signature, TxInput, TxInputReq, TxMetadataReq, TxOutput,
-    TxOutputReq, H256,
+    encode, encode_as_compact, encode_to, AccountCommand, AccountSpending, AdditionalOrderInfo,
+    AdditionalUtxoInfo, Amount, Encode, InputAddressPath, OrderAccountCommand, OutputValue,
+    PCoinType, SighashInputCommitment, SignTxReq, Signature, TxInputReq, TxInputWithAdditionalInfo,
+    TxMetadataReq, TxOutput, TxOutputReq, H256,
 };
 
 use ledger_device_sdk::{
@@ -102,16 +102,12 @@ fn merge_tx_type(tx_type: Option<TxType>, new_type: TxType) -> Option<TxType> {
 }
 
 pub struct InputCompressed {
-    pub addresses: Vec<InputAddressPathCompressed>,
-}
-
-pub struct InputAddressPathCompressed {
     pub path: [u32; COMPRESSED_DERIVATION_PATH_LEN],
     pub input_idx: usize,
     pub multisig_idx: Option<u32>,
 }
 
-impl InputAddressPathCompressed {
+impl InputCompressed {
     fn new(addr: InputAddressPath, input_idx: usize, coin: PCoinType) -> Result<Self, StatusWord> {
         let path = addr.path.as_ref();
         if path.len() != DERIVATION_PATH_LEN {
@@ -136,28 +132,22 @@ impl InputAddressPathCompressed {
     }
 }
 
-pub enum InputData {
-    Utxo,
-    DelegationWithdrawl,
-    MintTokens,
-    UnmintTokens,
-    FreezeToken,
-    UnfreezeToken,
-    LockTokenSupply,
-    ChangeTokenAuthority,
-    ChangeTokenMetadataUri,
-    FillOrderV0,
-    FillOrderV1,
-    FreezeOrderV1,
-    ConcludeOrder,
-}
-
 #[derive(PartialEq, Eq)]
 enum TxParsingState {
     Input(usize),
+    InputCommitment {
+        inp_idx: usize,
+        input_commitments_hash: [u8; 64],
+    },
     Output(usize),
-    CompleteNotApproved { inp_idx: usize, sighash: [u8; 32] },
-    ApprovedNotFinishedSigning { inp_idx: usize, sighash: [u8; 32] },
+    CompleteNotApproved {
+        inp_idx: usize,
+        sighash: [u8; 32],
+    },
+    ApprovedNotFinishedSigning {
+        inp_idx: usize,
+        sighash: [u8; 32],
+    },
     Finished,
 }
 
@@ -177,11 +167,11 @@ pub struct TxContext {
     tx_type: Option<TxType>,
 
     tx_hasher: Blake2b_512,
+    input_commitments_hasher: Blake2b_512,
 
     total_inputs: BTreeMap<CoinOrTokenId, Amount>,
     total_outputs: BTreeMap<CoinOrTokenId, Amount>,
-    inputs: Vec<InputAddressPathCompressed>,
-    input_commitments: Vec<SighashInputCommitment>,
+    inputs: Vec<InputCompressed>,
 
     spinner: NbglSpinner,
 }
@@ -224,6 +214,7 @@ impl TxContext {
         }: TxMetadataReq,
     ) -> Result<TxContext, StatusWord> {
         let mut tx_hasher = Blake2b_512::new();
+        let input_commitments_hasher = Blake2b_512::new();
         // mode
         tx_hasher
             .update(b"\x01")
@@ -244,13 +235,13 @@ impl TxContext {
             num_outputs,
             review_finished: false,
             tx_hasher,
+            input_commitments_hasher,
             state: TxParsingState::Input(0),
             tx_type: None,
 
             total_inputs: Default::default(),
             total_outputs: Default::default(),
             inputs: Vec::with_capacity(20),
-            input_commitments: Vec::with_capacity(20),
             spinner: NbglSpinner::new(),
         })
     }
@@ -276,13 +267,11 @@ impl TxContext {
     }
 
     fn update_hash<T: Encode>(&mut self, data: &T) -> Result<(), StatusWord> {
-        self.raw_buf.clear();
-        encode_to(data, &mut self.raw_buf);
-        self.tx_hasher
-            .update(self.raw_buf.as_slice())
-            .map_err(|_| StatusWord::TxHashFail)?;
-        self.raw_buf.clear();
-        Ok(())
+        update_hash(&mut self.raw_buf, data, &mut self.tx_hasher)
+    }
+
+    fn update_input_commitments_hash<T: Encode>(&mut self, data: &T) -> Result<(), StatusWord> {
+        update_hash(&mut self.raw_buf, data, &mut self.input_commitments_hasher)
     }
 
     fn completed_all_signatures(&self) -> bool {
@@ -295,24 +284,55 @@ impl TxContext {
         self.review_finished
     }
 
-    fn advance_next_input_additional_info_step<'a>(
+    fn advance_next_input_step<'a>(
         &mut self,
         current_input_step: usize,
-        review: &'a Review,
     ) -> Result<SigningState<'a>, StatusWord> {
         let finished_with_inputs = current_input_step >= (self.num_inputs - 1) as usize;
 
-        let signing_state = if finished_with_inputs {
+        self.state = if finished_with_inputs {
             // Update hash for input commitments and proceed with outputs
             self.tx_hasher
                 .update(&self.num_inputs.to_le_bytes())
                 .map_err(|_| StatusWord::TxHashFail)?;
 
-            for commitment in core::mem::take(&mut self.input_commitments) {
-                self.update_hash(&commitment)?;
+            let mut input_commitments_hash: [u8; 64] = [0u8; 64];
+            self.input_commitments_hasher
+                .finalize(&mut input_commitments_hash)
+                .map_err(|_| StatusWord::TxHashFail)?;
+
+            TxParsingState::InputCommitment {
+                inp_idx: 0,
+                input_commitments_hash,
+            }
+        } else {
+            TxParsingState::Input(current_input_step + 1)
+        };
+
+        Ok(SigningState::TxParsingNotComplete)
+    }
+
+    fn advance_next_input_additional_info_step<'a>(
+        &mut self,
+        current_input_step: usize,
+        expected_input_commitments_hash: [u8; 64],
+        review: &'a Review,
+    ) -> Result<SigningState<'a>, StatusWord> {
+        let finished_with_inputs = current_input_step >= (self.num_inputs - 1) as usize;
+
+        let signing_state = if finished_with_inputs {
+            // Make sure the hashes match before continuing with the outputs
+            let mut input_commitments_hash: [u8; 64] = [0u8; 64];
+            self.input_commitments_hasher
+                .finalize(&mut input_commitments_hash)
+                .map_err(|_| StatusWord::TxHashFail)?;
+
+            if input_commitments_hash != expected_input_commitments_hash {
+                return Err(StatusWord::DifferentInputCommitmentHash);
             }
 
             self.state = TxParsingState::Output(0);
+
             match review {
                 Review::Review(_) => SigningState::TxParsingNotComplete,
                 Review::StreamingReview(review) => SigningState::StreamingReviewStart(review),
@@ -404,9 +424,13 @@ impl TxContext {
                 inp_idx: _,
                 sighash: _,
             } => true,
-            TxParsingState::Input(_) | TxParsingState::Finished | TxParsingState::Output(_) => {
-                false
+            TxParsingState::Input(_)
+            | TxParsingState::InputCommitment {
+                inp_idx: _,
+                input_commitments_hash: _,
             }
+            | TxParsingState::Finished
+            | TxParsingState::Output(_) => false,
         };
 
         if returning_signatures && self.num_inputs > 1 {
@@ -432,31 +456,42 @@ pub fn setup_sign_tx(req: TxMetadataReq, ctx: &mut DataContext) -> Result<(), St
     Ok(())
 }
 
+fn handle_input_commitment_req<'a>(
+    req: SighashInputCommitment,
+    input_step: usize,
+    input_commitments_hash: [u8; 64],
+    ctx: &mut TxContext,
+    review: &'a mut Review,
+) -> Result<SigningState<'a>, StatusWord> {
+    ctx.update_input_commitments_hash(&req)?;
+    ctx.update_hash(&req)?;
+    ctx.advance_next_input_additional_info_step(input_step, input_commitments_hash, review)
+}
+
 fn handle_input_req<'a>(
     req: TxInputReq,
     input_step: usize,
     ctx: &mut TxContext,
-    review: &'a mut Review,
 ) -> Result<SigningState<'a>, StatusWord> {
     let addresses = req
         .addresses
         .into_iter()
-        .map(|a| InputAddressPathCompressed::new(a, input_step, ctx.coin))
+        .map(|a| InputCompressed::new(a, input_step, ctx.coin))
         .collect::<Result<Vec<_>, StatusWord>>()?;
     ctx.inputs.extend(addresses);
 
-    let input_data = process_input(ctx, &req.inp, &req.additional_info)?;
+    process_input(ctx, &req.inp)?;
 
-    let commitment = into_input_commitment(input_data, req.additional_info)?;
-    ctx.input_commitments.push(commitment);
+    let (input, commitment) = req.inp.into_input_and_commitment();
+    ctx.update_input_commitments_hash(&commitment)?;
 
     if input_step == 0 {
         ctx.tx_hasher
             .update(&ctx.num_inputs.to_le_bytes())
             .map_err(|_| StatusWord::TxHashFail)?;
     }
-    ctx.update_hash(&req.inp)?;
-    ctx.advance_next_input_additional_info_step(input_step, review)
+    ctx.update_hash(&input)?;
+    ctx.advance_next_input_step(input_step)
 }
 
 fn handle_output_req<'a>(
@@ -516,9 +551,14 @@ pub fn handle_sign_tx(
     review: &mut Review,
 ) -> Result<(), StatusWord> {
     let signing_state = match (req, ctx.state()) {
-        (SignTxReq::Input(req), TxParsingState::Input(n)) => {
-            handle_input_req(req, *n, ctx, review)?
-        }
+        (SignTxReq::Input(req), TxParsingState::Input(n)) => handle_input_req(req, *n, ctx)?,
+        (
+            SignTxReq::InputCommitment(req),
+            TxParsingState::InputCommitment {
+                inp_idx,
+                input_commitments_hash,
+            },
+        ) => handle_input_commitment_req(req, *inp_idx, *input_commitments_hash, ctx, review)?,
         (SignTxReq::Output(req), TxParsingState::Output(n)) => {
             handle_output_req(req, *n, ctx, review)?
         }
@@ -664,147 +704,98 @@ fn process_output(ctx: &mut TxContext, out: &TxOutput) -> Result<(), StatusWord>
     Ok(())
 }
 
-fn into_input_commitment(
-    inp_data: InputData,
-    additional_info: InputAdditionalInfo,
-) -> Result<SighashInputCommitment, StatusWord> {
-    let commitment = match additional_info {
-        InputAdditionalInfo::None => SighashInputCommitment::None,
-        InputAdditionalInfo::Utxo { utxo } => SighashInputCommitment::Utxo(utxo),
-        InputAdditionalInfo::PoolInfo {
-            utxo,
-            staker_balance,
-        } => SighashInputCommitment::ProduceBlockFromStakeUtxo {
-            utxo,
-            staker_balance,
-        },
-        InputAdditionalInfo::OrderInfo {
-            initially_asked,
-            initially_given,
-            ask_balance,
-            give_balance,
-        } => match &inp_data {
-            InputData::FillOrderV0 => SighashInputCommitment::FillOrderAccountCommand {
-                initially_asked,
-                initially_given,
-            },
-            InputData::FillOrderV1 => SighashInputCommitment::FillOrderAccountCommand {
-                initially_asked,
-                initially_given,
-            },
-            InputData::ConcludeOrder => SighashInputCommitment::ConcludeOrderAccountCommand {
-                initially_asked,
-                initially_given,
-                ask_balance,
-                give_balance,
-            },
-            _ => return Err(StatusWord::WrongContext),
-        },
-    };
-
-    Ok(commitment)
-}
-
-fn process_input(
-    ctx: &mut TxContext,
-    inp: &TxInput,
-    additional_info: &InputAdditionalInfo,
-) -> Result<InputData, StatusWord> {
-    let input_data = match (inp, additional_info) {
-        (
-            TxInput::Utxo(_),
-            InputAdditionalInfo::PoolInfo {
+fn process_input(ctx: &mut TxContext, inp: &TxInputWithAdditionalInfo) -> Result<(), StatusWord> {
+    match inp {
+        TxInputWithAdditionalInfo::Utxo(_, info) => match info {
+            AdditionalUtxoInfo::PoolData {
                 utxo: _,
                 staker_balance,
-            },
-        ) => {
-            increase_input_totals(&mut ctx.total_inputs, CoinOrTokenId::Coin, *staker_balance)?;
-            InputData::Utxo
-        }
-        (TxInput::Utxo(_), InputAdditionalInfo::Utxo { utxo }) => {
-            match &utxo {
-                TxOutput::Transfer(value, _)
-                | TxOutput::LockThenTransfer(value, _, _)
-                | TxOutput::Htlc(value, _) => {
-                    let (coin_or_token_id, amount) = into_coin_or_token_id_and_amount(value)?;
-                    increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, amount)?;
-                }
-                TxOutput::Burn(_)
-                | TxOutput::ProduceBlockFromStake(_, _)
-                | TxOutput::CreateDelegationId(_, _)
-                | TxOutput::IssueFungibleToken(_)
-                | TxOutput::DataDeposit(_)
-                | TxOutput::DelegateStaking(_, _)
-                | TxOutput::CreateOrder(_) => return Err(StatusWord::TxInvalidInputUtxo),
-                TxOutput::CreateStakePool(_, data) => {
-                    increase_input_totals(&mut ctx.total_inputs, CoinOrTokenId::Coin, data.pledge)?;
-                }
-                TxOutput::IssueNft(nft_id, _, _) => {
-                    increase_input_totals(
-                        &mut ctx.total_inputs,
-                        CoinOrTokenId::TokenId(*nft_id.hash()),
-                        Amount::from_atoms(1),
-                    )?;
-                }
-            };
-            InputData::Utxo
-        }
-        (TxInput::Utxo(_), _) => {
-            return Err(StatusWord::WrongContext);
-        }
-        (TxInput::Account(acc), InputAdditionalInfo::None) => match acc.spending {
+            } => {
+                increase_input_totals(&mut ctx.total_inputs, CoinOrTokenId::Coin, *staker_balance)?;
+            }
+            AdditionalUtxoInfo::Utxo(utxo) => {
+                match &utxo {
+                    TxOutput::Transfer(value, _)
+                    | TxOutput::LockThenTransfer(value, _, _)
+                    | TxOutput::Htlc(value, _) => {
+                        let (coin_or_token_id, amount) = into_coin_or_token_id_and_amount(&value)?;
+                        increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, amount)?;
+                    }
+                    TxOutput::Burn(_)
+                    | TxOutput::ProduceBlockFromStake(_, _)
+                    | TxOutput::CreateDelegationId(_, _)
+                    | TxOutput::IssueFungibleToken(_)
+                    | TxOutput::DataDeposit(_)
+                    | TxOutput::DelegateStaking(_, _)
+                    | TxOutput::CreateOrder(_) => return Err(StatusWord::TxInvalidInputUtxo),
+                    TxOutput::CreateStakePool(_, data) => {
+                        increase_input_totals(
+                            &mut ctx.total_inputs,
+                            CoinOrTokenId::Coin,
+                            data.pledge,
+                        )?;
+                    }
+                    TxOutput::IssueNft(nft_id, _, _) => {
+                        increase_input_totals(
+                            &mut ctx.total_inputs,
+                            CoinOrTokenId::TokenId(*nft_id.hash()),
+                            Amount::from_atoms(1),
+                        )?;
+                    }
+                };
+            }
+        },
+        TxInputWithAdditionalInfo::Account(acc) => match acc.spending {
             AccountSpending::DelegationBalance(_, amount) => {
                 ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::DelegationWithdrawl);
                 increase_input_totals(&mut ctx.total_inputs, CoinOrTokenId::Coin, amount)?;
-                InputData::DelegationWithdrawl
             }
         },
-        (TxInput::Account(_), _) => {
-            return Err(StatusWord::WrongContext);
-        }
-        (TxInput::AccountCommand(_, cmd), additional_info) => match (cmd, additional_info) {
-            (AccountCommand::MintTokens(token_id, amount), InputAdditionalInfo::None) => {
+        TxInputWithAdditionalInfo::AccountCommand(_, cmd) => match cmd {
+            AccountCommand::MintTokens(token_id, amount) => {
                 ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::MintTokens);
                 increase_input_totals(
                     &mut ctx.total_inputs,
                     CoinOrTokenId::TokenId(*token_id.hash()),
                     *amount,
                 )?;
-                InputData::MintTokens
             }
-            (
-                AccountCommand::ConcludeOrder(_),
-                InputAdditionalInfo::OrderInfo {
-                    initially_asked,
-                    initially_given,
-                    ask_balance,
-                    give_balance,
-                },
-            ) => {
-                let (coin_or_token_id, _) = into_coin_or_token_id_and_amount(&initially_asked)?;
-                increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, *ask_balance)?;
-
-                let (coin_or_token_id, _) = into_coin_or_token_id_and_amount(&initially_given)?;
-                increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, *give_balance)?;
-
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ConcludeOrder);
-                InputData::ConcludeOrder
+            AccountCommand::ConcludeOrder(_) | AccountCommand::FillOrder(_, _, _) => {
+                return Err(StatusWord::OrdersV0NotSupported)
             }
-            (
-                AccountCommand::FillOrder(_, fill_amount, _),
-                InputAdditionalInfo::OrderInfo {
-                    initially_asked,
-                    initially_given,
-                    ask_balance,
-                    give_balance,
-                },
-            ) => {
-                let (fill_coin_or_token_id, asked_amount) = into_coin_or_token_id_and_amount(
-                    &output_value_with_amount(&initially_asked, *ask_balance)?,
-                )?;
-                let (given_coin_or_token_id, given_amount) = into_coin_or_token_id_and_amount(
-                    &output_value_with_amount(&initially_given, *give_balance)?,
-                )?;
+            AccountCommand::UnmintTokens(_) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::UnmintTokens);
+            }
+            AccountCommand::LockTokenSupply(_) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::LockTokenSupply);
+            }
+            AccountCommand::FreezeToken(_, _) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FreezeToken);
+            }
+            AccountCommand::UnfreezeToken(_) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::UnfreezeToken);
+            }
+            AccountCommand::ChangeTokenAuthority(_, _) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ChangeTokenAuthority);
+            }
+            AccountCommand::ChangeTokenMetadataUri(_, _) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ChangeTokenMetadataUri);
+            }
+        },
+        TxInputWithAdditionalInfo::OrderAccountCommand(
+            cmd,
+            AdditionalOrderInfo {
+                initially_asked,
+                initially_given,
+                ask_balance,
+                give_balance,
+            },
+        ) => match cmd {
+            OrderAccountCommand::FillOrder(_, fill_amount) => {
+                let (fill_coin_or_token_id, asked_amount) =
+                    into_coin_or_token_id_and_amount(&initially_asked)?;
+                let (given_coin_or_token_id, given_amount) =
+                    into_coin_or_token_id_and_amount(&initially_given)?;
 
                 increase_output_totals(
                     &mut ctx.total_outputs,
@@ -822,92 +813,23 @@ fn process_input(
                 increase_input_totals(&mut ctx.total_inputs, given_coin_or_token_id, amount)?;
 
                 ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FillOrder);
-                InputData::FillOrderV0
             }
-            (AccountCommand::UnmintTokens(_), InputAdditionalInfo::None) => {
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::UnmintTokens);
-                InputData::UnmintTokens
+            OrderAccountCommand::ConcludeOrder(_) => {
+                let (coin_or_token_id, _) = into_coin_or_token_id_and_amount(&initially_asked)?;
+                increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, *ask_balance)?;
+
+                let (coin_or_token_id, _) = into_coin_or_token_id_and_amount(&initially_given)?;
+                increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, *give_balance)?;
+
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ConcludeOrder);
             }
-            (AccountCommand::LockTokenSupply(_), InputAdditionalInfo::None) => {
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::LockTokenSupply);
-                InputData::LockTokenSupply
+            OrderAccountCommand::FreezeOrder(_) => {
+                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FreezeOrder);
             }
-            (AccountCommand::FreezeToken(_, _), InputAdditionalInfo::None) => {
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FreezeToken);
-                InputData::FreezeToken
-            }
-            (AccountCommand::UnfreezeToken(_), InputAdditionalInfo::None) => {
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::UnfreezeToken);
-                InputData::UnfreezeToken
-            }
-            (AccountCommand::ChangeTokenAuthority(_, _), InputAdditionalInfo::None) => {
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ChangeTokenAuthority);
-                InputData::ChangeTokenAuthority
-            }
-            (AccountCommand::ChangeTokenMetadataUri(_, _), InputAdditionalInfo::None) => {
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ChangeTokenMetadataUri);
-                InputData::ChangeTokenMetadataUri
-            }
-            _ => return Err(StatusWord::WrongContext),
         },
-        (
-            TxInput::OrderAccountCommand(OrderAccountCommand::FillOrder(_, fill_amount)),
-            InputAdditionalInfo::OrderInfo {
-                initially_asked,
-                initially_given,
-                ask_balance: _,
-                give_balance: _,
-            },
-        ) => {
-            let (fill_coin_or_token_id, asked_amount) =
-                into_coin_or_token_id_and_amount(&initially_asked)?;
-            let (given_coin_or_token_id, given_amount) =
-                into_coin_or_token_id_and_amount(&initially_given)?;
-
-            increase_output_totals(&mut ctx.total_outputs, fill_coin_or_token_id, *fill_amount)?;
-
-            let atoms = given_amount
-                .into_atoms()
-                .checked_mul(fill_amount.into_atoms())
-                .ok_or(StatusWord::TxNumericOperationFail)?
-                .checked_div(asked_amount.into_atoms())
-                .ok_or(StatusWord::TxNumericOperationFail)?;
-            let amount = Amount::from_atoms(atoms);
-            increase_input_totals(&mut ctx.total_inputs, given_coin_or_token_id, amount)?;
-
-            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FillOrder);
-            InputData::FillOrderV1
-        }
-        (
-            TxInput::OrderAccountCommand(OrderAccountCommand::ConcludeOrder(_)),
-            InputAdditionalInfo::OrderInfo {
-                initially_asked,
-                initially_given,
-                ask_balance,
-                give_balance,
-            },
-        ) => {
-            let (coin_or_token_id, _) = into_coin_or_token_id_and_amount(&initially_asked)?;
-            increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, *ask_balance)?;
-
-            let (coin_or_token_id, _) = into_coin_or_token_id_and_amount(&initially_given)?;
-            increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, *give_balance)?;
-
-            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ConcludeOrder);
-            InputData::ConcludeOrder
-        }
-        (
-            TxInput::OrderAccountCommand(OrderAccountCommand::FreezeOrder(_)),
-            InputAdditionalInfo::None,
-        ) => {
-            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FreezeOrder);
-            InputData::FreezeOrderV1
-        }
-
-        _ => return Err(StatusWord::WrongContext),
     };
 
-    Ok(input_data)
+    Ok(())
 }
 
 fn increase_input_totals(
@@ -974,12 +896,16 @@ fn compute_signature_and_append(
     Ok(())
 }
 
-fn output_value_with_amount(
-    value: &OutputValue,
-    new_amount: Amount,
-) -> Result<OutputValue, StatusWord> {
-    match value {
-        OutputValue::Coin(_) => Ok(OutputValue::Coin(new_amount)),
-        OutputValue::TokenV1(token_id, _) => Ok(OutputValue::TokenV1(*token_id, new_amount)),
-    }
+fn update_hash<T: Encode>(
+    raw_buf: &mut Vec<u8>,
+    data: &T,
+    hasher: &mut Blake2b_512,
+) -> Result<(), StatusWord> {
+    raw_buf.clear();
+    encode_to(data, raw_buf);
+    hasher
+        .update(raw_buf.as_slice())
+        .map_err(|_| StatusWord::TxHashFail)?;
+    raw_buf.clear();
+    Ok(())
 }
