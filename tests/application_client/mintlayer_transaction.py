@@ -10,4 +10,5 @@ class TransactionError(Exception):
 class Transaction:
     coin: int
     inputs: List[bytes]
+    input_commitments: List[bytes]
     outputs: List[bytes]

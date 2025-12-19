@@ -23,8 +23,9 @@ class P1(IntEnum):
     # Parameter 1 for first APDU number.
     P1_START = 0x00
     P1_TX_INPUT = 0x01
-    P1_TX_OUTPUT = 0x02
-    P1_TX_NEXT_SIG = 0x03
+    P1_TX_INPUT_COMMITMENT = 0x02
+    P1_TX_OUTPUT = 0x03
+    P1_TX_NEXT_SIG = 0x04
     # Parameter 1 for maximum APDU number.
     P1_MAX = 0x03
     # Parameter 1 for screen confirmation for GET_PUBLIC_KEY.
@@ -167,6 +168,25 @@ class MintlayerCommandSender:
                 data=chunks[-1],
             )
             print("inp ", res)
+
+        for inp in transaction.input_commitments:
+            chunks = split_message(inp, MAX_APDU_LEN)
+            for chunk in chunks[:-1]:
+                res = self.backend.exchange(
+                    cla=CLA,
+                    ins=InsType.SIGN_TX,
+                    p1=P1.P1_TX_INPUT_COMMITMENT,
+                    p2=P2.P2_MORE,
+                    data=chunk,
+                )
+
+            res = self.backend.exchange(
+                cla=CLA,
+                ins=InsType.SIGN_TX,
+                p1=P1.P1_TX_INPUT_COMMITMENT,
+                p2=P2.P2_LAST,
+                data=chunks[-1],
+            )
 
         for out in transaction.outputs[:-1]:
             chunks = split_message(out, MAX_APDU_LEN)

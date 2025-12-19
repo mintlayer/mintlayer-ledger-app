@@ -83,7 +83,7 @@ fn wrong_p1p2(_: u8) -> WrongP1P2 {
 pub enum P1SignTx {
     Metadata = 0,
     Input = 1,
-    InputAdditionalInfo = 2,
+    InputCommitment = 2,
     Output = 3,
     NextSignature = 4,
 }

@@ -24,7 +24,7 @@ use crate::{
         streaming_review_show_output, ui_display_tx,
     },
     handlers::sign_message::schnorr_sign,
-    DataContext, P1SignTx, StatusWord, P2_DONE, P2_MORE,
+    DataContext, StatusWord, P2_DONE, P2_MORE,
 };
 use messages::{
     encode, encode_as_compact, encode_to, AccountCommand, AccountSpending, AdditionalOrderInfo,
@@ -301,6 +301,8 @@ impl TxContext {
                 .finalize(&mut input_commitments_hash)
                 .map_err(|_| StatusWord::TxHashFail)?;
 
+            self.input_commitments_hasher = Blake2b_512::new();
+
             TxParsingState::InputCommitment {
                 inp_idx: 0,
                 input_commitments_hash,
@@ -338,7 +340,10 @@ impl TxContext {
                 Review::StreamingReview(review) => SigningState::StreamingReviewStart(review),
             }
         } else {
-            self.state = TxParsingState::Input(current_input_step + 1);
+            self.state = TxParsingState::InputCommitment {
+                inp_idx: current_input_step + 1,
+                input_commitments_hash: expected_input_commitments_hash,
+            };
             SigningState::TxParsingNotComplete
         };
 
@@ -394,22 +399,6 @@ impl TxContext {
         } else {
             TxParsingState::Finished
         };
-    }
-
-    // Check the state corresponds to the incoming request
-    pub fn check_state(&self, p1: P1SignTx) -> Result<(), StatusWord> {
-        match (p1, &self.state) {
-            (P1SignTx::Input, TxParsingState::Input(_))
-            | (P1SignTx::Output, TxParsingState::Output(_))
-            | (
-                P1SignTx::NextSignature,
-                TxParsingState::ApprovedNotFinishedSigning {
-                    inp_idx: _,
-                    sighash: _,
-                },
-            ) => Ok(()),
-            (_, _) => Err(StatusWord::WrongP1P2),
-        }
     }
 
     // show a spinner for bigger transactions

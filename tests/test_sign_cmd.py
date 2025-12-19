@@ -51,14 +51,22 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
                         {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
                     ],
                     "inp": {
-                        "Utxo": {
-                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
-                            "index": 1,
-                        }
-                    },
-                    "additional_info": additional_info,
+                        "Utxo": [
+                            {
+                                "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                                "index": 1,
+                            },
+                            additional_info,
+                        ]
+                    }
                 }
             }
+        ).data
+    
+    inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": additional_info
+        }
         ).data
 
     output = sign_tx_req_obj.encode(
@@ -79,7 +87,7 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
     ).data
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
     # Enable display of transaction memo (NBGL devices only)
@@ -105,9 +113,6 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
     response = client.get_async_response().data
 
     assert len(response) == TX_RESPONSE_SIZE
-    # _, der_sig, _ = unpack_sign_tx_response(response)
-
-    # assert check_signature_validity(public_key, der_sig, transaction.to_hash())
 
 
 def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigator):
@@ -130,9 +135,14 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
                             "account": {"Delegation": [[0] * 32, 11]},
                         }
                     },
-                    "additional_info": {"None": None}
                 }
             }
+    ).data
+
+    inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": {"None": None}
+        }
     ).data
 
     output = sign_tx_req_obj.encode(
@@ -155,7 +165,7 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
     # Enable display of transaction memo (NBGL devices only)
@@ -186,9 +196,6 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
 def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    # The path used for this entire test
-    path: str = "m/44'/19788'/0'/0/0"
-
     h = 1 << 31
 
     additional_info = {
@@ -213,14 +220,22 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
                         {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
                     ],
                     "inp": {
-                        "Utxo": {
+                        "Utxo": [
+                            {
                             "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
                             "index": 1,
-                        }
+                            },
+                            additional_info,
+                        ]
                     },
-                    "additional_info": additional_info
                 }
             }
+    ).data
+
+    inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": additional_info
+        }
     ).data
 
     output = sign_tx_req_obj.encode(
@@ -242,7 +257,7 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
     # Enable display of transaction memo (NBGL devices only)
@@ -274,9 +289,6 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
 def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    # The path used for this entire test
-    path: str = "m/44'/19788'/0'/0/0"
-
     h = 1 << 31
 
     additional_info = {
@@ -301,14 +313,22 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
                         {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
                     ],
                     "inp": {
-                        "Utxo": {
-                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
-                            "index": 1,
-                        }
+                        "Utxo": [
+                            {
+                                "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                                "index": 1,
+                            },
+                            additional_info,
+                        ]
                     },
-                    "additional_info": additional_info
                 }
             }
+    ).data
+
+    inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": additional_info
+        }
     ).data
 
     output = sign_tx_req_obj.encode(
@@ -323,7 +343,7 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
     # Enable display of transaction memo (NBGL devices only)
@@ -354,9 +374,6 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
 def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    # The path used for this entire test
-    path: str = "m/44'/19788'/0'/0/0"
-
     h = 1 << 31
     
     additional_info = {
@@ -381,14 +398,22 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
                         {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
                     ],
                     "inp": {
-                        "Utxo": {
-                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
-                            "index": 1,
-                        }
+                        "Utxo": [
+                            {
+                                "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                                "index": 1,
+                            },
+                            additional_info,
+                        ]
                     },
-                    "additional_info": additional_info
                 }
             }
+    ).data
+
+    inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": additional_info
+        }
     ).data
 
     output = sign_tx_req_obj.encode(
@@ -424,7 +449,7 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
     ).data
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
     # Enable display of transaction memo (NBGL devices only)
@@ -455,9 +480,6 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
 def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    # The path used for this entire test
-    path: str = "m/44'/19788'/0'/0/0"
-
     h = 1 << 31
     additional_info = {
             "Utxo": {
@@ -481,14 +503,22 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
                         {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
                     ],
                     "inp": {
-                        "Utxo": {
-                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
-                            "index": 1,
-                        }
+                        "Utxo": [
+                            {
+                                "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                                "index": 1,
+                            },
+                            additional_info,
+                        ]
                     },
-                    "additional_info": additional_info
                 }
             }
+    ).data
+
+    inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": additional_info
+        }
     ).data
 
     output = sign_tx_req_obj.encode(
@@ -518,7 +548,7 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
     # Send the sign device instruction
@@ -534,9 +564,6 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
 def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    # The path used for this entire test
-    path: str = "m/44'/19788'/0'/0/0"
-
     h = 1 << 31
     additional_info = {
             "Utxo": {
@@ -560,14 +587,22 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
                         {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
                     ],
                     "inp": {
-                        "Utxo": {
-                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
-                            "index": 1,
-                        }
+                        "Utxo": [
+                            {
+                                "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                                "index": 1,
+                            },
+                            additional_info,
+                        ]
                     },
-                    "additional_info": additional_info
                 }
             }
+    ).data
+
+    inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": additional_info
+        }
     ).data
 
     # This is the new output for issuing an NFT.
@@ -613,7 +648,7 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
     # Send the sign device instruction
@@ -634,8 +669,6 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
     And one output to transfer the newly minted tokens.
     """
     client = MintlayerCommandSender(backend)
-    # The path for the key that will sign the inputs
-    path: str = "m/44'/19788'/0'/0/0"
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
@@ -660,17 +693,23 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
             "Input": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
+                    "Utxo": [
+                        {
+                            "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                            "index": 0,
+                        },
+                        additional_info,
+                    ]
                 },
-                "additional_info": additional_info
             }
         }
     ).data
 
-    
+    inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": additional_info
+        }
+    ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
     account_input = sign_tx_req_obj.encode(
@@ -688,8 +727,13 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
                         },
                     ]
                 },
-                "additional_info": {"None": None}
             }
+        }
+    ).data
+
+    acc_inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": {"None": None}
         }
     ).data
 
@@ -713,6 +757,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input],
+        input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[mint_output],
     )
 
@@ -741,8 +786,6 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     And one output to transfer the newly minted tokens.
     """
     client = MintlayerCommandSender(backend)
-    # The path for the key that will sign the inputs
-    path: str = "m/44'/19788'/0'/0/0"
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
@@ -781,13 +824,21 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
             "Input": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
+                    "Utxo": [
+                        {
+                            "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                            "index": 0,
+                        },
+                        additional_info,
+                    ]
                 },
-                "additional_info": additional_info
             }
+        }
+    ).data
+
+    inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": additional_info,
         }
     ).data
 
@@ -796,16 +847,23 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
             "Input": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 2,
-                    }
+                    "Utxo": [
+                        {
+                            "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                            "index": 2,
+                        },
+                        additional_info2,
+                    ]
                 },
-                "additional_info": additional_info2
             }
         }
     ).data
 
+    inp_commitment2 = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": additional_info2,
+        }
+    ).data
 
     account_input = sign_tx_req_obj.encode(
         {
@@ -819,8 +877,13 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
                         },
                     ]
                 },
-                "additional_info": {"None": None}
             }
+        }
+    ).data
+
+    acc_inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": {"None": None}
         }
     ).data
 
@@ -844,6 +907,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input, utxo_input2],
+        input_commitments=[inp_commitment, acc_inp_commitment, inp_commitment2],
         outputs=[change_output],
     )
 
@@ -871,8 +935,6 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
     And one output to transfer the change coins.
     """
     client = MintlayerCommandSender(backend)
-    # The path for the key that will sign the inputs
-    path: str = "m/44'/19788'/0'/0/0"
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
@@ -898,13 +960,21 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
             "Input": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
+                    "Utxo": [
+                        {
+                            "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                            "index": 0,
+                        },
+                        additional_info,
+                    ]
                 },
-                "additional_info": additional_info
             }
+        }
+    ).data
+
+    inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": additional_info,
         }
     ).data
 
@@ -919,8 +989,13 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
                         {"FreezeToken": [f"0x{bytes([0]*32).hex()}", {"No": None}]},  # TokenId
                     ]
                 },
-                "additional_info": {"None": None}
             }
+        }
+    ).data
+
+    acc_inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": {"None": None}
         }
     ).data
 
@@ -944,6 +1019,7 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input],
+        input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[change_output],
     )
 
@@ -971,8 +1047,6 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
     And one output to transfer the change coins.
     """
     client = MintlayerCommandSender(backend)
-    # The path for the key that will sign the inputs
-    path: str = "m/44'/19788'/0'/0/0"
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
@@ -997,14 +1071,22 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
             "Input": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
+                    "Utxo": [
+                        {
+                            "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                            "index": 0,
+                        },
+                        additional_info,
+                    ]
                 },
-                "additional_info": additional_info
             }
         }).data
+
+    inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": additional_info,
+        }
+    ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
     account_input = sign_tx_req_obj.encode(
@@ -1019,8 +1101,13 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
                         },
                     ]
                 },
-                "additional_info": {"None": None}
             }
+        }
+    ).data
+
+    acc_inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": {"None": None}
         }
     ).data
 
@@ -1044,6 +1131,7 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input],
+        input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[change_output],
     )
 
@@ -1071,8 +1159,6 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
     And one output to transfer the change coins.
     """
     client = MintlayerCommandSender(backend)
-    # The path for the key that will sign the inputs
-    path: str = "m/44'/19788'/0'/0/0"
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
@@ -1097,14 +1183,22 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
             "Input": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
+                    "Utxo": [
+                        {
+                            "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                            "index": 0,
+                        },
+                        additional_info,
+                    ]
                 },
-                "additional_info": additional_info
             }
         }).data
+
+    inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": additional_info,
+        }
+    ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
     account_input = sign_tx_req_obj.encode(
@@ -1128,8 +1222,13 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
                         },
                     ]
                 },
-                "additional_info": {"None": None}
             }
+        }
+    ).data
+
+    acc_inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": {"None": None}
         }
     ).data
 
@@ -1153,6 +1252,7 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input],
+        input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[change_output],
     )
 
@@ -1182,8 +1282,6 @@ def test_sign_tx_change_token_metadata_uri(
     And one output to transfer the change coins.
     """
     client = MintlayerCommandSender(backend)
-    # The path for the key that will sign the inputs
-    path: str = "m/44'/19788'/0'/0/0"
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
@@ -1208,13 +1306,21 @@ def test_sign_tx_change_token_metadata_uri(
             "Input": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
+                    "Utxo": [
+                        {
+                            "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                            "index": 0,
+                        },
+                        additional_info,
+                    ]
                 },
-                "additional_info": additional_info
             }
+        }
+    ).data
+
+    inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": additional_info,
         }
     ).data
 
@@ -1234,8 +1340,13 @@ def test_sign_tx_change_token_metadata_uri(
                         },
                     ]
                 },
-                "additional_info": {"None": None}
             }
+        }
+    ).data
+
+    acc_inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": {"None": None}
         }
     ).data
 
@@ -1259,6 +1370,7 @@ def test_sign_tx_change_token_metadata_uri(
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input],
+        input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[change_output],
     )
 
@@ -1287,8 +1399,6 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     And one output to transfer the change coins.
     """
     client = MintlayerCommandSender(backend)
-    # The path for the key that will sign the inputs
-    path: str = "m/44'/19788'/0'/0/0"
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
@@ -1313,42 +1423,62 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
             "Input": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
+                    "Utxo": [
+                        {
+                            "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                            "index": 0,
+                        },
+                        additional_info,
+                    ]
                 },
-                "additional_info": additional_info
             }
+        }
+    ).data
+
+    inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": additional_info,
         }
     ).data
 
     fill_amount = 10
     fill_ask = 100
     fill_give = 1000
-    order_additional_info = {
-            "OrderInfo": [
-                {"Coin": fill_ask},
-                {"TokenV1": [f"0x{bytes([0]*32).hex()}", fill_give]},
-                0,
-                0,
-            ]
-        }
+
+    additional_order_info = {
+           "initially_asked": {"Coin": fill_ask},
+           "initially_given": {"TokenV1": [f"0x{bytes([0]*32).hex()}", fill_give]},
+           "ask_balance": 0,
+           "give_balance": 0,
+    }
     # This is the OrderAccountCommand to fill 10 units
     account_input = sign_tx_req_obj.encode(
         {
             "Input": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "inp": {
-                    "OrderAccountCommand": {
-                        "FillOrder": [
-                            f"0x{bytes([0]*32).hex()}",  # OrderId
-                            fill_amount,
-                        ]
-                    }
+                    "OrderAccountCommand": [
+                        {
+                            "FillOrder": [
+                                f"0x{bytes([0]*32).hex()}",  # OrderId
+                                fill_amount,
+                            ]
+                        },
+                        additional_order_info,
+                    ]
                 },
-                "additional_info": order_additional_info
             }
+        }
+    ).data
+
+    fill_order_inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": {
+                "FillOrderAccountCommand": [
+                    additional_order_info["initially_asked"],
+                    additional_order_info["initially_given"],
+                ]
+            },
         }
     ).data
 
@@ -1394,6 +1524,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input],
+        input_commitments=[inp_commitment, fill_order_inp_commitment],
         outputs=[change_output, fill_output],
     )
 
@@ -1421,8 +1552,6 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     And one output to transfer the change coins + ask balance and another output for the give balance.
     """
     client = MintlayerCommandSender(backend)
-    # The path for the key that will sign the inputs
-    path: str = "m/44'/19788'/0'/0/0"
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
@@ -1447,13 +1576,21 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
             "Input": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
+                    "Utxo": [
+                        {
+                            "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                            "index": 0,
+                        },
+                        additional_info,
+                    ]
                 },
-                "additional_info": additional_info
             }
+        }
+    ).data
+
+    inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": additional_info,
         }
     ).data
 
@@ -1462,25 +1599,40 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     ask_balance = 10
     give_balance = 900
 
+    additional_order_info = {
+           "initially_asked": {"Coin": initial_ask},
+           "initially_given": {"TokenV1": [f"0x{bytes([0]*32).hex()}", initial_give]},
+           "ask_balance": ask_balance,
+           "give_balance": give_balance,
+    }
+
     # This is the OrderAccountCommand to fill 10 units
     account_input = sign_tx_req_obj.encode(
         {
             "Input": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "inp": {
-                    "OrderAccountCommand": {
-                        "ConcludeOrder": f"0x{bytes([0]*32).hex()}",  # OrderId
-                    }
-                },
-                "additional_info": {
-                    "OrderInfo": [
-                        {"Coin": initial_ask},
-                        {"TokenV1": [f"0x{bytes([0]*32).hex()}", initial_give]},
-                        ask_balance,
-                        give_balance,
+                    "OrderAccountCommand": [
+                        {
+                            "ConcludeOrder": f"0x{bytes([0]*32).hex()}",  # OrderId
+                        },
+                        additional_order_info,
                     ]
-                }
+                },
             }
+        }
+    ).data
+
+    conclude_order_inp_commitment = sign_tx_req_obj.encode(
+        {
+            "InputCommitment": {
+                "ConcludeOrderAccountCommand": [
+                    additional_order_info["initially_asked"],
+                    additional_order_info["initially_given"],
+                    additional_order_info["ask_balance"],
+                    additional_order_info["give_balance"]
+                ]
+            },
         }
     ).data
 
@@ -1521,6 +1673,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input],
+        input_commitments=[inp_commitment, conclude_order_inp_commitment],
         outputs=[change_output, conclude_output],
     )
 
@@ -1542,13 +1695,11 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
 
 def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
     """
-    Test signing a transaction with two inputs:
-    1. A standard UTXO input to pay for tx fees.
+    Test signing a transaction with one input:
+    1. The standard UTXO input to pay for tx fees.
     And one output to transfer the change coins and the HTLC output.
     """
     client = MintlayerCommandSender(backend)
-    # The path for the key that will sign the inputs
-    path: str = "m/44'/19788'/0'/0/0"
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
@@ -1573,34 +1724,21 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
             "Input": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "inp": {
-                    "Utxo": {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
-                        "index": 0,
-                    }
+                    "Utxo": [
+                        {
+                            "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                            "index": 0,
+                        },
+                        additional_info,
+                    ]
                 },
-                "additional_info": additional_info
             }
         }
     ).data
 
-    # This is the AccountCommand to mint 1000 units of a new token
-    account_input = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_req_obj.encode(
         {
-            "Input": {
-                "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
-                    "AccountCommand": [
-                        1,  # AccountNonce
-                        {
-                            "ChangeTokenMetadataUri": [
-                                f"0x{bytes([0]*32).hex()}",  # TokenId
-                                "uri.com".encode(),
-                            ]
-                        },
-                    ]
-                },
-                "additional_info": {"None": None}
-            }
+            "InputCommitment": additional_info,
         }
     ).data
 
@@ -1653,7 +1791,8 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
 
     transaction = Transaction(
         coin=MAINNET,
-        inputs=[utxo_input, account_input],
+        inputs=[utxo_input],
+        input_commitments=[inp_commitment],
         outputs=[htlc_output, change_output],
     )
 
@@ -1661,13 +1800,12 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
     # It will yield the result when the user validates on-screen.
     with client.sign_tx(transaction=transaction):
         # Validate the on-screen request by performing the navigation
-        scenario_navigator.review_approve()
+        scenario_navigator.review_approve(custom_screen_text=r"Sign\screate\sHTLC")
     # The device has yielded the result, parse it and ensure the signatures are correct
     responses = client.get_all_signatures(transaction)
 
-    # The device should have returned two signatures, one for each input that
-    # required signing (the Utxo and the AccountCommand).
+    # The device should have returned one signature
     # Each signature is 64 bytes + 3 sighash byte = 67 bytes.
-    assert len(responses) == 2
+    assert len(responses) == 1
     for resp in responses:
         assert len(resp) == TX_RESPONSE_SIZE

@@ -264,6 +264,15 @@ def init_mintlayer_types():
                     ["OrderAccountCommand", "OrderAccountCommand"],
                 ],
             },
+            "TxInputWithAdditionalInfo": {
+                "type": "enum",
+                "type_mapping": [
+                    ["Utxo", "(OutPoint, AdditionalUtxoInfo)"],
+                    ["Account", "(AccountOutPoint)"],
+                    ["AccountCommand", "(AccountNonce, AccountCommand)"],
+                    ["OrderAccountCommand", "(OrderAccountCommand, AdditionalOrderInfo)"],
+                ],
+            },
             "AccountOutPoint": {
                 "type": "struct",
                 "type_mapping": [
@@ -396,23 +405,26 @@ def init_mintlayer_types():
                 "type": "struct",
                 "type_mapping": [
                     ["addresses", "Vec<InputAddressPath>"],
-                    ["inp", "TxInput"],
-                    ["additional_info", "InputAdditionalInfoReq"],
+                    ["inp", "TxInputWithAdditionalInfo"],
                 ],
             },
-            "InputAdditionalInfoReq": {
+            "AdditionalUtxoInfo": {
                 "type": "enum",
                 "type_mapping": [
-                    ["None", "()"],
                     ["Utxo", "TxOutput"],
                     [
                         "PoolInfo",
                         "(TxOutput, Amount)",
                     ],
-                    [
-                        "OrderInfo",
-                        "(OutputValue, OutputValue, Amount, Amount)",
-                    ],
+                ],
+            },
+            "AdditionalOrderInfo": {
+                "type": "struct",
+                "type_mapping": [
+                    ["initially_asked", "OutputValue"],
+                    ["initially_given", "OutputValue"],
+                    ["ask_balance", "Amount"],
+                    ["give_balance", "Amount"],
                 ],
             },
             "TxOutputReq": {
@@ -425,6 +437,7 @@ def init_mintlayer_types():
                 "type": "enum",
                 "type_mapping": [
                     ["Input", "TxInputReq"],
+                    ["InputCommitment", "SighashInputCommitment"],
                     ["Output", "TxOutputReq"],
                     ["NextSignature", "()"],
                 ],
