@@ -16,11 +16,13 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use include_gif::include_gif;
-use ledger_device_sdk::io::Comm;
+use ledger_device_sdk::{
+    include_gif,
+    io::Comm,
+    nbgl::{NbglGlyph, NbglHomeAndSettings},
+};
 
 use crate::settings::Settings;
-use ledger_device_sdk::nbgl::{NbglGlyph, NbglHomeAndSettings};
 
 pub fn ui_menu_main(_: &mut Comm) -> NbglHomeAndSettings {
     // Load glyph from file with include_gif macro. Creates an NBGL compatible glyph.

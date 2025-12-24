@@ -37,18 +37,10 @@ use parity_scale_codec::{Decode, DecodeAll};
 pub const APDU_CLASS: u8 = 0xE1;
 pub const MAX_ADPU_DATA_LEN: usize = u8::MAX as usize;
 
-// P2 for last APDU to receive.
+// P2 is used to indicate APDU chunking.
+// `P2_DONE` marks the final chunk, while `P2_MORE` indicates that more chunks follow.
 pub const P2_DONE: u8 = 0x00;
-// P2 for more APDU to receive.
 pub const P2_MORE: u8 = 0x80;
-// P1 for first APDU number.
-pub const P1_SIGN_START: u8 = 0x00;
-// P1 for next APDU number.
-pub const P1_SIGN_NEXT: u8 = 0x01;
-// P1 for the GET VERSION INS
-pub const P1_GET_VERSION: u8 = 0x00;
-// P1 for the APP NAME INS
-pub const P1_APP_NAME: u8 = 0x00;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
 #[num_enum(error_type(name = WrongP1P2, constructor = wrong_p1p2))]
@@ -80,12 +72,9 @@ fn wrong_p1p2(_: u8) -> WrongP1P2 {
 #[derive(Debug, Clone, Copy, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
 #[num_enum(error_type(name = WrongP1P2, constructor = wrong_p1p2))]
 #[repr(u8)]
-pub enum P1SignTx {
-    Metadata = 0,
-    Input = 1,
-    InputCommitment = 2,
-    Output = 3,
-    NextSignature = 4,
+pub enum SignP1 {
+    Start = 0,
+    Next = 1,
 }
 
 #[derive(Encode, Decode)]

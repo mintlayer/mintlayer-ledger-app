@@ -19,9 +19,9 @@
 use crate::{app_ui::utils::to_address, StatusWord};
 use messages::{Destination, PCoinType, PublicKey, Secp256k1PublicKey};
 
-use include_gif::include_gif;
 use ledger_device_sdk::{
     ecc::ECPublicKey,
+    include_gif,
     nbgl::{NbglAddressReview, NbglGlyph},
 };
 

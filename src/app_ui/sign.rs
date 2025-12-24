@@ -35,10 +35,10 @@ use messages::{
 };
 
 use chrono::{TimeZone, Utc};
-use include_gif::include_gif;
 use ledger_device_sdk::{
     ecc::ECPublicKey,
     hash::{blake2::Blake2b_512, HashInit},
+    include_gif,
     nbgl::{
         Field, NbglGlyph, NbglReview, NbglStreamingReview, NbglStreamingReviewStatus,
         TransactionType,

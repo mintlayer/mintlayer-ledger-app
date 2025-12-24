@@ -1,20 +1,25 @@
-from typing import Tuple
 from struct import unpack
+from typing import Tuple
+
 import scalecodec  # type: ignore
 
-# remainder, data_len, data
-def pop_sized_buf_from_buffer(buffer:bytes, size:int) -> Tuple[bytes, bytes]:
-    return buffer[size:], buffer[0:size]
 
 # remainder, data_len, data
-def pop_size_prefixed_buf_from_buf(buffer:bytes) -> Tuple[bytes, int, bytes]:
+def pop_sized_buf_from_buffer(buffer: bytes, size: int) -> Tuple[bytes, bytes]:
+    return buffer[size:], buffer[0:size]
+
+
+# remainder, data_len, data
+def pop_size_prefixed_buf_from_buf(buffer: bytes) -> Tuple[bytes, int, bytes]:
     data_len = buffer[0]
-    return buffer[1+data_len:], data_len, buffer[1:data_len+1]
+    return buffer[1 + data_len :], data_len, buffer[1 : data_len + 1]
+
 
 # Unpack from response:
 # response = app_name (var)
 def unpack_get_app_name_response(response: bytes) -> str:
     return response.decode("ascii")
+
 
 # Unpack from response:
 # response = MAJOR (1)
@@ -24,6 +29,7 @@ def unpack_get_version_response(response: bytes) -> Tuple[int, int, int]:
     assert len(response) == 3
     major, minor, patch = unpack("BBB", response)
     return (major, minor, patch)
+
 
 # Unpack from response:
 # response = format_id (1)
@@ -43,6 +49,7 @@ def unpack_get_app_and_version_response(response: bytes) -> Tuple[str, str]:
 
     return app_name_raw.decode("ascii"), version_raw.decode("ascii")
 
+
 # Unpack from response:
 # response = pub_key_len (1)
 #            pub_key (var)
@@ -50,14 +57,16 @@ def unpack_get_app_and_version_response(response: bytes) -> Tuple[str, str]:
 #            chain_code (var)
 def unpack_get_public_key_response(response: bytes) -> Tuple[int, bytes, int, bytes]:
     response_bytes = scalecodec.base.ScaleBytes(response)
-    msg_signature_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("GetPublicKeyRespones", data=response_bytes)
+    msg_signature_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
+        "GetPublicKeyRespones", data=response_bytes
+    )
     sig = msg_signature_obj.decode()
 
     print(sig)
 
-    pub_key = bytes.fromhex(sig['public_key'][2:])
+    pub_key = bytes.fromhex(sig["public_key"][2:])
     pub_key_len = len(pub_key)
-    chain_code = bytes.fromhex(sig['chain_code'][2:])
+    chain_code = bytes.fromhex(sig["chain_code"][2:])
     chain_code_len = len(chain_code)
 
     print(pub_key_len, pub_key)
@@ -66,6 +75,7 @@ def unpack_get_public_key_response(response: bytes) -> Tuple[int, bytes, int, by
     assert pub_key_len == 65
     assert chain_code_len == 32
     return pub_key_len, pub_key, chain_code_len, chain_code
+
 
 # Unpack from response:
 # response = sig_len (1)
@@ -77,6 +87,7 @@ def unpack_sign_message_response(response: bytes) -> Tuple[int, bytes]:
     assert len(response) == 0
     return sig_len, sig
 
+
 # Unpack from response:
 # response = der_sig_len (1)
 #            der_sig (var)
@@ -87,4 +98,4 @@ def unpack_sign_tx_response(response: bytes) -> Tuple[int, bytes, int]:
 
     assert len(response) == 0
 
-    return der_sig_len, der_sig, int.from_bytes(v, byteorder='big')
+    return der_sig_len, der_sig, int.from_bytes(v, byteorder="big")

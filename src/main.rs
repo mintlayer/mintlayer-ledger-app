@@ -50,8 +50,7 @@ use handlers::{
     sign_tx::{setup_sign_tx, Review, TxContext},
 };
 use messages::{
-    decode_all, Ins, P1SignTx, PubKeyP1, WrongP1P2, APDU_CLASS, MAX_ADPU_DATA_LEN, P1_SIGN_START,
-    P2_DONE, P2_MORE,
+    decode_all, Ins, PubKeyP1, SignP1, WrongP1P2, APDU_CLASS, MAX_ADPU_DATA_LEN, P2_DONE, P2_MORE,
 };
 
 use crate::handlers::sign_tx::handle_sign_tx;
@@ -233,9 +232,9 @@ impl ApduTransport {
 }
 
 pub enum Command {
-    GetPubkey { display: bool, data: Vec<u8> },
-    SignTx { p1: P1SignTx, data: Vec<u8> },
-    SignMessage { p1: u8, data: Vec<u8> },
+    GetPubkey { p1: PubKeyP1, data: Vec<u8> },
+    SignTx { p1: SignP1, data: Vec<u8> },
+    SignMessage { p1: SignP1, data: Vec<u8> },
 }
 
 impl TryFrom<RawInstruction> for Command {
@@ -245,17 +244,14 @@ impl TryFrom<RawInstruction> for Command {
         match raw.ins {
             Ins::PUB_KEY => {
                 let p1: PubKeyP1 = raw.p1.try_into()?;
-                Ok(Command::GetPubkey {
-                    display: p1.display(),
-                    data: raw.data,
-                })
+                Ok(Command::GetPubkey { p1, data: raw.data })
             }
             Ins::SIGN_TX => {
-                let p1: P1SignTx = raw.p1.try_into()?;
+                let p1: SignP1 = raw.p1.try_into()?;
                 Ok(Command::SignTx { p1, data: raw.data })
             }
             Ins::SIGN_MSG => {
-                let p1 = raw.p1;
+                let p1: SignP1 = raw.p1.try_into()?;
                 Ok(Command::SignMessage { p1, data: raw.data })
             }
             _ => Err(StatusWord::InsNotSupported),
@@ -265,7 +261,7 @@ impl TryFrom<RawInstruction> for Command {
 
 fn show_status_and_home_if_needed(cmd: &Command, ctx: &mut Context, status: &StatusWord) {
     let (show_status, status_type) = match (cmd, status) {
-        (Command::GetPubkey { display: true, .. }, StatusWord::Deny | StatusWord::Ok) => {
+        (Command::GetPubkey { p1, .. }, StatusWord::Deny | StatusWord::Ok) if p1.display() => {
             (true, StatusType::Address)
         }
         (Command::SignTx { .. }, StatusWord::Deny | StatusWord::Ok) if ctx.finished() => {
@@ -364,15 +360,16 @@ extern "C" fn sample_main() {
 
 fn handle_command(comm: &mut Comm, cmd: &Command, ctx: &mut Context) -> Result<(), StatusWord> {
     match cmd {
-        Command::GetPubkey { display, data } => {
+        Command::GetPubkey { p1, data } => {
             let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
-            handle_get_public_key(comm, req, *display)
+            handle_get_public_key(comm, req, p1.display())
         }
-        Command::SignTx { p1, data } => {
-            if *p1 == P1SignTx::Metadata {
+        Command::SignTx { p1, data } => match p1 {
+            SignP1::Start => {
                 let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
                 setup_sign_tx(req, &mut ctx.data)
-            } else {
+            }
+            SignP1::Next => {
                 let (tx_ctx, review) = match &mut ctx.data {
                     DataContext::TxContext(c, r) => (c, r),
                     _ => return Err(StatusWord::WrongContext),
@@ -383,14 +380,13 @@ fn handle_command(comm: &mut Comm, cmd: &Command, ctx: &mut Context) -> Result<(
                 let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
                 handle_sign_tx(comm, req, tx_ctx, review)
             }
-        }
-        Command::SignMessage { p1, data } => {
-            if *p1 == P1_SIGN_START {
+        },
+        Command::SignMessage { p1, data } => match p1 {
+            SignP1::Start => {
                 let req = decode_all(&data).ok_or(StatusWord::DeserializeFail)?;
                 setup_sign_message(req, &mut ctx.data)
-            } else {
-                handle_sign_message(comm, false, &mut ctx.data)
             }
-        }
+            SignP1::Next => handle_sign_message(comm, false, &mut ctx.data),
+        },
     }
 }
