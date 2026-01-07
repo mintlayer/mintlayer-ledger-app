@@ -30,6 +30,6 @@ pub fn bech32m_encode(hrp: &str, data: &[u8]) -> Result<String, StatusWord> {
 }
 
 pub fn to_address(destination: &Destination, coin: PCoinType) -> Result<String, StatusWord> {
-    let hrp = coin.address_prefix(destination);
+    let hrp = coin.address_prefix(destination.into());
     bech32m_encode(hrp, &encode(destination))
 }

@@ -4,11 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-# Fixed in: https://github.com/paritytech/parity-scale-codec/pull/751
-# Should be included in versions after 3.7.5
+# Use the specific commit "5021525697edc0661591ebc71392c48d950a10b0",
+# which includes a fix for NanoX devices that do not support certain
+# atomic operations.
+#
+# Fix reference: https://github.com/paritytech/parity-scale-codec/pull/751
+# This fix should be included in releases after version 3.7.5.
 parity-scale-codec = { git = "https://github.com/paritytech/parity-scale-codec.git", rev = "5021525697edc0661591ebc71392c48d950a10b0", default-features = false, features = [
   "derive",
   "chain-error",
 ] }
-mintlayer-core-primitives = { git = "https://github.com/mintlayer/mintlayer-core-primitives", branch = "feature/ledger-coin-type" }
+mintlayer-core-primitives = { git = "https://github.com/mintlayer/mintlayer-core-primitives", rev = "13b10dbc88efdf3b5aa31ece8e34278bc69a5a9b", package = "mintlayer-core-primitives" }
 num_enum = { version = "0.7.5", default-features = false }

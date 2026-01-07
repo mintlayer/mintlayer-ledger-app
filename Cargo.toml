@@ -5,13 +5,13 @@ edition = "2021"
 
 [dependencies]
 messages = { path = "./messages" }
-ledger_device_sdk = "1.29.1"
-ledger_secure_sdk_sys = "1.12.1"
+ledger_device_sdk = "1.30.0"
+ledger_secure_sdk_sys = "1.13.0"
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 bech32 = { version = "0.11", default-features = false, features = ["alloc"] }
 chrono = { version = "0.4", default-features = false, features = ["alloc"] }
 
-mintlayer-core-primitives = { git = "https://github.com/mintlayer/mintlayer-core-primitives", branch = "feature/ledger-coin-type" }
+mintlayer-core-primitives = { git = "https://github.com/mintlayer/mintlayer-core-primitives", rev = "13b10dbc88efdf3b5aa31ece8e34278bc69a5a9b", package = "mintlayer-core-primitives" }
 
 [build-dependencies]
 image = "0.25.8"
