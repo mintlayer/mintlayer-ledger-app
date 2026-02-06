@@ -24,13 +24,13 @@ use crate::{
         streaming_review_show_output, ui_display_tx,
     },
     handlers::sign_message::schnorr_sign,
-    DataContext, StatusWord, P2_DONE, P2_MORE,
+    DataContext, StatusWord,
 };
 use messages::{
     encode, encode_as_compact, encode_to, AccountCommand, AccountSpending, AdditionalOrderInfo,
     AdditionalUtxoInfo, Amount, Encode, InputAddressPath, OrderAccountCommand, OutputValue,
-    PCoinType, SighashInputCommitment, SignTxReq, Signature, TxInputReq, TxInputWithAdditionalInfo,
-    TxMetadataReq, TxOutput, TxOutputReq, H256,
+    PCoinType, SighashInputCommitment, SignTxReq, Signature, SignatureResponse, TxInputReq,
+    TxInputWithAdditionalInfo, TxMetadataReq, TxOutput, TxOutputReq, H256,
 };
 
 use ledger_device_sdk::{
@@ -103,12 +103,12 @@ fn merge_tx_type(tx_type: Option<TxType>, new_type: TxType) -> Option<TxType> {
 
 pub struct InputCompressed {
     pub path: [u32; COMPRESSED_DERIVATION_PATH_LEN],
-    pub input_idx: usize,
+    pub input_idx: u32,
     pub multisig_idx: Option<u32>,
 }
 
 impl InputCompressed {
-    fn new(addr: InputAddressPath, input_idx: usize, coin: PCoinType) -> Result<Self, StatusWord> {
+    fn new(addr: InputAddressPath, input_idx: u32, coin: PCoinType) -> Result<Self, StatusWord> {
         let path = addr.path.as_ref();
         if path.len() != DERIVATION_PATH_LEN {
             return Err(StatusWord::TxInvalidInputPath);
@@ -134,18 +134,18 @@ impl InputCompressed {
 
 #[derive(PartialEq, Eq)]
 enum TxParsingState {
-    Input(usize),
+    Input(u32),
     InputCommitment {
-        inp_idx: usize,
+        inp_idx: u32,
         input_commitments_hash: [u8; 64],
     },
-    Output(usize),
+    Output(u32),
     CompleteNotApproved {
-        inp_idx: usize,
+        inp_idx: u32,
         sighash: [u8; 32],
     },
     ApprovedNotFinishedSigning {
-        inp_idx: usize,
+        inp_idx: u32,
         sighash: [u8; 32],
     },
     Finished,
@@ -153,8 +153,8 @@ enum TxParsingState {
 
 #[derive(PartialEq, Eq)]
 pub enum NextTxOutputParsingState {
-    Output(usize),
-    CompleteNotApproved { inp_idx: usize, sighash: [u8; 32] },
+    Output(u32),
+    CompleteNotApproved { inp_idx: u32, sighash: [u8; 32] },
 }
 
 pub struct TxContext {
@@ -187,17 +187,17 @@ pub enum SigningState<'a> {
     StreamingReviewApprove {
         review: &'a NbglStreamingReview,
         output: TxOutput,
-        inp_idx: usize,
+        inp_idx: u32,
         sighash: [u8; 32],
     },
     TxParsingNotComplete,
     CompleteNotApproved {
-        inp_idx: usize,
+        inp_idx: u32,
         sighash: [u8; 32],
         outputs: &'a [TxOutput],
     },
     ApprovedNotFinishedSigning {
-        inp_idx: usize,
+        inp_idx: u32,
         sighash: [u8; 32],
     },
 }
@@ -286,9 +286,9 @@ impl TxContext {
 
     fn advance_next_input_step<'a>(
         &mut self,
-        current_input_step: usize,
+        current_input_step: u32,
     ) -> Result<SigningState<'a>, StatusWord> {
-        let finished_with_inputs = current_input_step >= (self.num_inputs - 1) as usize;
+        let finished_with_inputs = current_input_step >= (self.num_inputs - 1);
 
         self.state = if finished_with_inputs {
             // Update hash for input commitments and proceed with outputs
@@ -316,11 +316,11 @@ impl TxContext {
 
     fn advance_next_input_additional_info_step<'a>(
         &mut self,
-        current_input_step: usize,
+        current_input_step: u32,
         expected_input_commitments_hash: [u8; 64],
         review: &'a Review,
     ) -> Result<SigningState<'a>, StatusWord> {
-        let finished_with_inputs = current_input_step >= (self.num_inputs - 1) as usize;
+        let finished_with_inputs = current_input_step >= (self.num_inputs - 1);
 
         let signing_state = if finished_with_inputs {
             // Make sure the hashes match before continuing with the outputs
@@ -353,9 +353,9 @@ impl TxContext {
     // After processing an output advance the internal state
     fn advance_next_output_state(
         &mut self,
-        n: usize,
+        n: u32,
     ) -> Result<NextTxOutputParsingState, StatusWord> {
-        let next_state = if n < (self.num_outputs - 1) as usize {
+        let next_state = if n < (self.num_outputs - 1) {
             NextTxOutputParsingState::Output(n + 1)
         } else {
             let inp_idx = 0;
@@ -390,8 +390,8 @@ impl TxContext {
     }
 
     // After processing a signature advance the internal state
-    fn advance_next_signing_step(&mut self, inp_idx: usize, sighash: &[u8; 32]) {
-        self.state = if (inp_idx + 1) < self.inputs.len() {
+    fn advance_next_signing_step(&mut self, inp_idx: u32, sighash: &[u8; 32]) {
+        self.state = if ((inp_idx + 1) as usize) < self.inputs.len() {
             TxParsingState::ApprovedNotFinishedSigning {
                 inp_idx: inp_idx + 1,
                 sighash: *sighash,
@@ -447,7 +447,7 @@ pub fn setup_sign_tx(req: TxMetadataReq, ctx: &mut DataContext) -> Result<(), St
 
 fn handle_input_commitment_req<'a>(
     req: SighashInputCommitment,
-    input_step: usize,
+    input_step: u32,
     input_commitments_hash: [u8; 64],
     ctx: &mut TxContext,
     review: &'a mut Review,
@@ -459,7 +459,7 @@ fn handle_input_commitment_req<'a>(
 
 fn handle_input_req<'a>(
     req: TxInputReq,
-    input_step: usize,
+    input_step: u32,
     ctx: &mut TxContext,
 ) -> Result<SigningState<'a>, StatusWord> {
     let addresses = req
@@ -485,7 +485,7 @@ fn handle_input_req<'a>(
 
 fn handle_output_req<'a>(
     req: TxOutputReq,
-    output_step: usize,
+    output_step: u32,
     ctx: &mut TxContext,
     review: &'a mut Review,
 ) -> Result<SigningState<'a>, StatusWord> {
@@ -852,13 +852,16 @@ fn increase_output_totals(
 fn compute_signature_and_append(
     comm: &mut Comm,
     ctx: &mut TxContext,
-    inp_idx: usize,
+    inp_idx: u32,
     sighash: &[u8; 32],
 ) -> Result<(), StatusWord> {
     let hash_algorithm_id = CX_SHA256;
     let signing_mode = CX_ECSCHNORR_BIP0340 | CX_RND_PROVIDED | CX_LAST;
 
-    let address = ctx.inputs.get(inp_idx).ok_or(StatusWord::WrongContext)?;
+    let address = ctx
+        .inputs
+        .get(inp_idx as usize)
+        .ok_or(StatusWord::WrongContext)?;
 
     let [p1, p2, p3] = address.path;
     let addr = [BIP44, ctx.coin.bip44_coin_type(), p1, p2, p3];
@@ -870,17 +873,15 @@ fn compute_signature_and_append(
         signature: sig,
         multisig_idx: address.multisig_idx,
     };
-    let input_idx = address.input_idx as u8;
+    let input_idx = address.input_idx;
 
     ctx.advance_next_signing_step(inp_idx, sighash);
-
-    comm.append(&[input_idx]);
-    comm.append(&encode(sig));
-    if ctx.state == TxParsingState::Finished {
-        comm.append(&[P2_DONE])
-    } else {
-        comm.append(&[P2_MORE])
-    }
+    let response = SignatureResponse {
+        signature: sig,
+        input_idx,
+        has_next: ctx.state != TxParsingState::Finished,
+    };
+    comm.append(&encode(response));
 
     Ok(())
 }

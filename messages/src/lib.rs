@@ -22,6 +22,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
+use derive_more::Display;
 pub use mintlayer_core_primitives::{
     AccountCommand, AccountNonce, AccountOutPoint, AccountSpending, Amount, CoinType as PCoinType,
     Destination, H256, HashedTimelockContract, HtlcSecretHash, Id, IsTokenFreezable,
@@ -43,7 +44,7 @@ pub const P2_DONE: u8 = 0x00;
 pub const P2_MORE: u8 = 0x80;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
-#[num_enum(error_type(name = WrongP1P2, constructor = wrong_p1p2))]
+#[num_enum(error_type(name = StatusWord, constructor = wrong_p1p2))]
 #[repr(u8)]
 pub enum PubKeyP1 {
     NoDisplayAddress = 0,
@@ -64,13 +65,12 @@ impl Ins {
     pub const SIGN_MSG: u8 = 0x02;
 }
 
-pub struct WrongP1P2;
-fn wrong_p1p2(_: u8) -> WrongP1P2 {
-    WrongP1P2
+fn wrong_p1p2(_: u8) -> StatusWord {
+    StatusWord::WrongP1P2
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
-#[num_enum(error_type(name = WrongP1P2, constructor = wrong_p1p2))]
+#[num_enum(error_type(name = StatusWord, constructor = wrong_p1p2))]
 #[repr(u8)]
 pub enum SignP1 {
     Start = 0,
@@ -271,6 +271,13 @@ pub struct Signature {
 }
 
 #[derive(Encode, Decode)]
+pub struct SignatureResponse {
+    pub signature: Signature,
+    pub input_idx: u32,
+    pub has_next: bool,
+}
+
+#[derive(Encode, Decode)]
 pub struct MsgSignature {
     pub signature: [u8; 64],
 }
@@ -363,4 +370,107 @@ impl<'a> Apdu<'a> {
         collection.extend(core::iter::once(self.command_data.len() as u8));
         collection.extend(self.command_data.iter().copied());
     }
+}
+
+/// Application status words.
+#[repr(u16)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Display, IntoPrimitive, TryFromPrimitive)]
+pub enum StatusWord {
+    // Standard Ledger APDU Codes
+    #[display("Success")]
+    Ok = 0x9000,
+    #[display("User cancelled")]
+    Deny = 0x6985,
+    #[display("CLA not supported")]
+    ClaNotSupported = 0x6E00,
+    #[display("Wrong P1/P2 parameters")]
+    WrongP1P2 = 0x6B00,
+    #[display("Instruction not supported")]
+    InsNotSupported = 0x6D00,
+    #[display("Wrong APDU length")]
+    WrongApduLength = 0x6700,
+
+    // App Specific Errors (0xB...)
+    #[display("Transaction display failed")]
+    TxDisplayFail = 0xB000,
+    #[display("Address display failed")]
+    AddrDisplayFail = 0xB001,
+    #[display("Transaction wrong length")]
+    TxWrongLength = 0xB002,
+    #[display("Transaction parsing failed")]
+    TxParsingFail = 0xB003,
+    #[display("Transaction hashing failed")]
+    TxHashFail = 0xB004,
+    #[display("Transaction address failed")]
+    TxAddressFail = 0xB005,
+    #[display("Transaction signing failed")]
+    TxSignFail = 0xB006,
+    #[display("Key derivation failed")]
+    KeyDeriveFail = 0xB007,
+    #[display("Version parsing failed")]
+    VersionParsingFail = 0xB008,
+    #[display("Wrong context")]
+    WrongContext = 0xB009,
+    #[display("Deserialization failed")]
+    DeserializeFail = 0xB00A,
+    #[display("Invalid input UTXO")]
+    TxInvalidInputUtxo = 0xB00B,
+    #[display("Numeric operation failed")]
+    TxNumericOperationFail = 0xB00C,
+    #[display("Unsupported input")]
+    TxUnsupportedInput = 0xB00D,
+    #[display("Invalid Token V0")]
+    TxInvalidTokenV0 = 0xB00E,
+    #[display("Invalid input path")]
+    TxInvalidInputPath = 0xB00F,
+    #[display("Nothing to sign")]
+    NothingToSign = 0xB010,
+    #[display("Transaction already finished")]
+    TxAlreadyFinished = 0xB011,
+    #[display("Invalid path")]
+    InvalidPath = 0xB012,
+    #[display("Invalid uncompressed public key")]
+    InvalidUncompressedPublicKey = 0xB013,
+    #[display("Max buffer length exceeded")]
+    MaxBufferLenExceeded = 0xB014,
+    #[display("Different input commitment hash")]
+    DifferentInputCommitmentHash = 0xB015,
+    #[display("Orders V0 not supported")]
+    OrdersV0NotSupported = 0xB016,
+
+    // Ecc Errors
+    #[display("ECC Carry")]
+    EccCarry = 0xB100,
+    #[display("ECC Locked")]
+    EccLocked = 0xB101,
+    #[display("ECC Unlocked")]
+    EccUnlocked = 0xB102,
+    #[display("ECC Not Locked")]
+    EccNotLocked = 0xB103,
+    #[display("ECC Not Unlocked")]
+    EccNotUnlocked = 0xB104,
+    #[display("ECC Internal Error")]
+    EccInternalError = 0xB105,
+    #[display("ECC Invalid Parameter Size")]
+    EccInvalidParameterSize = 0xB106,
+    #[display("ECC Invalid Parameter Value")]
+    EccInvalidParameterValue = 0xB107,
+    #[display("ECC Invalid Parameter")]
+    EccInvalidParameter = 0xB108,
+    #[display("ECC Not Invertible")]
+    EccNotInvertible = 0xB109,
+    #[display("ECC Overflow")]
+    EccOverflow = 0xB10A,
+    #[display("ECC Memory Full")]
+    EccMemoryFull = 0xB10B,
+    #[display("ECC No Residue")]
+    EccNoResidue = 0xB10C,
+    #[display("ECC Point At Infinity")]
+    EccPointAtInfinity = 0xB10D,
+    #[display("ECC Invalid Point")]
+    EccInvalidPoint = 0xB10E,
+    #[display("ECC Invalid Curve")]
+    EccInvalidCurve = 0xB10F,
+    #[display("ECC Generic Error")]
+    EccGenericError = 0xB110,
 }

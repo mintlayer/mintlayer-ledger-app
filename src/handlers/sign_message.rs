@@ -15,13 +15,12 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use crate::app_ui::sign::ui_display_message;
-use crate::{DataContext, StatusWord};
+use crate::{app_ui::sign::ui_display_message, errors::cx_err_to_status, DataContext, StatusWord};
 use messages::{encode, AddrType, Bip32Path, MsgSignature, PCoinType, SignMessageReq};
 
 use alloc::vec::Vec;
 use ledger_device_sdk::{
-    ecc::{CxError, ECPrivateKey, Secp256k1, SeedDerive},
+    ecc::{ECPrivateKey, Secp256k1, SeedDerive},
     hash::{blake2::Blake2b_512, HashInit},
     io::Comm,
 };
@@ -152,7 +151,7 @@ pub fn schnorr_sign<const N: usize>(
     msg: &[u8],
     hash_id: u8,
     mode: u32,
-) -> Result<[u8; 64], CxError> {
+) -> Result<[u8; 64], StatusWord> {
     let mut sig = [0u8; 64];
     let mut sig_len = 64;
 
@@ -170,7 +169,7 @@ pub fn schnorr_sign<const N: usize>(
     };
 
     if err_code != CX_OK {
-        Err(err_code.into())
+        Err(cx_err_to_status(err_code.into()))
     } else {
         Ok(sig)
     }

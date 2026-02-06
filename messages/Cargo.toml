@@ -16,3 +16,6 @@ parity-scale-codec = { git = "https://github.com/paritytech/parity-scale-codec.g
 ] }
 mintlayer-core-primitives = { git = "https://github.com/mintlayer/mintlayer-core-primitives", rev = "13b10dbc88efdf3b5aa31ece8e34278bc69a5a9b", package = "mintlayer-core-primitives" }
 num_enum = { version = "0.7.5", default-features = false }
+derive_more = { version = "2.1.1", default-features = false, features = [
+  "display",
+] }

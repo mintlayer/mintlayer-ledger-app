@@ -31,6 +31,7 @@ mod handlers {
     pub mod sign_tx;
 }
 
+mod errors;
 mod settings;
 
 // Required for using String, Vec, format!...
@@ -38,8 +39,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use ledger_device_sdk::{
-    ecc::CxError,
-    io::{ApduHeader, Comm, Reply, StatusWords},
+    io::{ApduHeader, Comm, Reply},
     nbgl::{init_comm, NbglHomeAndSettings, NbglReviewStatus, StatusType},
 };
 
@@ -50,7 +50,7 @@ use handlers::{
     sign_tx::{setup_sign_tx, Review, TxContext},
 };
 use messages::{
-    decode_all, Ins, PubKeyP1, SignP1, WrongP1P2, APDU_CLASS, MAX_ADPU_DATA_LEN, P2_DONE, P2_MORE,
+    decode_all, Ins, PubKeyP1, SignP1, StatusWord, APDU_CLASS, MAX_ADPU_DATA_LEN, P2_DONE, P2_MORE,
 };
 
 use crate::handlers::sign_tx::handle_sign_tx;
@@ -58,97 +58,6 @@ use crate::handlers::sign_tx::handle_sign_tx;
 ledger_device_sdk::set_panic!(ledger_device_sdk::exiting_panic);
 
 pub const MAX_BUFFER_LEN: usize = 4 * MAX_ADPU_DATA_LEN;
-
-impl From<WrongP1P2> for StatusWord {
-    fn from(_: WrongP1P2) -> Self {
-        Self::WrongP1P2
-    }
-}
-
-// Application status words.
-#[repr(u16)]
-#[derive(Clone, Copy, PartialEq)]
-pub enum StatusWord {
-    Ok = StatusWords::Ok as u16,
-    Deny = StatusWords::UserCancelled as u16,
-    ClaNotSupported = StatusWords::BadCla as u16,
-    WrongP1P2 = StatusWords::BadP1P2 as u16,
-    InsNotSupported = StatusWords::BadIns as u16,
-    WrongApduLength = StatusWords::BadLen as u16,
-
-    TxDisplayFail = 0xB000,
-    AddrDisplayFail = 0xB001,
-    TxWrongLength = 0xB002,
-    TxParsingFail = 0xB003,
-    TxHashFail = 0xB004,
-    TxAddressFail = 0xB005,
-    TxSignFail = 0xB006,
-    KeyDeriveFail = 0xB007,
-    VersionParsingFail = 0xB008,
-    WrongContext = 0xB009,
-    DeserializeFail = 0xB00A,
-    TxInvalidInputUtxo = 0xB00B,
-    TxNumericOperationFail = 0xB00C,
-    TxUnsupportedInput = 0xB00D,
-    TxInvalidTokenV0 = 0xB00E,
-    TxInvalidInputPath = 0xB00F,
-    NothingToSign = 0xB010,
-    TxAlreadyFinished = 0xB011,
-    InvalidPath = 0xB012,
-    InvalidUncompressedPublicKey = 0xB013,
-    MaxBufferLenExceeded = 0xB014,
-    DifferentInputCommitmentHash = 0xB015,
-    OrdersV0NotSupported = 0xB016,
-
-    // The following errors come from ecc::CxError
-    EccCarry = 0xB100,
-    EccLocked = 0xB101,
-    EccUnlocked = 0xB102,
-    EccNotLocked = 0xB103,
-    EccNotUnlocked = 0xB104,
-    EccInternalError = 0xB105,
-    EccInvalidParameterSize = 0xB106,
-    EccInvalidParameterValue = 0xB107,
-    EccInvalidParameter = 0xB108,
-    EccNotInvertible = 0xB109,
-    EccOverflow = 0xB10A,
-    EccMemoryFull = 0xB10B,
-    EccNoResidue = 0xB10C,
-    EccPointAtInfinity = 0xB10D,
-    EccInvalidPoint = 0xB10E,
-    EccInvalidCurve = 0xB10F,
-    EccGenericError = 0xB110,
-}
-
-impl From<CxError> for StatusWord {
-    fn from(value: CxError) -> Self {
-        match value {
-            CxError::Carry => Self::EccCarry,
-            CxError::Locked => Self::EccLocked,
-            CxError::Unlocked => Self::EccUnlocked,
-            CxError::NotLocked => Self::EccNotLocked,
-            CxError::NotUnlocked => Self::EccNotUnlocked,
-            CxError::InternalError => Self::EccInternalError,
-            CxError::InvalidParameterSize => Self::EccInvalidParameterSize,
-            CxError::InvalidParameterValue => Self::EccInvalidParameterValue,
-            CxError::InvalidParameter => Self::EccInvalidParameter,
-            CxError::NotInvertible => Self::EccNotInvertible,
-            CxError::Overflow => Self::EccOverflow,
-            CxError::MemoryFull => Self::EccMemoryFull,
-            CxError::NoResidue => Self::EccNoResidue,
-            CxError::PointAtInfinity => Self::EccPointAtInfinity,
-            CxError::InvalidPoint => Self::EccInvalidPoint,
-            CxError::InvalidCurve => Self::EccInvalidCurve,
-            CxError::GenericError => Self::EccGenericError,
-        }
-    }
-}
-
-impl From<StatusWord> for Reply {
-    fn from(sw: StatusWord) -> Reply {
-        Reply(sw as u16)
-    }
-}
 
 /// Represents a fully assembled Low-Level Instruction.
 /// Contains the aggregated data from one or more APDUs (if P2 indicated more data).
@@ -204,7 +113,7 @@ impl ApduTransport {
         match header.p2 {
             P2_MORE => {
                 // Signal host that we received the chunk and are waiting for more
-                comm.reply(StatusWord::Ok);
+                comm.reply(Reply(StatusWord::Ok as u16));
                 Ok(None)
             }
             P2_DONE => {
@@ -330,7 +239,7 @@ extern "C" fn sample_main() {
             Ok(Some(raw)) => raw,
             Ok(None) => continue, // Waiting for more chunks, loop around
             Err(sw) => {
-                comm.reply(sw);
+                comm.reply(Reply(sw as u16));
                 continue;
             }
         };
@@ -338,7 +247,7 @@ extern "C" fn sample_main() {
         let command = match Command::try_from(raw_instruction) {
             Ok(cmd) => cmd,
             Err(sw) => {
-                comm.reply(sw);
+                comm.reply(Reply(sw as u16));
                 continue;
             }
         };
@@ -349,7 +258,7 @@ extern "C" fn sample_main() {
                 StatusWord::Ok
             }
             Err(sw) => {
-                comm.reply(sw);
+                comm.reply(Reply(sw as u16));
                 sw
             }
         };
