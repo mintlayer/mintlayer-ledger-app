@@ -303,7 +303,7 @@ pub fn ui_display_message<const T: char>(
     let addr = to_address(&dest, coin_type)?;
 
     let message_str = match core::str::from_utf8(message) {
-        Ok(s) if s.is_ascii() => s.to_string(),
+        Ok(s) if s.bytes().all(|b| b >= 0x20 && b <= 0x7E) => s.to_string(),
         Ok(_) | Err(_) => format!("0x{}", hex::encode(message)),
     };
 
