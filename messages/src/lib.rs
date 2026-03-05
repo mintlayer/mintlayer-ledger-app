@@ -63,6 +63,7 @@ impl Ins {
     pub const PUB_KEY: u8 = 0x00;
     pub const SIGN_TX: u8 = 0x01;
     pub const SIGN_MSG: u8 = 0x02;
+    pub const PING: u8 = 0x03;
 }
 
 fn wrong_p1p2(_: u8) -> StatusWord {
@@ -75,6 +76,13 @@ fn wrong_p1p2(_: u8) -> StatusWord {
 pub enum SignP1 {
     Start = 0,
     Next = 1,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
+#[num_enum(error_type(name = StatusWord, constructor = wrong_p1p2))]
+#[repr(u8)]
+pub enum PingP1 {
+    Start = 0,
 }
 
 #[derive(Encode, Decode)]

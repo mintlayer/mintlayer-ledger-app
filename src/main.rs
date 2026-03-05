@@ -144,6 +144,7 @@ pub enum Command {
     GetPubkey { p1: PubKeyP1, data: Vec<u8> },
     SignTx { p1: SignP1, data: Vec<u8> },
     SignMessage { p1: SignP1, data: Vec<u8> },
+    Ping,
 }
 
 impl TryFrom<RawInstruction> for Command {
@@ -163,6 +164,9 @@ impl TryFrom<RawInstruction> for Command {
                 let p1: SignP1 = raw.p1.try_into()?;
                 Ok(Command::SignMessage { p1, data: raw.data })
             }
+            Ins::PING => {
+                Ok(Command::Ping)
+            }
             _ => Err(StatusWord::InsNotSupported),
         }
     }
@@ -178,6 +182,10 @@ fn show_status_and_home_if_needed(cmd: &Command, ctx: &mut Context, status: &Sta
         }
         (Command::SignMessage { .. }, StatusWord::Deny | StatusWord::Ok) if ctx.finished() => {
             (true, StatusType::Message)
+        }
+        (Command::Ping, StatusWord::Ok) => {
+            ctx.home.show_and_return();
+            return;
         }
         (_, _) => (false, StatusType::Transaction), // Default fallback
     };
@@ -297,5 +305,6 @@ fn handle_command(comm: &mut Comm, cmd: &Command, ctx: &mut Context) -> Result<(
             }
             SignP1::Next => handle_sign_message(comm, false, &mut ctx.data),
         },
+        Command::Ping => Ok(())
     }
 }
