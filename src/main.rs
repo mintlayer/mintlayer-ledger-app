@@ -164,9 +164,7 @@ impl TryFrom<RawInstruction> for Command {
                 let p1: SignP1 = raw.p1.try_into()?;
                 Ok(Command::SignMessage { p1, data: raw.data })
             }
-            Ins::PING => {
-                Ok(Command::Ping)
-            }
+            Ins::PING => Ok(Command::Ping),
             _ => Err(StatusWord::InsNotSupported),
         }
     }
@@ -305,6 +303,6 @@ fn handle_command(comm: &mut Comm, cmd: &Command, ctx: &mut Context) -> Result<(
             }
             SignP1::Next => handle_sign_message(comm, false, &mut ctx.data),
         },
-        Command::Ping => Ok(())
+        Command::Ping => Ok(()),
     }
 }
