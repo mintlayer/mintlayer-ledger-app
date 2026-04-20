@@ -14,8 +14,14 @@ parity-scale-codec = { git = "https://github.com/paritytech/parity-scale-codec.g
   "derive",
   "chain-error",
 ] }
-mintlayer-core-primitives = { git = "https://github.com/mintlayer/mintlayer-core-primitives", rev = "13b10dbc88efdf3b5aa31ece8e34278bc69a5a9b", package = "mintlayer-core-primitives" }
+
 num_enum = { version = "0.7.5", default-features = false }
 derive_more = { version = "2.1.1", default-features = false, features = [
   "display",
 ] }
+
+[dependencies.mintlayer-core-primitives]
+git = "https://github.com/mintlayer/mintlayer-core-primitives"
+# The commit "Merge pull request #4 from mintlayer/fix_typo".
+rev = "8644bfe06d932d687075939d2d175183ba1c369d"
+package = "mintlayer-core-primitives"
