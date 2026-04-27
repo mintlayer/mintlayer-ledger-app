@@ -16,12 +16,14 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use crate::{app_ui::utils::to_address, StatusWord};
+use crate::{
+    app_ui::utils::{load_glyph, to_address},
+    StatusWord,
+};
 use messages::{Destination, PCoinType, PublicKey, Secp256k1PublicKey};
 
 use ledger_device_sdk::{
     ecc::ECPublicKey,
-    include_gif,
     nbgl::{NbglAddressReview, NbglGlyph},
 };
 
@@ -59,20 +61,11 @@ pub fn ui_display_pk<const T: char>(
     let dest = Destination::PublicKey(PublicKey::Secp256k1Schnorr(Secp256k1PublicKey(pk)));
     let addr = to_address(&dest, coin_type)?;
 
-    // Load glyph from file with include_gif macro. Creates an NBGL compatible glyph.
-    #[cfg(target_os = "apex_p")]
-    const FERRIS: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_48x48.png", NBGL));
-    #[cfg(any(target_os = "stax", target_os = "flex"))]
-    const FERRIS: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_64x64.gif", NBGL));
-    #[cfg(any(target_os = "nanosplus", target_os = "nanox"))]
-    const FERRIS: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("icons/mintlayer_14x14.gif", NBGL));
+    const MINTLAYER: NbglGlyph = load_glyph();
 
     // Display the address confirmation screen.
     Ok(NbglAddressReview::new()
-        .glyph(&FERRIS)
+        .glyph(&MINTLAYER)
         .review_title("Verify ML address")
         .show(&addr))
 }

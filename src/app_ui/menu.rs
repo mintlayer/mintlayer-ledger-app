@@ -16,32 +16,19 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use ledger_device_sdk::{
-    include_gif,
-    io::Comm,
-    nbgl::{NbglGlyph, NbglHomeAndSettings},
-};
+use ledger_device_sdk::nbgl::{NbglGlyph, NbglHomeAndSettings};
 
-use crate::settings::Settings;
+use crate::{app_ui::utils::load_glyph, settings::Settings};
 
-pub fn ui_menu_main(_: &mut Comm) -> NbglHomeAndSettings {
-    // Load glyph from file with include_gif macro. Creates an NBGL compatible glyph.
-    #[cfg(target_os = "apex_p")]
-    const FERRIS: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_48x48.png", NBGL));
-    #[cfg(any(target_os = "stax", target_os = "flex"))]
-    const FERRIS: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_64x64.gif", NBGL));
-    #[cfg(any(target_os = "nanosplus", target_os = "nanox"))]
-    const FERRIS: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("icons/mintlayer_14x14.gif", NBGL));
+pub fn ui_menu_main() -> NbglHomeAndSettings {
+    const MINTLAYER: NbglGlyph = load_glyph();
 
     let settings_strings = [["Display Memo", "Allow display of transaction memo."]];
     let mut settings: Settings = Default::default();
 
     // Display the home screen.
     NbglHomeAndSettings::new()
-        .glyph(&FERRIS)
+        .glyph(&MINTLAYER)
         .settings(settings.get_mut(), &settings_strings)
         .infos(
             "Mintlayer",

@@ -27,19 +27,18 @@ use crate::{
     DataContext, StatusWord,
 };
 use messages::{
-    encode, encode_as_compact, encode_to, AccountCommand, AccountSpending, AdditionalOrderInfo,
-    AdditionalUtxoInfo, Amount, Encode, InputAddressPath, OrderAccountCommand, OutputValue,
-    PCoinType, SighashInputCommitment, SignTxReq, Signature, SignatureResponse, TxInputReq,
-    TxInputWithAdditionalInfo, TxMetadataReq, TxOutput, TxOutputReq, H256,
+    encode_as_compact, encode_to, AccountCommand, AccountSpending, AdditionalOrderInfo,
+    AdditionalUtxoInfo, Amount, CoinType, Encode, InputAddressPath, OrderAccountCommand,
+    OutputValue, PCoinType, Response, SighashInputCommitment, SignTxReq, Signature,
+    SignatureResponse, TxInputReq, TxInputWithAdditionalInfo, TxMetadataReq, TxMetadataV1Req,
+    TxMetadataVersionReq, TxOutput, TxOutputReq, H256,
 };
 
 use ledger_device_sdk::{
     ecc::{Secp256k1, SeedDerive},
     hash::{blake2::Blake2b_512, HashInit},
-    io::Comm,
     nbgl::{NbglSpinner, NbglStreamingReview},
 };
-use ledger_secure_sdk_sys::*;
 
 const BIP44: u32 = 44 + (1 << 31);
 
@@ -202,26 +201,23 @@ pub enum SigningState<'a> {
     },
 }
 
-// Implement constructor for TxInfo with default values
 impl TxContext {
-    // Constructor
-    pub fn new(
-        TxMetadataReq {
-            coin,
-            version,
+    pub fn from_v1(
+        coin: CoinType,
+        TxMetadataV1Req {
             num_inputs,
             num_outputs,
-        }: TxMetadataReq,
+        }: TxMetadataV1Req,
     ) -> Result<TxContext, StatusWord> {
+        const VERSION_1: u8 = 1;
         let mut tx_hasher = Blake2b_512::new();
-        let input_commitments_hasher = Blake2b_512::new();
         // mode
         tx_hasher
             .update(b"\x01")
             .map_err(|_| StatusWord::TxHashFail)?;
         // version
         tx_hasher
-            .update(&[version])
+            .update(&[VERSION_1])
             .map_err(|_| StatusWord::TxHashFail)?;
         // flags
         tx_hasher
@@ -235,7 +231,7 @@ impl TxContext {
             num_outputs,
             review_finished: false,
             tx_hasher,
-            input_commitments_hasher,
+            input_commitments_hasher: Blake2b_512::new(),
             state: TxParsingState::Input(0),
             tx_type: None,
 
@@ -431,11 +427,13 @@ impl TxContext {
 }
 
 pub fn setup_sign_tx(req: TxMetadataReq, ctx: &mut DataContext) -> Result<(), StatusWord> {
-    let mut tx_ctx = TxContext::new(req)?;
+    let mut tx_ctx = match req.version {
+        TxMetadataVersionReq::V1(v1_req) => TxContext::from_v1(req.coin, v1_req)?,
+    };
 
     tx_ctx.show_spinner();
 
-    // if has many outputs use a streaming review
+    // if the tx has many outputs use a streaming review
     if tx_ctx.num_outputs > 10 {
         *ctx = DataContext::TxContext(tx_ctx, Review::StreamingReview(new_streaming_review()));
     } else {
@@ -534,11 +532,10 @@ fn handle_output_req<'a>(
 }
 
 pub fn handle_sign_tx(
-    comm: &mut Comm,
     req: SignTxReq,
     ctx: &mut TxContext,
     review: &mut Review,
-) -> Result<(), StatusWord> {
+) -> Result<Response, StatusWord> {
     let signing_state = match (req, ctx.state()) {
         (SignTxReq::Input(req), TxParsingState::Input(n)) => handle_input_req(req, *n, ctx)?,
         (
@@ -572,10 +569,10 @@ pub fn handle_sign_tx(
     };
 
     match signing_state {
-        SigningState::TxParsingNotComplete => Ok(()),
+        SigningState::TxParsingNotComplete => Ok(Response::TxNext),
         SigningState::StreamingReviewStart(review) => {
             if start_streaming_review(review) {
-                Ok(())
+                Ok(Response::TxNext)
             } else {
                 ctx.review_finished = true;
                 Err(StatusWord::Deny)
@@ -583,7 +580,7 @@ pub fn handle_sign_tx(
         }
         SigningState::StreamingReviewOutput(review, output) => {
             if streaming_review_show_output(review, &output, ctx.coin)? {
-                Ok(())
+                Ok(Response::TxNext)
             } else {
                 ctx.review_finished = true;
                 Err(StatusWord::Deny)
@@ -596,13 +593,13 @@ pub fn handle_sign_tx(
             sighash,
         } => {
             if approve_streaming_review(review, &output, ctx)? {
-                compute_signature_and_append(comm, ctx, inp_idx, &sighash)?;
+                let response = compute_signature_and_append(ctx, inp_idx, &sighash)?;
                 if ctx.completed_all_signatures() {
                     ctx.review_finished = true;
                 } else {
                     ctx.show_spinner();
                 }
-                Ok(())
+                Ok(Response::TxSignature(response))
             } else {
                 ctx.review_finished = true;
                 Err(StatusWord::Deny)
@@ -616,14 +613,14 @@ pub fn handle_sign_tx(
             // Display transaction. If user approves the transaction, sign it.
             // Otherwise, return a "deny" status word.
             if ui_display_tx(ctx, outputs)? {
-                compute_signature_and_append(comm, ctx, inp_idx, &sighash)?;
+                let response = compute_signature_and_append(ctx, inp_idx, &sighash)?;
                 if ctx.completed_all_signatures() {
                     ctx.review_finished = true;
                 } else {
                     ctx.show_spinner();
                 }
 
-                Ok(())
+                Ok(Response::TxSignature(response))
             } else {
                 ctx.review_finished = true;
                 Err(StatusWord::Deny)
@@ -631,14 +628,14 @@ pub fn handle_sign_tx(
         }
         SigningState::ApprovedNotFinishedSigning { inp_idx, sighash } => {
             // Already approved sign and return the next signature
-            compute_signature_and_append(comm, ctx, inp_idx, &sighash)?;
+            let response = compute_signature_and_append(ctx, inp_idx, &sighash)?;
             if ctx.completed_all_signatures() {
                 ctx.review_finished = true;
             } else {
                 ctx.show_spinner();
             }
 
-            Ok(())
+            Ok(Response::TxSignature(response))
         }
     }
 }
@@ -850,14 +847,10 @@ fn increase_output_totals(
 }
 
 fn compute_signature_and_append(
-    comm: &mut Comm,
     ctx: &mut TxContext,
     inp_idx: u32,
     sighash: &[u8; 32],
-) -> Result<(), StatusWord> {
-    let hash_algorithm_id = CX_SHA256;
-    let signing_mode = CX_ECSCHNORR_BIP0340 | CX_RND_PROVIDED | CX_LAST;
-
+) -> Result<SignatureResponse, StatusWord> {
     let address = ctx
         .inputs
         .get(inp_idx as usize)
@@ -867,7 +860,7 @@ fn compute_signature_and_append(
     let addr = [BIP44, ctx.coin.bip44_coin_type(), p1, p2, p3];
 
     let private_key = Secp256k1::derive_from_path(&addr);
-    let sig = schnorr_sign(&private_key, sighash, hash_algorithm_id, signing_mode)?;
+    let sig = schnorr_sign(&private_key, sighash)?;
 
     let sig = Signature {
         signature: sig,
@@ -881,9 +874,8 @@ fn compute_signature_and_append(
         input_idx,
         has_next: ctx.state != TxParsingState::Finished,
     };
-    comm.append(&encode(response));
 
-    Ok(())
+    Ok(response)
 }
 
 fn update_hash<T: Encode>(

@@ -21,6 +21,7 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
+use core::iter::ExactSizeIterator;
 
 use derive_more::Display;
 pub use mintlayer_core_primitives::{
@@ -107,11 +108,20 @@ pub enum SignTxReq {
 }
 
 #[derive(Encode, Decode)]
-pub struct TxMetadataReq {
-    pub coin: CoinType,
-    pub version: u8,
+pub struct TxMetadataV1Req {
     pub num_inputs: u32,
     pub num_outputs: u32,
+}
+
+#[derive(Encode, Decode)]
+pub enum TxMetadataVersionReq {
+    V1(TxMetadataV1Req),
+}
+
+#[derive(Encode, Decode)]
+pub struct TxMetadataReq {
+    pub coin: CoinType,
+    pub version: TxMetadataVersionReq,
 }
 
 #[derive(Encode, Decode)]
@@ -252,22 +262,7 @@ pub struct InputAddressPath {
 }
 
 #[derive(Encode, Decode)]
-pub enum Prerelease {
-    Alpha,
-    Beta,
-}
-
-#[derive(Encode, Decode)]
-pub struct GetVersionRespones {
-    pub major: u8,
-    pub minor: u8,
-    pub patch: u8,
-    pub prerelease_id: Option<Prerelease>,
-    pub build_metadata: Vec<u8>,
-}
-
-#[derive(Encode, Decode)]
-pub struct GetPublicKeyRespones {
+pub struct GetPublicKeyResponse {
     pub public_key: [u8; 65],
     pub chain_code: [u8; 32],
 }
@@ -288,6 +283,26 @@ pub struct SignatureResponse {
 #[derive(Encode, Decode)]
 pub struct MsgSignature {
     pub signature: [u8; 64],
+}
+
+#[derive(Encode, Decode)]
+pub enum Response {
+    #[codec(index = 0)]
+    ExpectingNextChunk,
+    #[codec(index = 1)]
+    PublicKey(GetPublicKeyResponse),
+    #[codec(index = 2)]
+    TxSetup,
+    #[codec(index = 3)]
+    TxNext,
+    #[codec(index = 4)]
+    TxSignature(SignatureResponse),
+    #[codec(index = 5)]
+    MessageSetup,
+    #[codec(index = 6)]
+    MessageSignature(MsgSignature),
+    #[codec(index = 7)]
+    Pong,
 }
 
 pub fn encode<T: Encode>(t: T) -> Vec<u8> {
@@ -334,20 +349,21 @@ impl<'a> Apdu<'a> {
         })
     }
 
-    /// Creates a Vec of APDUs by chunking the data to MAX_ADPU_DATA_LEN
-    pub fn new_chunks(instruction_byte: u8, param1_byte: u8, data: &'a [u8]) -> Vec<Self> {
-        let mut adpus = Vec::new();
-        let mut chunks_iter = data.chunks(MAX_ADPU_DATA_LEN).peekable();
-        while let Some(chunk) = chunks_iter.next() {
-            let apdu = Self {
-                instruction_byte,
-                param1_byte,
-                command_data: chunk,
-                is_last_chunk: chunks_iter.peek().is_none(),
-            };
-            adpus.push(apdu);
-        }
-        adpus
+    /// Returns an ExactSizeIterator of APDUs by chunking the data to MAX_ADPU_DATA_LEN
+    pub fn new_chunks(
+        instruction_byte: u8,
+        param1_byte: u8,
+        data: &'a [u8],
+    ) -> impl ExactSizeIterator<Item = Self> {
+        let chunk_iter = data.chunks(MAX_ADPU_DATA_LEN);
+        let last_chunk_idx = chunk_iter.len() - 1;
+
+        chunk_iter.enumerate().map(move |(chunk_idx, chunk)| Self {
+            instruction_byte,
+            param1_byte,
+            command_data: chunk,
+            is_last_chunk: chunk_idx == last_chunk_idx,
+        })
     }
 
     pub fn is_last(&self) -> bool {

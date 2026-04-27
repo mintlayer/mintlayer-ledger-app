@@ -17,6 +17,8 @@
 
 use alloc::string::String;
 
+use ledger_device_sdk::{include_gif, nbgl::NbglGlyph};
+
 use crate::StatusWord;
 use messages::{encode, Destination, PCoinType};
 
@@ -32,4 +34,19 @@ pub fn bech32m_encode(hrp: &str, data: &[u8]) -> Result<String, StatusWord> {
 pub fn to_address(destination: &Destination, coin: PCoinType) -> Result<String, StatusWord> {
     let hrp = coin.address_prefix(destination.into());
     bech32m_encode(hrp, &encode(destination))
+}
+
+/// Load glyph from file with include_gif macro. Creates an NBGL compatible glyph.
+pub const fn load_glyph() -> NbglGlyph<'static> {
+    #[cfg(target_os = "apex_p")]
+    const MINTLAYER: NbglGlyph =
+        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_48x48.png", NBGL));
+    #[cfg(any(target_os = "stax", target_os = "flex"))]
+    const MINTLAYER: NbglGlyph =
+        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_64x64.gif", NBGL));
+    #[cfg(any(target_os = "nanosplus", target_os = "nanox"))]
+    const MINTLAYER: NbglGlyph =
+        NbglGlyph::from_include(include_gif!("icons/mintlayer_14x14.gif", NBGL));
+
+    MINTLAYER
 }

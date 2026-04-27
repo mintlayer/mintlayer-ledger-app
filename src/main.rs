@@ -50,7 +50,8 @@ use handlers::{
     sign_tx::{setup_sign_tx, Review, TxContext},
 };
 use messages::{
-    decode_all, Ins, PubKeyP1, SignP1, StatusWord, APDU_CLASS, MAX_ADPU_DATA_LEN, P2_DONE, P2_MORE,
+    decode_all, encode, Ins, PubKeyP1, Response, SignP1, StatusWord, APDU_CLASS, MAX_ADPU_DATA_LEN,
+    P2_DONE, P2_MORE,
 };
 
 use crate::handlers::sign_tx::handle_sign_tx;
@@ -65,6 +66,11 @@ pub struct RawInstruction {
     pub ins: u8,
     pub p1: u8,
     pub data: Vec<u8>,
+}
+
+pub enum ReceiveInstructionResult {
+    ExpectingNextChunk,
+    Instruction(RawInstruction),
 }
 
 /// State machine to handle APDU packet chaining (P2_MORE / P2_DONE).
@@ -88,7 +94,7 @@ impl ApduTransport {
     /// - If `P2 == P2_MORE`, it accumulates the data and returns `Ok(None)`.
     ///   It also sends a `StatusWord::Ok` to the host to request the next chunk.
     /// - If `P2 == P2_DONE`, it finishes accumulation and returns `Ok(Some(RawInstruction))`.
-    pub fn receive(&mut self, comm: &mut Comm) -> Result<Option<RawInstruction>, StatusWord> {
+    pub fn receive(&mut self, comm: &mut Comm) -> Result<ReceiveInstructionResult, StatusWord> {
         let header: ApduHeader = comm.next_command();
         let data = comm.get_data().map_err(|_| StatusWord::WrongApduLength)?;
 
@@ -111,11 +117,7 @@ impl ApduTransport {
         self.buffer.extend_from_slice(data);
 
         match header.p2 {
-            P2_MORE => {
-                // Signal host that we received the chunk and are waiting for more
-                comm.reply(Reply(StatusWord::Ok as u16));
-                Ok(None)
-            }
+            P2_MORE => Ok(ReceiveInstructionResult::ExpectingNextChunk),
             P2_DONE => {
                 // Construct the full instruction
                 let raw = RawInstruction {
@@ -124,7 +126,7 @@ impl ApduTransport {
                     data: core::mem::take(&mut self.buffer),
                 };
                 self.reset();
-                Ok(Some(raw))
+                Ok(ReceiveInstructionResult::Instruction(raw))
             }
             _ => {
                 self.reset();
@@ -235,15 +237,20 @@ extern "C" fn sample_main() {
 
     // Initialize reference to Comm instance for NBGL API calls.
     init_comm(&mut comm);
-    tx_ctx.home = ui_menu_main(&mut comm);
+    tx_ctx.home = ui_menu_main();
     tx_ctx.home.show_and_return();
 
     let mut transport = ApduTransport::new();
 
     loop {
         let raw_instruction = match transport.receive(&mut comm) {
-            Ok(Some(raw)) => raw,
-            Ok(None) => continue, // Waiting for more chunks, loop around
+            Ok(ReceiveInstructionResult::Instruction(raw)) => raw,
+            Ok(ReceiveInstructionResult::ExpectingNextChunk) => {
+                // Signal host that we received the chunk and are waiting for more
+                comm.append(&encode(Response::ExpectingNextChunk));
+                comm.reply(Reply(StatusWord::Ok as u16));
+                continue; // Waiting for more chunks, loop around
+            }
             Err(sw) => {
                 comm.reply(Reply(sw as u16));
                 continue;
@@ -258,8 +265,9 @@ extern "C" fn sample_main() {
             }
         };
 
-        let status = match handle_command(&mut comm, &command, &mut tx_ctx) {
-            Ok(()) => {
+        let status = match handle_command(&command, &mut tx_ctx) {
+            Ok(response) => {
+                comm.append(&encode(response));
                 comm.reply_ok();
                 StatusWord::Ok
             }
@@ -273,16 +281,17 @@ extern "C" fn sample_main() {
     }
 }
 
-fn handle_command(comm: &mut Comm, cmd: &Command, ctx: &mut Context) -> Result<(), StatusWord> {
+fn handle_command(cmd: &Command, ctx: &mut Context) -> Result<Response, StatusWord> {
     match cmd {
         Command::GetPubkey { p1, data } => {
             let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
-            handle_get_public_key(comm, req, p1.display())
+            handle_get_public_key(req, p1.display()).map(Response::PublicKey)
         }
         Command::SignTx { p1, data } => match p1 {
             SignP1::Start => {
                 let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
-                setup_sign_tx(req, &mut ctx.data)
+                setup_sign_tx(req, &mut ctx.data)?;
+                Ok(Response::TxSetup)
             }
             SignP1::Next => {
                 let (tx_ctx, review) = match &mut ctx.data {
@@ -293,16 +302,19 @@ fn handle_command(comm: &mut Comm, cmd: &Command, ctx: &mut Context) -> Result<(
                 tx_ctx.show_spinner();
 
                 let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
-                handle_sign_tx(comm, req, tx_ctx, review)
+                handle_sign_tx(req, tx_ctx, review)
             }
         },
         Command::SignMessage { p1, data } => match p1 {
             SignP1::Start => {
                 let req = decode_all(&data).ok_or(StatusWord::DeserializeFail)?;
-                setup_sign_message(req, &mut ctx.data)
+                setup_sign_message(req, &mut ctx.data)?;
+                Ok(Response::MessageSetup)
             }
-            SignP1::Next => handle_sign_message(comm, false, &mut ctx.data),
+            SignP1::Next => {
+                handle_sign_message(&data, &mut ctx.data).map(Response::MessageSignature)
+            }
         },
-        Command::Ping => Ok(()),
+        Command::Ping => Ok(Response::Pong),
     }
 }

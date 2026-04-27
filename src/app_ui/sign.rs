@@ -23,7 +23,7 @@ use core::fmt::Write;
 use crate::{
     app_ui::{
         address::compress_public_key,
-        utils::{bech32m_encode, to_address},
+        utils::{bech32m_encode, load_glyph, to_address},
     },
     handlers::sign_tx::{CoinOrTokenId, TxContext, TxType},
     StatusWord,
@@ -38,7 +38,6 @@ use chrono::{TimeZone, Utc};
 use ledger_device_sdk::{
     ecc::ECPublicKey,
     hash::{blake2::Blake2b_512, HashInit},
-    include_gif,
     nbgl::{
         Field, NbglGlyph, NbglReview, NbglStreamingReview, NbglStreamingReviewStatus,
         TransactionType,
@@ -46,19 +45,10 @@ use ledger_device_sdk::{
 };
 
 pub fn new_streaming_review() -> NbglStreamingReview {
-    // Load glyph from file with include_gif macro. Creates an NBGL compatible glyph.
-    #[cfg(target_os = "apex_p")]
-    const FERRIS: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_48x48.png", NBGL));
-    #[cfg(any(target_os = "stax", target_os = "flex"))]
-    const FERRIS: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_64x64.gif", NBGL));
-    #[cfg(any(target_os = "nanosplus", target_os = "nanox"))]
-    const FERRIS: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("icons/mintlayer_14x14.gif", NBGL));
+    const MINTLAYER: NbglGlyph = load_glyph();
 
     NbglStreamingReview::new()
-        .glyph(&FERRIS)
+        .glyph(&MINTLAYER)
         .tx_type(TransactionType::Transaction)
 }
 
@@ -205,16 +195,7 @@ pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, Stat
 
     // Create transaction review
 
-    // Load glyph from file with include_gif macro. Creates an NBGL compatible glyph.
-    #[cfg(target_os = "apex_p")]
-    const FERRIS: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_48x48.png", NBGL));
-    #[cfg(any(target_os = "stax", target_os = "flex"))]
-    const FERRIS: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_64x64.gif", NBGL));
-    #[cfg(any(target_os = "nanosplus", target_os = "nanox"))]
-    const FERRIS: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("icons/mintlayer_14x14.gif", NBGL));
+    const MINTLAYER: NbglGlyph = load_glyph();
 
     let title = transaction_title(ctx);
 
@@ -222,7 +203,7 @@ pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, Stat
     // with constant generic parameters of NbglReview. Default values are 32 and 1024 respectively.
     let review: NbglReview = NbglReview::new()
         .titles("Review transaction", "", title)
-        .glyph(&FERRIS);
+        .glyph(&MINTLAYER);
 
     Ok(review.show(&my_fields))
 }
@@ -318,16 +299,7 @@ pub fn ui_display_message<const T: char>(
         },
     ];
 
-    // Load glyph from file with include_gif macro. Creates an NBGL compatible glyph.
-    #[cfg(target_os = "apex_p")]
-    const FERRIS: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_48x48.png", NBGL));
-    #[cfg(any(target_os = "stax", target_os = "flex"))]
-    const FERRIS: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_64x64.gif", NBGL));
-    #[cfg(any(target_os = "nanosplus", target_os = "nanox"))]
-    const FERRIS: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("icons/mintlayer_14x14.gif", NBGL));
+    const MINTLAYER: NbglGlyph = load_glyph();
 
     // Create the NBGL review flow with titles appropriate for message signing.
     let review: NbglReview = NbglReview::new()
@@ -337,7 +309,7 @@ pub fn ui_display_message<const T: char>(
             "Sign message",     // Final confirmation prompt
         )
         .tx_type(TransactionType::Message)
-        .glyph(&FERRIS);
+        .glyph(&MINTLAYER);
 
     // Show the review screen with the defined fields and return the user's choice.
     Ok(review.show(&my_fields))

@@ -58,7 +58,7 @@ def unpack_get_app_and_version_response(response: bytes) -> Tuple[str, str]:
 def unpack_get_public_key_response(response: bytes) -> Tuple[int, bytes, int, bytes]:
     response_bytes = scalecodec.base.ScaleBytes(response)
     msg_signature_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
-        "GetPublicKeyRespones", data=response_bytes
+        "GetPublicKeyResponse", data=response_bytes
     )
     sig = msg_signature_obj.decode()
 

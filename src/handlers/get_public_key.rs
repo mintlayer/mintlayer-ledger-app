@@ -17,16 +17,14 @@
 
 use crate::app_ui::address::ui_display_pk;
 use crate::StatusWord;
-use messages::{encode, GetPublicKeyRespones, PCoinType, PublicKeyReq};
+use messages::{GetPublicKeyResponse, PCoinType, PublicKeyReq};
 
 use ledger_device_sdk::ecc::{Secp256k1, SeedDerive};
-use ledger_device_sdk::io::Comm;
 
 pub fn handle_get_public_key(
-    comm: &mut Comm,
     req: PublicKeyReq,
     display: bool,
-) -> Result<(), StatusWord> {
+) -> Result<GetPublicKeyResponse, StatusWord> {
     if req.path.as_ref().len() < 3 {
         return Err(StatusWord::InvalidPath);
     }
@@ -43,12 +41,10 @@ pub fn handle_get_public_key(
     if display && !ui_display_pk(&pk, req.coin_type.into())? {
         return Err(StatusWord::Deny);
     }
-    let response = GetPublicKeyRespones {
+    let response = GetPublicKeyResponse {
         public_key: pk.pubkey,
         chain_code: code.value,
     };
 
-    comm.append(&encode(response));
-
-    Ok(())
+    Ok(response)
 }

@@ -448,7 +448,7 @@ def init_mintlayer_types():
                     ["signature", "[u8; 64]"],
                 ],
             },
-            "GetPublicKeyRespones": {
+            "GetPublicKeyResponse": {
                 "type": "struct",
                 "type_mapping": [
                     ["public_key", "[u8; 65]"],
