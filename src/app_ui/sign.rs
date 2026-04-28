@@ -85,17 +85,10 @@ pub fn approve_streaming_review(
         return Ok(false);
     }
 
-    let fees = ctx.total_inputs().iter().try_fold(
+    let fees = ctx.summary().fees_iter().try_fold(
         String::new(),
-        |mut acc, (coin_or_token, amount)| -> Result<_, StatusWord> {
-            let out = *ctx
-                .total_outputs()
-                .get(coin_or_token)
-                .unwrap_or(&Amount::ZERO);
-            let fee: u128 = amount
-                .into_atoms()
-                .checked_sub(out.into_atoms())
-                .ok_or(StatusWord::TxNumericOperationFail)?;
+        |mut acc, res| -> Result<_, StatusWord> {
+            let (coin_or_token, fee) = res?;
 
             match coin_or_token {
                 CoinOrTokenId::Coin => writeln!(
@@ -105,6 +98,7 @@ pub fn approve_streaming_review(
                     ctx.coin().coin_ticker()
                 )
                 .map_err(|_| StatusWord::TxDisplayFail)?,
+
                 CoinOrTokenId::TokenId(token_id) => {
                     if fee != 0 {
                         writeln!(
@@ -131,7 +125,7 @@ pub fn approve_streaming_review(
         NbglStreamingReviewStatus::Next | NbglStreamingReviewStatus::Skipped => {}
     };
 
-    let title = transaction_title(ctx);
+    let title = transaction_title(&ctx.tx_type());
     Ok(review.finish(title))
 }
 
@@ -143,17 +137,10 @@ pub fn approve_streaming_review(
 ///
 /// * `ctx` - TxContext to be displayed for validation
 pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, StatusWord> {
-    let fees = ctx.total_inputs().iter().try_fold(
+    let fees = ctx.summary().fees_iter().try_fold(
         String::new(),
-        |mut acc, (coin_or_token, amount)| -> Result<_, StatusWord> {
-            let out = *ctx
-                .total_outputs()
-                .get(coin_or_token)
-                .unwrap_or(&Amount::ZERO);
-            let fee: u128 = amount
-                .into_atoms()
-                .checked_sub(out.into_atoms())
-                .ok_or(StatusWord::TxNumericOperationFail)?;
+        |mut acc, res| -> Result<_, StatusWord> {
+            let (coin_or_token, fee) = res?;
 
             match coin_or_token {
                 CoinOrTokenId::Coin => writeln!(
@@ -163,6 +150,7 @@ pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, Stat
                     ctx.coin().coin_ticker()
                 )
                 .map_err(|_| StatusWord::TxDisplayFail)?,
+
                 CoinOrTokenId::TokenId(token_id) => {
                     if fee != 0 {
                         writeln!(
@@ -198,7 +186,7 @@ pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, Stat
 
     const MINTLAYER: NbglGlyph = load_glyph();
 
-    let title = transaction_title(ctx);
+    let title = transaction_title(&ctx.tx_type());
 
     // Create NBGL review. Maximum number of fields and string buffer length can be customised
     // with constant generic parameters of NbglReview. Default values are 32 and 1024 respectively.
@@ -209,8 +197,8 @@ pub fn ui_display_tx(ctx: &TxContext, outputs: &[TxOutput]) -> Result<bool, Stat
     Ok(review.show(&my_fields))
 }
 
-fn transaction_title(tx: &TxContext) -> &'static str {
-    match tx.tx_type() {
+fn transaction_title(tx_type: &Option<TxType>) -> &'static str {
+    match tx_type {
         None | Some(TxType::ComplexTransaction) => "Sign transaction",
         Some(TxType::Transfer) => "Sign transfer transaction",
         Some(TxType::Burn) => "Sign burn transaction",

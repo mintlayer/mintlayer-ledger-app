@@ -29,11 +29,11 @@ use crate::{
 use messages::{
     encode_as_compact, encode_to,
     mlcp::{
-        AccountCommand, AccountSpending, Amount, CoinType as PCoinType, OrderAccountCommand,
-        OutputValue, SighashInputCommitment, TxOutput, H256,
+        Amount, CoinType as PCoinType,
+        SighashInputCommitment, TxOutput, H256,
     },
-    AdditionalOrderInfo, AdditionalUtxoInfo, CoinType, Encode, InputAddressPath, Response,
-    SignTxReq, Signature, TxInputReq, TxInputSignatureResponse, TxInputWithAdditionalInfo,
+    CoinType, Encode, InputAddressPath, Response,
+    SignTxReq, Signature, TxInputReq, TxInputSignatureResponse,
     TxMetadataReq, TxMetadataV1Req, TxMetadataVersionReq, TxOutputReq,
 };
 
@@ -43,65 +43,16 @@ use ledger_device_sdk::{
     nbgl::{NbglSpinner, NbglStreamingReview},
 };
 
+mod summary_collector;
+use summary_collector::TxSummaryCollector;
+pub use summary_collector::{TxType, CoinOrTokenId};
+
 const BIP44: u32 = 44 + (1 << 31);
 
 // BIP44/COIN/ACCOUNT/PURPOSE/INDEX
 const DERIVATION_PATH_LEN: usize = 5;
 // DERIVATION_PATH_LEN without the BIP44 and COIN as they are the same for all
 const COMPRESSED_DERIVATION_PATH_LEN: usize = 3;
-
-#[derive(Eq, Ord, PartialEq, PartialOrd)]
-pub enum CoinOrTokenId {
-    Coin,
-    TokenId(H256),
-}
-
-fn into_coin_or_token_id_and_amount(
-    value: &OutputValue,
-) -> Result<(CoinOrTokenId, Amount), StatusWord> {
-    match value {
-        OutputValue::Coin(amount) => Ok((CoinOrTokenId::Coin, *amount)),
-        OutputValue::TokenV1(token_id, amount) => {
-            Ok((CoinOrTokenId::TokenId(*token_id.hash()), *amount))
-        }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum TxType {
-    Transfer,
-    Burn,
-    Htlc,
-    CreateDelegation,
-    DelegationStake,
-    DelegationWithdrawl,
-    CreateStakePool,
-    DecommissionStakePool,
-    CreateNft,
-    CreateToken,
-    MintTokens,
-    UnmintTokens,
-    FreezeToken,
-    UnfreezeToken,
-    LockTokenSupply,
-    ChangeTokenAuthority,
-    ChangeTokenMetadataUri,
-    FillOrder,
-    FreezeOrder,
-    CreateOrder,
-    ConcludeOrder,
-    ComplexTransaction,
-    DataDeposit,
-}
-
-fn merge_tx_type(tx_type: Option<TxType>, new_type: TxType) -> Option<TxType> {
-    match tx_type {
-        None => Some(new_type),
-        // Transfers are a lower priority (as they can be change outputs) so keep the previous type
-        Some(_) if new_type == TxType::Transfer => tx_type,
-        Some(_) => Some(TxType::ComplexTransaction),
-    }
-}
 
 pub struct InputCompressed {
     pub path: [u32; COMPRESSED_DERIVATION_PATH_LEN],
@@ -166,13 +117,11 @@ pub struct TxContext {
     num_outputs: u32,
     review_finished: bool,
     state: TxParsingState,
-    tx_type: Option<TxType>,
 
     tx_hasher: Blake2b_512,
     input_commitments_hasher: Blake2b_512,
 
-    total_inputs: BTreeMap<CoinOrTokenId, Amount>,
-    total_outputs: BTreeMap<CoinOrTokenId, Amount>,
+    summary: TxSummaryCollector,
     inputs: Vec<InputCompressed>,
 
     spinner: NbglSpinner,
@@ -236,10 +185,7 @@ impl TxContext {
             tx_hasher,
             input_commitments_hasher: Blake2b_512::new(),
             state: TxParsingState::Input(0),
-            tx_type: None,
-
-            total_inputs: Default::default(),
-            total_outputs: Default::default(),
+            summary: TxSummaryCollector::new(),
             inputs: Vec::with_capacity(20),
             spinner: NbglSpinner::new(),
         })
@@ -249,16 +195,24 @@ impl TxContext {
         self.coin
     }
 
+    pub fn summary(&self) -> &TxSummaryCollector {
+        &self.summary
+    }
+
+    pub fn summary_mut(&mut self) -> &mut TxSummaryCollector {
+        &mut self.summary
+    }
+
     pub fn tx_type(&self) -> Option<TxType> {
-        self.tx_type
+        self.summary.tx_type()
     }
 
     pub fn total_inputs(&self) -> &BTreeMap<CoinOrTokenId, Amount> {
-        &self.total_inputs
+        self.summary.total_inputs()
     }
 
     pub fn total_outputs(&self) -> &BTreeMap<CoinOrTokenId, Amount> {
-        &self.total_outputs
+        self.summary.total_outputs()
     }
 
     fn state(&self) -> &TxParsingState {
@@ -464,7 +418,7 @@ fn handle_input_req<'a>(
         .collect::<Result<Vec<_>, StatusWord>>()?;
     ctx.inputs.extend(addresses);
 
-    process_input(ctx, &req.inp)?;
+    ctx.summary.process_input(&req.inp)?;
 
     let (input, commitment) = req.inp.into_input_and_commitment();
     ctx.update_input_commitments_hash(&commitment)?;
@@ -484,7 +438,7 @@ fn handle_output_req<'a>(
     ctx: &mut TxContext,
     review: &'a mut Review,
 ) -> Result<SigningState<'a>, StatusWord> {
-    process_output(ctx, &req.out)?;
+    ctx.summary.process_output(&req.out)?;
     // on the first output add the number of outputs to the hash
     if output_step == 0 {
         ctx.tx_hasher
@@ -637,211 +591,6 @@ pub fn handle_sign_tx(
     }
 }
 
-fn process_output(ctx: &mut TxContext, out: &TxOutput) -> Result<(), StatusWord> {
-    match &out {
-        TxOutput::Transfer(value, _) | TxOutput::LockThenTransfer(value, _, _) => {
-            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::Transfer);
-
-            let (coin_or_token_id, amount) = into_coin_or_token_id_and_amount(value)?;
-            increase_output_totals(&mut ctx.total_outputs, coin_or_token_id, amount)?;
-        }
-        TxOutput::Burn(value) => {
-            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::Burn);
-
-            let (coin_or_token_id, amount) = into_coin_or_token_id_and_amount(value)?;
-            increase_output_totals(&mut ctx.total_outputs, coin_or_token_id, amount)?;
-        }
-        TxOutput::Htlc(value, _) => {
-            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::Htlc);
-
-            let (coin_or_token_id, amount) = into_coin_or_token_id_and_amount(value)?;
-            increase_output_totals(&mut ctx.total_outputs, coin_or_token_id, amount)?;
-        }
-        TxOutput::CreateStakePool(_, data) => {
-            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::CreateStakePool);
-
-            increase_output_totals(&mut ctx.total_outputs, CoinOrTokenId::Coin, data.pledge)?;
-        }
-        TxOutput::ProduceBlockFromStake(_, _) => {}
-        TxOutput::DelegateStaking(amount, _) => {
-            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::DelegationStake);
-            increase_output_totals(&mut ctx.total_outputs, CoinOrTokenId::Coin, *amount)?;
-        }
-        TxOutput::CreateDelegationId(_, _) => {
-            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::CreateDelegation);
-        }
-        TxOutput::IssueFungibleToken(_) => {
-            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::CreateToken);
-        }
-        TxOutput::DataDeposit(_) => {
-            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::DataDeposit);
-        }
-        TxOutput::IssueNft(_, _, _) => {
-            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::CreateNft);
-        }
-        TxOutput::CreateOrder(_) => {
-            ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::CreateOrder);
-        }
-    }
-
-    Ok(())
-}
-
-fn process_input(ctx: &mut TxContext, inp: &TxInputWithAdditionalInfo) -> Result<(), StatusWord> {
-    match inp {
-        TxInputWithAdditionalInfo::Utxo(_, info) => match info {
-            AdditionalUtxoInfo::UtxoWithPoolData {
-                utxo: _,
-                staker_balance,
-            } => {
-                increase_input_totals(&mut ctx.total_inputs, CoinOrTokenId::Coin, *staker_balance)?;
-            }
-            AdditionalUtxoInfo::Utxo(utxo) => {
-                match &utxo {
-                    TxOutput::Transfer(value, _)
-                    | TxOutput::LockThenTransfer(value, _, _)
-                    | TxOutput::Htlc(value, _) => {
-                        let (coin_or_token_id, amount) = into_coin_or_token_id_and_amount(&value)?;
-                        increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, amount)?;
-                    }
-                    TxOutput::Burn(_)
-                    | TxOutput::ProduceBlockFromStake(_, _)
-                    | TxOutput::CreateDelegationId(_, _)
-                    | TxOutput::IssueFungibleToken(_)
-                    | TxOutput::DataDeposit(_)
-                    | TxOutput::DelegateStaking(_, _)
-                    | TxOutput::CreateOrder(_) => return Err(StatusWord::TxInvalidInputUtxo),
-                    TxOutput::CreateStakePool(_, data) => {
-                        increase_input_totals(
-                            &mut ctx.total_inputs,
-                            CoinOrTokenId::Coin,
-                            data.pledge,
-                        )?;
-                    }
-                    TxOutput::IssueNft(nft_id, _, _) => {
-                        increase_input_totals(
-                            &mut ctx.total_inputs,
-                            CoinOrTokenId::TokenId(*nft_id.hash()),
-                            Amount::from_atoms(1),
-                        )?;
-                    }
-                };
-            }
-        },
-        TxInputWithAdditionalInfo::Account(acc) => match acc.spending {
-            AccountSpending::DelegationBalance(_, amount) => {
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::DelegationWithdrawl);
-                increase_input_totals(&mut ctx.total_inputs, CoinOrTokenId::Coin, amount)?;
-            }
-        },
-        TxInputWithAdditionalInfo::AccountCommand(_, cmd) => match cmd {
-            AccountCommand::MintTokens(token_id, amount) => {
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::MintTokens);
-                increase_input_totals(
-                    &mut ctx.total_inputs,
-                    CoinOrTokenId::TokenId(*token_id.hash()),
-                    *amount,
-                )?;
-            }
-            AccountCommand::ConcludeOrder(_) | AccountCommand::FillOrder(_, _, _) => {
-                return Err(StatusWord::OrdersV0NotSupported)
-            }
-            AccountCommand::UnmintTokens(_) => {
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::UnmintTokens);
-            }
-            AccountCommand::LockTokenSupply(_) => {
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::LockTokenSupply);
-            }
-            AccountCommand::FreezeToken(_, _) => {
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FreezeToken);
-            }
-            AccountCommand::UnfreezeToken(_) => {
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::UnfreezeToken);
-            }
-            AccountCommand::ChangeTokenAuthority(_, _) => {
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ChangeTokenAuthority);
-            }
-            AccountCommand::ChangeTokenMetadataUri(_, _) => {
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ChangeTokenMetadataUri);
-            }
-        },
-        TxInputWithAdditionalInfo::OrderAccountCommand(
-            cmd,
-            AdditionalOrderInfo {
-                initially_asked,
-                initially_given,
-                ask_balance,
-                give_balance,
-            },
-        ) => match cmd {
-            OrderAccountCommand::FillOrder(_, fill_amount) => {
-                let (fill_coin_or_token_id, asked_amount) =
-                    into_coin_or_token_id_and_amount(&initially_asked)?;
-                let (given_coin_or_token_id, given_amount) =
-                    into_coin_or_token_id_and_amount(&initially_given)?;
-
-                increase_output_totals(
-                    &mut ctx.total_outputs,
-                    fill_coin_or_token_id,
-                    *fill_amount,
-                )?;
-
-                let atoms = given_amount
-                    .into_atoms()
-                    .checked_mul(fill_amount.into_atoms())
-                    .ok_or(StatusWord::TxNumericOperationFail)?
-                    .checked_div(asked_amount.into_atoms())
-                    .ok_or(StatusWord::TxNumericOperationFail)?;
-                let amount = Amount::from_atoms(atoms);
-                increase_input_totals(&mut ctx.total_inputs, given_coin_or_token_id, amount)?;
-
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FillOrder);
-            }
-            OrderAccountCommand::ConcludeOrder(_) => {
-                let (coin_or_token_id, _) = into_coin_or_token_id_and_amount(&initially_asked)?;
-                increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, *ask_balance)?;
-
-                let (coin_or_token_id, _) = into_coin_or_token_id_and_amount(&initially_given)?;
-                increase_input_totals(&mut ctx.total_inputs, coin_or_token_id, *give_balance)?;
-
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::ConcludeOrder);
-            }
-            OrderAccountCommand::FreezeOrder(_) => {
-                ctx.tx_type = merge_tx_type(ctx.tx_type, TxType::FreezeOrder);
-            }
-        },
-    };
-
-    Ok(())
-}
-
-fn increase_input_totals(
-    total_inputs: &mut BTreeMap<CoinOrTokenId, Amount>,
-    key: CoinOrTokenId,
-    amount: Amount,
-) -> Result<(), StatusWord> {
-    let total = total_inputs.entry(key).or_insert(Amount::from_atoms(0));
-    let new_total = total
-        .into_atoms()
-        .checked_add(amount.into_atoms())
-        .ok_or(StatusWord::TxNumericOperationFail)?;
-    *total = Amount::from_atoms(new_total);
-    Ok(())
-}
-
-fn increase_output_totals(
-    total_outputs: &mut BTreeMap<CoinOrTokenId, Amount>,
-    key: CoinOrTokenId,
-    amount: Amount,
-) -> Result<(), StatusWord> {
-    let total = total_outputs.entry(key).or_insert(Amount::from_atoms(0));
-    let new_total = total
-        .into_atoms()
-        .checked_add(amount.into_atoms())
-        .ok_or(StatusWord::TxNumericOperationFail)?;
-    *total = Amount::from_atoms(new_total);
-    Ok(())
-}
 
 fn compute_signature_and_append(
     ctx: &mut TxContext,
