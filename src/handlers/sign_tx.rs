@@ -23,15 +23,18 @@ use crate::{
         approve_streaming_review, new_streaming_review, start_streaming_review,
         streaming_review_show_output, ui_display_tx,
     },
-    handlers::sign_message::schnorr_sign,
+    handlers::{sign_message::schnorr_sign, utils::mintlayer_hash},
     DataContext, StatusWord,
 };
 use messages::{
-    encode_as_compact, encode_to, AccountCommand, AccountSpending, AdditionalOrderInfo,
-    AdditionalUtxoInfo, Amount, CoinType, Encode, InputAddressPath, OrderAccountCommand,
-    OutputValue, PCoinType, Response, SighashInputCommitment, SignTxReq, Signature,
-    SignatureResponse, TxInputReq, TxInputWithAdditionalInfo, TxMetadataReq, TxMetadataV1Req,
-    TxMetadataVersionReq, TxOutput, TxOutputReq, H256,
+    encode_as_compact, encode_to,
+    mlcp::{
+        AccountCommand, AccountSpending, Amount, CoinType as PCoinType, OrderAccountCommand,
+        OutputValue, SighashInputCommitment, TxOutput, H256,
+    },
+    AdditionalOrderInfo, AdditionalUtxoInfo, CoinType, Encode, InputAddressPath, Response,
+    SignTxReq, Signature, TxInputReq, TxInputSignatureResponse, TxInputWithAdditionalInfo,
+    TxMetadataReq, TxMetadataV1Req, TxMetadataVersionReq, TxOutputReq,
 };
 
 use ledger_device_sdk::{
@@ -141,11 +144,11 @@ enum TxParsingState {
     Output(u32),
     CompleteNotApproved {
         inp_idx: u32,
-        sighash: [u8; 32],
+        sighash: H256,
     },
     ApprovedNotFinishedSigning {
         inp_idx: u32,
-        sighash: [u8; 32],
+        sighash: H256,
     },
     Finished,
 }
@@ -153,7 +156,7 @@ enum TxParsingState {
 #[derive(PartialEq, Eq)]
 pub enum NextTxOutputParsingState {
     Output(u32),
-    CompleteNotApproved { inp_idx: u32, sighash: [u8; 32] },
+    CompleteNotApproved { inp_idx: u32, sighash: H256 },
 }
 
 pub struct TxContext {
@@ -187,17 +190,17 @@ pub enum SigningState<'a> {
         review: &'a NbglStreamingReview,
         output: TxOutput,
         inp_idx: u32,
-        sighash: [u8; 32],
+        sighash: H256,
     },
     TxParsingNotComplete,
     CompleteNotApproved {
         inp_idx: u32,
-        sighash: [u8; 32],
+        sighash: H256,
         outputs: &'a [TxOutput],
     },
     ApprovedNotFinishedSigning {
         inp_idx: u32,
-        sighash: [u8; 32],
+        sighash: H256,
     },
 }
 
@@ -361,17 +364,11 @@ impl TxContext {
                 .finalize(&mut message_hash)
                 .map_err(|_| StatusWord::TxHashFail)?;
 
-            let mut blake2b256 = Blake2b_512::new();
-            let mut message_hash2: [u8; 64] = [0u8; 64];
-            blake2b256
-                .hash(&message_hash[0..32], &mut message_hash2)
-                .map_err(|_| StatusWord::TxHashFail)?;
+            let message_hash2 = mintlayer_hash(&message_hash[0..32])?;
 
             NextTxOutputParsingState::CompleteNotApproved {
                 inp_idx,
-                sighash: message_hash2[..32]
-                    .try_into()
-                    .map_err(|_| StatusWord::TxHashFail)?,
+                sighash: message_hash2,
             }
         };
 
@@ -386,7 +383,7 @@ impl TxContext {
     }
 
     // After processing a signature advance the internal state
-    fn advance_next_signing_step(&mut self, inp_idx: u32, sighash: &[u8; 32]) {
+    fn advance_next_signing_step(&mut self, inp_idx: u32, sighash: &H256) {
         self.state = if ((inp_idx + 1) as usize) < self.inputs.len() {
             TxParsingState::ApprovedNotFinishedSigning {
                 inp_idx: inp_idx + 1,
@@ -693,7 +690,7 @@ fn process_output(ctx: &mut TxContext, out: &TxOutput) -> Result<(), StatusWord>
 fn process_input(ctx: &mut TxContext, inp: &TxInputWithAdditionalInfo) -> Result<(), StatusWord> {
     match inp {
         TxInputWithAdditionalInfo::Utxo(_, info) => match info {
-            AdditionalUtxoInfo::PoolData {
+            AdditionalUtxoInfo::UtxoWithPoolData {
                 utxo: _,
                 staker_balance,
             } => {
@@ -849,8 +846,8 @@ fn increase_output_totals(
 fn compute_signature_and_append(
     ctx: &mut TxContext,
     inp_idx: u32,
-    sighash: &[u8; 32],
-) -> Result<SignatureResponse, StatusWord> {
+    sighash: &H256,
+) -> Result<TxInputSignatureResponse, StatusWord> {
     let address = ctx
         .inputs
         .get(inp_idx as usize)
@@ -860,17 +857,16 @@ fn compute_signature_and_append(
     let addr = [BIP44, ctx.coin.bip44_coin_type(), p1, p2, p3];
 
     let private_key = Secp256k1::derive_from_path(&addr);
-    let sig = schnorr_sign(&private_key, sighash)?;
+    let sig = schnorr_sign(&private_key, sighash.as_bytes())?;
 
-    let sig = Signature {
-        signature: sig,
-        multisig_idx: address.multisig_idx,
-    };
+    let signature = Signature(sig);
     let input_idx = address.input_idx;
+    let multisig_idx = address.multisig_idx;
 
     ctx.advance_next_signing_step(inp_idx, sighash);
-    let response = SignatureResponse {
-        signature: sig,
+    let response = TxInputSignatureResponse {
+        signature,
+        multisig_idx,
         input_idx,
         has_next: ctx.state != TxParsingState::Finished,
     };

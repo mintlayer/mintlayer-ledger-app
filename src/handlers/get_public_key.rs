@@ -17,7 +17,7 @@
 
 use crate::app_ui::address::ui_display_pk;
 use crate::StatusWord;
-use messages::{GetPublicKeyResponse, PCoinType, PublicKeyReq};
+use messages::{mlcp::CoinType, ChainCode, GetPublicKeyResponse, PublicKey, PublicKeyReq};
 
 use ledger_device_sdk::ecc::{Secp256k1, SeedDerive};
 
@@ -28,7 +28,7 @@ pub fn handle_get_public_key(
     if req.path.as_ref().len() < 3 {
         return Err(StatusWord::InvalidPath);
     }
-    let coin_type: PCoinType = req.coin_type.into();
+    let coin_type: CoinType = req.coin_type.into();
     if req.path.as_ref()[1] != coin_type.bip44_coin_type() {
         return Err(StatusWord::InvalidPath);
     }
@@ -42,8 +42,8 @@ pub fn handle_get_public_key(
         return Err(StatusWord::Deny);
     }
     let response = GetPublicKeyResponse {
-        public_key: pk.pubkey,
-        chain_code: code.value,
+        public_key: PublicKey(pk.pubkey),
+        chain_code: ChainCode(code.value),
     };
 
     Ok(response)

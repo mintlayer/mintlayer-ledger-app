@@ -15,19 +15,21 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use crate::{app_ui::sign::ui_display_message, errors::cx_err_to_status, DataContext, StatusWord};
-use messages::{AddrType, Bip32Path, MsgSignature, PCoinType, SignMessageReq};
+use crate::{
+    app_ui::sign::ui_display_message, errors::cx_err_to_status, handlers::utils::mintlayer_hash,
+    DataContext, StatusWord,
+};
+use messages::{
+    mlcp::CoinType, AddrType, Bip32Path, MsgSignatureResponse, SignMessageReq, Signature,
+};
 
 use alloc::vec::Vec;
-use ledger_device_sdk::{
-    ecc::{ECPrivateKey, Secp256k1, SeedDerive},
-    hash::{blake2::Blake2b_512, HashInit},
-};
+use ledger_device_sdk::ecc::{ECPrivateKey, Secp256k1, SeedDerive};
 use ledger_secure_sdk_sys::*;
 
 pub struct SignMessageContext {
     path: Bip32Path,
-    coin: PCoinType,
+    coin: CoinType,
     addr_type: AddrType,
     review_finished: bool,
 }
@@ -55,7 +57,7 @@ pub fn setup_sign_message(req: SignMessageReq, ctx: &mut DataContext) -> Result<
 pub fn handle_sign_message(
     message: &[u8],
     ctx: &mut DataContext,
-) -> Result<MsgSignature, StatusWord> {
+) -> Result<MsgSignatureResponse, StatusWord> {
     let ctx = match ctx {
         DataContext::SignMessageContext(ctx) => ctx,
         _ => return Err(StatusWord::WrongContext),
@@ -80,12 +82,9 @@ pub fn handle_sign_message(
 fn compute_signature<const N: usize>(
     private_key: &ECPrivateKey<N, 'W'>,
     message: &[u8],
-) -> Result<MsgSignature, StatusWord> {
+) -> Result<MsgSignatureResponse, StatusWord> {
     const MESSAGE_MAGIC_PREFIX: &str = "===MINTLAYER MESSAGE BEGIN===\n";
     const MESSAGE_MAGIC_SUFFIX: &str = "\n===MINTLAYER MESSAGE END===";
-
-    let mut blake2b256 = Blake2b_512::new();
-    let mut message_hash: [u8; 64] = [0u8; 64];
 
     let message = MESSAGE_MAGIC_PREFIX
         .as_bytes()
@@ -95,24 +94,14 @@ fn compute_signature<const N: usize>(
         .copied()
         .collect::<Vec<_>>();
 
-    blake2b256
-        .hash(&message, &mut message_hash)
-        .map_err(|_| StatusWord::TxHashFail)?;
-    let mut message_hash_32: [u8; 32] = [0u8; 32];
-    message_hash_32.copy_from_slice(&message_hash[0..32]);
+    let message_hash = mintlayer_hash(&message)?;
+    let message_hash2 = mintlayer_hash(message_hash.as_bytes())?;
 
-    let mut blake2b256 = Blake2b_512::new();
-    let mut message_hash2: [u8; 64] = [0u8; 64];
-    blake2b256
-        .hash(&message_hash_32, &mut message_hash2)
-        .map_err(|_| StatusWord::TxHashFail)?;
+    let sig = schnorr_sign(private_key, message_hash2.as_bytes())?;
 
-    let mut message_hash2_32: [u8; 32] = [0u8; 32];
-    message_hash2_32.copy_from_slice(&message_hash2[0..32]);
-
-    let sig = schnorr_sign(private_key, &message_hash2_32)?;
-
-    let response = MsgSignature { signature: sig };
+    let response = MsgSignatureResponse {
+        signature: Signature(sig),
+    };
 
     Ok(response)
 }

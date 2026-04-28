@@ -1,6 +1,5 @@
 /*****************************************************************************
  *   Mintlayer Ledger App.
- *   (c) 2023 Ledger SAS.
  *   (c) 2025 RBB S.r.l.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,19 +15,18 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use ledger_device_sdk::nbgl::{NbglGlyph, NbglHomeAndSettings};
+use crate::StatusWord;
 
-use crate::app_ui::utils::load_glyph;
+use messages::mlcp::H256;
 
-pub fn ui_menu_main() -> NbglHomeAndSettings {
-    const MINTLAYER: NbglGlyph = load_glyph();
+use ledger_device_sdk::hash::{blake2::Blake2b_512, HashInit};
 
-    // Display the home screen.
-    NbglHomeAndSettings::new()
-        .glyph(&MINTLAYER)
-        .infos(
-            "Mintlayer",
-            env!("CARGO_PKG_VERSION"),
-            env!("CARGO_PKG_AUTHORS"),
-        )
+pub fn mintlayer_hash(data: &[u8]) -> Result<H256, StatusWord> {
+    let mut hasher = Blake2b_512::new();
+    let mut message_hash: [u8; 64] = [0u8; 64];
+    hasher
+        .hash(data, &mut message_hash)
+        .map_err(|_| StatusWord::TxHashFail)?;
+
+    Ok(H256::from_slice(&message_hash[..32]))
 }

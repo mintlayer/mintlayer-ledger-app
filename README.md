@@ -2,7 +2,7 @@
 
 ![Rule enforcer](https://github.com/mintlayer/mintlayer-ledger-app/actions/workflows/guidelines_enforcer.yml/badge.svg) ![Build and tests](https://github.com/mintlayer/mintlayer-ledger-app/actions/workflows/build_and_functional_tests.yml/badge.svg)
 
-This is the Mintlayer ledger application for the Ledger Nano X, S+, Stax and Flex devices.
+This is the Mintlayer Ledger application for the Ledger Nano X, S+, Stax, Flex and Nano Gen 5 devices.
 
 :warning: Nano S is not supported
 

@@ -17,10 +17,18 @@
 
 use alloc::string::String;
 
-use ledger_device_sdk::{include_gif, nbgl::NbglGlyph};
+use ledger_device_sdk::{
+    ecc::ECPublicKey,
+    hash::{blake2::Blake2b_512, HashInit},
+    include_gif,
+    nbgl::NbglGlyph,
+};
 
 use crate::StatusWord;
-use messages::{encode, Destination, PCoinType};
+use messages::{
+    encode,
+    mlcp::{CoinType, Destination, PublicKeyHash, Secp256k1PublicKey},
+};
 
 pub fn bech32m_encode(hrp: &str, data: &[u8]) -> Result<String, StatusWord> {
     let parsed_hrp = bech32::Hrp::parse(hrp).map_err(|_| StatusWord::TxAddressFail)?;
@@ -31,7 +39,7 @@ pub fn bech32m_encode(hrp: &str, data: &[u8]) -> Result<String, StatusWord> {
     Ok(encoded)
 }
 
-pub fn to_address(destination: &Destination, coin: PCoinType) -> Result<String, StatusWord> {
+pub fn to_address(destination: &Destination, coin: CoinType) -> Result<String, StatusWord> {
     let hrp = coin.address_prefix(destination.into());
     bech32m_encode(hrp, &encode(destination))
 }
@@ -49,4 +57,50 @@ pub const fn load_glyph() -> NbglGlyph<'static> {
         NbglGlyph::from_include(include_gif!("icons/mintlayer_14x14.gif", NBGL));
 
     MINTLAYER
+}
+
+pub fn compress_public_key<const T: char>(
+    public_key: &ECPublicKey<65, T>,
+) -> Result<Secp256k1PublicKey, StatusWord> {
+    let uncompressed_key = &public_key.pubkey;
+    if uncompressed_key[0] != 0x04 {
+        return Err(StatusWord::InvalidUncompressedPublicKey);
+    }
+
+    let mut compressed_key = [0u8; 33];
+
+    let y_coordinate = &uncompressed_key[33..65];
+    let prefix = if y_coordinate[31] % 2 == 0 {
+        0x02
+    } else {
+        0x03
+    };
+
+    compressed_key[0] = prefix;
+
+    let x_coordinate = &uncompressed_key[1..33];
+    compressed_key[1..].copy_from_slice(x_coordinate);
+
+    Ok(Secp256k1PublicKey(compressed_key))
+}
+
+pub fn to_public_key_hash(pk: &Secp256k1PublicKey) -> Result<PublicKeyHash, StatusWord> {
+    let mut blake2b256 = Blake2b_512::new();
+    let mut public_key_hash: [u8; 64] = [0u8; 64];
+
+    blake2b256
+        .update(&[0])
+        .map_err(|_| StatusWord::TxHashFail)?;
+    blake2b256
+        .update(&pk.0)
+        .map_err(|_| StatusWord::TxHashFail)?;
+
+    blake2b256
+        .finalize(&mut public_key_hash)
+        .map_err(|_| StatusWord::TxHashFail)?;
+
+    let mut pkh = [0u8; 20];
+    pkh.copy_from_slice(&public_key_hash[0..20]);
+
+    Ok(PublicKeyHash(pkh))
 }

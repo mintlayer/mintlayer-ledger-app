@@ -29,10 +29,10 @@ mod handlers {
     pub mod get_public_key;
     pub mod sign_message;
     pub mod sign_tx;
+    pub mod utils;
 }
 
 mod errors;
-mod settings;
 
 // Required for using String, Vec, format!...
 extern crate alloc;

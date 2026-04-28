@@ -24,17 +24,11 @@ use alloc::vec::Vec;
 use core::iter::ExactSizeIterator;
 
 use derive_more::Display;
-pub use mintlayer_core_primitives::{
-    AccountCommand, AccountNonce, AccountOutPoint, AccountSpending, Amount, CoinType as PCoinType,
-    Destination, H256, HashedTimelockContract, HtlcSecretHash, Id, IsTokenFreezable,
-    IsTokenUnfreezable, NftIssuance, OrderAccountCommand, OrderData, OutPointSourceId,
-    OutputTimeLock, OutputValue, PublicKey, PublicKeyHash, SchnorrkelPublicKey, Secp256k1PublicKey,
-    SighashInputCommitment, StakePoolData, TokenIssuance, TokenTotalSupply, TxInput, TxOutput,
-    UtxoOutPoint, VrfPublicKey,
-};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-pub use parity_scale_codec::Encode;
 use parity_scale_codec::{Decode, DecodeAll};
+
+pub use mintlayer_core_primitives as mlcp;
+pub use parity_scale_codec::Encode;
 
 pub const APDU_CLASS: u8 = 0xE1;
 pub const MAX_ADPU_DATA_LEN: usize = u8::MAX as usize;
@@ -43,6 +37,10 @@ pub const MAX_ADPU_DATA_LEN: usize = u8::MAX as usize;
 // `P2_DONE` marks the final chunk, while `P2_MORE` indicates that more chunks follow.
 pub const P2_DONE: u8 = 0x00;
 pub const P2_MORE: u8 = 0x80;
+
+fn wrong_p1p2(_: u8) -> StatusWord {
+    StatusWord::WrongP1P2
+}
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
 #[num_enum(error_type(name = StatusWord, constructor = wrong_p1p2))]
@@ -65,10 +63,6 @@ impl Ins {
     pub const SIGN_TX: u8 = 0x01;
     pub const SIGN_MSG: u8 = 0x02;
     pub const PING: u8 = 0x03;
-}
-
-fn wrong_p1p2(_: u8) -> StatusWord {
-    StatusWord::WrongP1P2
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
@@ -102,7 +96,7 @@ pub struct SignMessageReq {
 #[derive(Encode, Decode)]
 pub enum SignTxReq {
     Input(TxInputReq),
-    InputCommitment(SighashInputCommitment),
+    InputCommitment(mlcp::SighashInputCommitment),
     Output(TxOutputReq),
     NextSignature,
 }
@@ -132,29 +126,29 @@ pub struct TxInputReq {
 
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub struct AdditionalOrderInfo {
-    pub initially_asked: OutputValue,
-    pub initially_given: OutputValue,
-    pub ask_balance: Amount,
-    pub give_balance: Amount,
+    pub initially_asked: mlcp::OutputValue,
+    pub initially_given: mlcp::OutputValue,
+    pub ask_balance: mlcp::Amount,
+    pub give_balance: mlcp::Amount,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub enum AdditionalUtxoInfo {
-    Utxo(TxOutput),
-    PoolData {
-        utxo: TxOutput,
-        staker_balance: Amount,
+    Utxo(mlcp::TxOutput),
+    UtxoWithPoolData {
+        utxo: mlcp::TxOutput,
+        staker_balance: mlcp::Amount,
     },
 }
 
-impl From<AdditionalUtxoInfo> for SighashInputCommitment {
+impl From<AdditionalUtxoInfo> for mlcp::SighashInputCommitment {
     fn from(value: AdditionalUtxoInfo) -> Self {
         match value {
-            AdditionalUtxoInfo::Utxo(output) => SighashInputCommitment::Utxo(output),
-            AdditionalUtxoInfo::PoolData {
+            AdditionalUtxoInfo::Utxo(output) => mlcp::SighashInputCommitment::Utxo(output),
+            AdditionalUtxoInfo::UtxoWithPoolData {
                 utxo,
                 staker_balance,
-            } => SighashInputCommitment::ProduceBlockFromStakeUtxo {
+            } => mlcp::SighashInputCommitment::ProduceBlockFromStakeUtxo {
                 utxo,
                 staker_balance,
             },
@@ -165,48 +159,49 @@ impl From<AdditionalUtxoInfo> for SighashInputCommitment {
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub enum TxInputWithAdditionalInfo {
     #[codec(index = 0)]
-    Utxo(UtxoOutPoint, AdditionalUtxoInfo),
+    Utxo(mlcp::UtxoOutPoint, AdditionalUtxoInfo),
 
     #[codec(index = 1)]
-    Account(AccountOutPoint),
+    Account(mlcp::AccountOutPoint),
 
     #[codec(index = 2)]
-    AccountCommand(AccountNonce, AccountCommand),
+    AccountCommand(mlcp::AccountNonce, mlcp::AccountCommand),
 
     #[codec(index = 3)]
-    OrderAccountCommand(OrderAccountCommand, AdditionalOrderInfo),
+    OrderAccountCommand(mlcp::OrderAccountCommand, AdditionalOrderInfo),
 }
 
 impl TxInputWithAdditionalInfo {
-    pub fn into_input_and_commitment(self) -> (TxInput, SighashInputCommitment) {
+    pub fn into_input_and_commitment(self) -> (mlcp::TxInput, mlcp::SighashInputCommitment) {
         match self {
-            TxInputWithAdditionalInfo::Utxo(utxo, info) => (TxInput::Utxo(utxo), info.into()),
-            TxInputWithAdditionalInfo::Account(acc) => {
-                (TxInput::Account(acc), SighashInputCommitment::None)
-            }
+            TxInputWithAdditionalInfo::Utxo(utxo, info) => (mlcp::TxInput::Utxo(utxo), info.into()),
+            TxInputWithAdditionalInfo::Account(acc) => (
+                mlcp::TxInput::Account(acc),
+                mlcp::SighashInputCommitment::None,
+            ),
             TxInputWithAdditionalInfo::AccountCommand(nonce, cmd) => (
-                TxInput::AccountCommand(nonce, cmd),
-                SighashInputCommitment::None,
+                mlcp::TxInput::AccountCommand(nonce, cmd),
+                mlcp::SighashInputCommitment::None,
             ),
             TxInputWithAdditionalInfo::OrderAccountCommand(cmd, info) => {
                 let commitment = match &cmd {
-                    OrderAccountCommand::FillOrder(_, _) => {
-                        SighashInputCommitment::FillOrderAccountCommand {
+                    mlcp::OrderAccountCommand::FillOrder(_, _) => {
+                        mlcp::SighashInputCommitment::FillOrderAccountCommand {
                             initially_asked: info.initially_asked,
                             initially_given: info.initially_given,
                         }
                     }
-                    OrderAccountCommand::ConcludeOrder(_) => {
-                        SighashInputCommitment::ConcludeOrderAccountCommand {
+                    mlcp::OrderAccountCommand::ConcludeOrder(_) => {
+                        mlcp::SighashInputCommitment::ConcludeOrderAccountCommand {
                             initially_asked: info.initially_asked,
                             initially_given: info.initially_given,
                             ask_balance: info.ask_balance,
                             give_balance: info.give_balance,
                         }
                     }
-                    OrderAccountCommand::FreezeOrder(_) => SighashInputCommitment::None,
+                    mlcp::OrderAccountCommand::FreezeOrder(_) => mlcp::SighashInputCommitment::None,
                 };
-                (TxInput::OrderAccountCommand(cmd), commitment)
+                (mlcp::TxInput::OrderAccountCommand(cmd), commitment)
             }
         }
     }
@@ -214,7 +209,7 @@ impl TxInputWithAdditionalInfo {
 
 #[derive(Encode, Decode)]
 pub struct TxOutputReq {
-    pub out: TxOutput,
+    pub out: mlcp::TxOutput,
 }
 
 #[derive(Encode, Decode, Clone, Copy, Debug, Eq, PartialEq, IntoPrimitive)]
@@ -226,7 +221,7 @@ pub enum CoinType {
     Signet = 3,
 }
 
-impl From<CoinType> for PCoinType {
+impl From<CoinType> for mlcp::CoinType {
     fn from(value: CoinType) -> Self {
         match value {
             CoinType::Mainnet => Self::Mainnet,
@@ -262,27 +257,31 @@ pub struct InputAddressPath {
 }
 
 #[derive(Encode, Decode)]
+pub struct PublicKey(pub [u8; 65]);
+
+#[derive(Encode, Decode)]
+pub struct ChainCode(pub [u8; 32]);
+
+#[derive(Encode, Decode)]
 pub struct GetPublicKeyResponse {
-    pub public_key: [u8; 65],
-    pub chain_code: [u8; 32],
+    pub public_key: PublicKey,
+    pub chain_code: ChainCode,
 }
 
 #[derive(Encode, Decode)]
-pub struct Signature {
-    pub signature: [u8; 64],
-    pub multisig_idx: Option<u32>,
-}
+pub struct Signature(pub [u8; 64]);
 
 #[derive(Encode, Decode)]
-pub struct SignatureResponse {
+pub struct TxInputSignatureResponse {
     pub signature: Signature,
     pub input_idx: u32,
+    pub multisig_idx: Option<u32>,
     pub has_next: bool,
 }
 
 #[derive(Encode, Decode)]
-pub struct MsgSignature {
-    pub signature: [u8; 64],
+pub struct MsgSignatureResponse {
+    pub signature: Signature,
 }
 
 #[derive(Encode, Decode)]
@@ -296,11 +295,11 @@ pub enum Response {
     #[codec(index = 3)]
     TxNext,
     #[codec(index = 4)]
-    TxSignature(SignatureResponse),
+    TxSignature(TxInputSignatureResponse),
     #[codec(index = 5)]
     MessageSetup,
     #[codec(index = 6)]
-    MessageSignature(MsgSignature),
+    MessageSignature(MsgSignatureResponse),
     #[codec(index = 7)]
     Pong,
 }

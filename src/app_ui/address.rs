@@ -17,48 +17,23 @@
  *****************************************************************************/
 
 use crate::{
-    app_ui::utils::{load_glyph, to_address},
+    app_ui::utils::{compress_public_key, load_glyph, to_address},
     StatusWord,
 };
-use messages::{Destination, PCoinType, PublicKey, Secp256k1PublicKey};
+use messages::mlcp::{CoinType, Destination, PublicKey};
 
 use ledger_device_sdk::{
     ecc::ECPublicKey,
     nbgl::{NbglAddressReview, NbglGlyph},
 };
 
-pub fn compress_public_key<const T: char>(
-    public_key: &ECPublicKey<65, T>,
-) -> Result<[u8; 33], StatusWord> {
-    let uncompressed_key = &public_key.pubkey;
-    if uncompressed_key[0] != 0x04 {
-        return Err(StatusWord::InvalidUncompressedPublicKey);
-    }
-
-    let mut compressed_key = [0u8; 33];
-
-    let y_coordinate = &uncompressed_key[33..65];
-    let prefix = if y_coordinate[31] % 2 == 0 {
-        0x02
-    } else {
-        0x03
-    };
-
-    compressed_key[0] = prefix;
-
-    let x_coordinate = &uncompressed_key[1..33];
-    compressed_key[1..].copy_from_slice(x_coordinate);
-
-    Ok(compressed_key)
-}
-
 pub fn ui_display_pk<const T: char>(
     public_key: &ECPublicKey<65, T>,
-    coin_type: PCoinType,
+    coin_type: CoinType,
 ) -> Result<bool, StatusWord> {
     let pk = compress_public_key(public_key)?;
 
-    let dest = Destination::PublicKey(PublicKey::Secp256k1Schnorr(Secp256k1PublicKey(pk)));
+    let dest = Destination::PublicKey(PublicKey::Secp256k1Schnorr(pk));
     let addr = to_address(&dest, coin_type)?;
 
     const MINTLAYER: NbglGlyph = load_glyph();

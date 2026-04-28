@@ -21,23 +21,24 @@ use alloc::{format, string::ToString};
 use core::fmt::Write;
 
 use crate::{
-    app_ui::{
-        address::compress_public_key,
-        utils::{bech32m_encode, load_glyph, to_address},
+    app_ui::utils::{
+        bech32m_encode, compress_public_key, load_glyph, to_address, to_public_key_hash,
     },
     handlers::sign_tx::{CoinOrTokenId, TxContext, TxType},
     StatusWord,
 };
 use messages::{
-    encode, AddrType, Amount, Destination, IsTokenFreezable, NftIssuance, OutputTimeLock,
-    OutputValue, PCoinType, PublicKey, PublicKeyHash, Secp256k1PublicKey, TokenIssuance,
-    TokenTotalSupply, TxOutput, VrfPublicKey, H256,
+    encode,
+    mlcp::{
+        Amount, CoinType, Destination, IsTokenFreezable, NftIssuance, OutputTimeLock, OutputValue,
+        PublicKey, TokenIssuance, TokenTotalSupply, TxOutput, VrfPublicKey, H256,
+    },
+    AddrType,
 };
 
 use chrono::{TimeZone, Utc};
 use ledger_device_sdk::{
     ecc::ECPublicKey,
-    hash::{blake2::Blake2b_512, HashInit},
     nbgl::{
         Field, NbglGlyph, NbglReview, NbglStreamingReview, NbglStreamingReviewStatus,
         TransactionType,
@@ -59,7 +60,7 @@ pub fn start_streaming_review(review: &NbglStreamingReview) -> bool {
 pub fn streaming_review_show_output(
     review: &NbglStreamingReview,
     output: &TxOutput,
-    coin: PCoinType,
+    coin: CoinType,
 ) -> Result<bool, StatusWord> {
     let (name, value) = format_output(output, coin)?;
     let fields = [Field {
@@ -253,33 +254,14 @@ fn transaction_title(tx: &TxContext) -> &'static str {
 pub fn ui_display_message<const T: char>(
     message: &[u8],
     public_key: &ECPublicKey<65, T>,
-    coin_type: PCoinType,
+    coin_type: CoinType,
     addr_type: AddrType,
 ) -> Result<bool, StatusWord> {
     let pk = compress_public_key(public_key)?;
 
     let dest = match addr_type {
-        AddrType::PublicKey => {
-            Destination::PublicKey(PublicKey::Secp256k1Schnorr(Secp256k1PublicKey(pk)))
-        }
-        AddrType::PublicKeyHash => {
-            let mut blake2b256 = Blake2b_512::new();
-            let mut public_key_hash: [u8; 64] = [0u8; 64];
-
-            blake2b256
-                .update(&[0])
-                .map_err(|_| StatusWord::TxHashFail)?;
-            blake2b256.update(&pk).map_err(|_| StatusWord::TxHashFail)?;
-
-            blake2b256
-                .finalize(&mut public_key_hash)
-                .map_err(|_| StatusWord::TxHashFail)?;
-
-            let mut pkh = [0u8; 20];
-            pkh.copy_from_slice(&public_key_hash[0..20]);
-
-            Destination::PublicKeyHash(PublicKeyHash(pkh))
-        }
+        AddrType::PublicKey => Destination::PublicKey(PublicKey::Secp256k1Schnorr(pk)),
+        AddrType::PublicKeyHash => Destination::PublicKeyHash(to_public_key_hash(&pk)?),
     };
     let addr = to_address(&dest, coin_type)?;
 
@@ -315,7 +297,7 @@ pub fn ui_display_message<const T: char>(
     Ok(review.show(&my_fields))
 }
 
-fn vrf_to_address(key: &VrfPublicKey, coin: PCoinType) -> Result<String, StatusWord> {
+fn vrf_to_address(key: &VrfPublicKey, coin: CoinType) -> Result<String, StatusWord> {
     bech32m_encode(coin.vrf_public_key_address_prefix(), &encode(key))
 }
 
@@ -323,7 +305,7 @@ fn id_to_address(id: &H256, hrp: &str) -> Result<String, StatusWord> {
     bech32m_encode(hrp, &id.0)
 }
 
-fn format_amount(amount: Amount, coin: PCoinType) -> String {
+fn format_amount(amount: Amount, coin: CoinType) -> String {
     let decimals = coin.coin_decimals() as usize;
     let mantissa = amount.into_atoms();
 
@@ -339,7 +321,7 @@ fn format_atoms(amount: Amount) -> String {
     amount.into_atoms().to_string()
 }
 
-fn format_value(value: &OutputValue, coin: PCoinType) -> Result<String, StatusWord> {
+fn format_value(value: &OutputValue, coin: CoinType) -> Result<String, StatusWord> {
     match value {
         OutputValue::Coin(amount) => Ok(format!("Coins: {}", format_amount(*amount, coin))),
         OutputValue::TokenV1(token_id, amount) => Ok(format!(
@@ -380,7 +362,7 @@ fn format_lock(lock: &OutputTimeLock) -> Result<String, StatusWord> {
 ///
 /// # Returns
 /// A tuple containing three `String`s: `(short_address, amount, address_label)`.
-pub fn format_output(output: &TxOutput, coin: PCoinType) -> Result<(&str, String), StatusWord> {
+pub fn format_output(output: &TxOutput, coin: CoinType) -> Result<(&str, String), StatusWord> {
     let res = match output {
         TxOutput::Transfer(value, destination) => (
             "Transfer",
