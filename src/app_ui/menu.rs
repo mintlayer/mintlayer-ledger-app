@@ -24,11 +24,9 @@ pub fn ui_menu_main() -> NbglHomeAndSettings {
     const MINTLAYER: NbglGlyph = load_glyph();
 
     // Display the home screen.
-    NbglHomeAndSettings::new()
-        .glyph(&MINTLAYER)
-        .infos(
-            "Mintlayer",
-            env!("CARGO_PKG_VERSION"),
-            env!("CARGO_PKG_AUTHORS"),
-        )
+    NbglHomeAndSettings::new().glyph(&MINTLAYER).infos(
+        "Mintlayer",
+        env!("CARGO_PKG_VERSION"),
+        env!("CARGO_PKG_AUTHORS"),
+    )
 }

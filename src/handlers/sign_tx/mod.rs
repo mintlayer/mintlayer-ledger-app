@@ -15,26 +15,21 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use crate::{
     app_ui::sign::{
-        approve_streaming_review, new_streaming_review, start_streaming_review,
-        streaming_review_show_output, ui_display_tx,
+        ui_approve_streaming_review, ui_new_streaming_review, ui_start_streaming_review,
+        ui_streaming_review_show_input, ui_streaming_review_show_output,
     },
     handlers::{sign_message::schnorr_sign, utils::mintlayer_hash},
     DataContext, StatusWord,
 };
 use messages::{
     encode_as_compact, encode_to,
-    mlcp::{
-        Amount, CoinType as PCoinType,
-        SighashInputCommitment, TxOutput, H256,
-    },
-    CoinType, Encode, InputAddressPath, Response,
-    SignTxReq, Signature, TxInputReq, TxInputSignatureResponse,
-    TxMetadataReq, TxMetadataV1Req, TxMetadataVersionReq, TxOutputReq,
+    mlcp::{CoinType as PCoinType, SighashInputCommitment, TxOutput, H256},
+    CoinType, Encode, InputAddressPath, Response, SignTxReq, Signature, TxInputReq,
+    TxInputSignatureResponse, TxMetadataReq, TxMetadataV1Req, TxMetadataVersionReq, TxOutputReq,
 };
 
 use ledger_device_sdk::{
@@ -45,7 +40,7 @@ use ledger_device_sdk::{
 
 mod summary_collector;
 use summary_collector::TxSummaryCollector;
-pub use summary_collector::{TxType, CoinOrTokenId};
+pub use summary_collector::{CoinOrTokenId, InputCommand, TxType};
 
 const BIP44: u32 = 44 + (1 << 31);
 
@@ -54,14 +49,18 @@ const DERIVATION_PATH_LEN: usize = 5;
 // DERIVATION_PATH_LEN without the BIP44 and COIN as they are the same for all
 const COMPRESSED_DERIVATION_PATH_LEN: usize = 3;
 
+// we try to save a few bytes instead of using usize for indexes,
+// u32 is enough to cover max possible number of inputs and outputs
+type Index = u32;
+
 pub struct InputCompressed {
     pub path: [u32; COMPRESSED_DERIVATION_PATH_LEN],
-    pub input_idx: u32,
-    pub multisig_idx: Option<u32>,
+    pub input_idx: Index,
+    pub multisig_idx: Option<Index>,
 }
 
 impl InputCompressed {
-    fn new(addr: InputAddressPath, input_idx: u32, coin: PCoinType) -> Result<Self, StatusWord> {
+    fn new(addr: InputAddressPath, input_idx: Index, coin: PCoinType) -> Result<Self, StatusWord> {
         let path = addr.path.as_ref();
         if path.len() != DERIVATION_PATH_LEN {
             return Err(StatusWord::TxInvalidInputPath);
@@ -85,38 +84,14 @@ impl InputCompressed {
     }
 }
 
-#[derive(PartialEq, Eq)]
-enum TxParsingState {
-    Input(u32),
-    InputCommitment {
-        inp_idx: u32,
-        input_commitments_hash: [u8; 64],
-    },
-    Output(u32),
-    CompleteNotApproved {
-        inp_idx: u32,
-        sighash: H256,
-    },
-    ApprovedNotFinishedSigning {
-        inp_idx: u32,
-        sighash: H256,
-    },
-    Finished,
-}
-
-#[derive(PartialEq, Eq)]
-pub enum NextTxOutputParsingState {
-    Output(u32),
-    CompleteNotApproved { inp_idx: u32, sighash: H256 },
-}
-
-pub struct TxContext {
-    raw_buf: Vec<u8>,
+pub struct TxMetadata {
     coin: PCoinType,
-    num_inputs: u32,
-    num_outputs: u32,
-    review_finished: bool,
-    state: TxParsingState,
+    num_inputs: Index,
+    num_outputs: Index,
+}
+
+pub struct TxParsingInputsContext {
+    metadata: TxMetadata,
 
     tx_hasher: Blake2b_512,
     input_commitments_hasher: Blake2b_512,
@@ -125,42 +100,230 @@ pub struct TxContext {
     inputs: Vec<InputCompressed>,
 
     spinner: NbglSpinner,
+
+    num_inputs_parsed: Index,
 }
 
-pub enum Review {
-    Review(Vec<TxOutput>),
-    StreamingReview(NbglStreamingReview),
+pub struct TxParsingInputCommitmentsContext {
+    metadata: TxMetadata,
+
+    tx_hasher: Blake2b_512,
+    input_commitments_hasher: Blake2b_512,
+    input_commitments_hash: [u8; 64],
+
+    summary: TxSummaryCollector,
+    inputs: Vec<InputCompressed>,
+
+    spinner: NbglSpinner,
+
+    num_inputs_parsed: Index,
 }
 
-pub enum SigningState<'a> {
-    StreamingReviewStart(&'a NbglStreamingReview),
-    StreamingReviewOutput(&'a NbglStreamingReview, TxOutput),
-    StreamingReviewApprove {
+impl TxParsingInputCommitmentsContext {
+    fn advance_next_input_additional_info_step<'a>(
+        mut self,
         review: &'a NbglStreamingReview,
-        output: TxOutput,
-        inp_idx: u32,
-        sighash: H256,
-    },
-    TxParsingNotComplete,
-    CompleteNotApproved {
-        inp_idx: u32,
-        sighash: H256,
-        outputs: &'a [TxOutput],
-    },
-    ApprovedNotFinishedSigning {
-        inp_idx: u32,
-        sighash: H256,
-    },
+    ) -> Result<TxParsingContext, StatusWord> {
+        let finished_with_inputs = self.num_inputs_parsed >= (self.metadata.num_inputs - 1);
+
+        if finished_with_inputs {
+            // Make sure the hashes match before continuing with the outputs
+            let mut input_commitments_hash: [u8; 64] = [0u8; 64];
+            self.input_commitments_hasher
+                .finalize(&mut input_commitments_hash)
+                .map_err(|_| StatusWord::TxHashFail)?;
+
+            if input_commitments_hash != self.input_commitments_hash {
+                return Err(StatusWord::DifferentInputCommitmentHash);
+            }
+
+            if !ui_start_streaming_review(review) {
+                return Err(StatusWord::Deny);
+            }
+
+            if let Some(command) = self.summary.input_command() {
+                if !ui_streaming_review_show_input(review, command, self.metadata.coin)? {
+                    return Err(StatusWord::Deny);
+                }
+            }
+
+            self.tx_hasher
+                .update(&encode_as_compact(self.metadata.num_outputs))
+                .map_err(|_| StatusWord::TxHashFail)?;
+            let new_context = TxParsingContext::ParsingOutputs(TxParsingOutputsContext {
+                metadata: self.metadata,
+
+                tx_hasher: self.tx_hasher,
+
+                summary: self.summary,
+                inputs: self.inputs,
+
+                spinner: self.spinner,
+
+                num_outputs_parsed: 0,
+            });
+            Ok(new_context)
+        } else {
+            self.num_inputs_parsed = self.num_inputs_parsed + 1;
+            Ok(TxParsingContext::ParsingInputCommitments(self))
+        }
+    }
 }
 
-impl TxContext {
+impl TxParsingInputsContext {
+    fn advance_next_input_step(mut self) -> Result<TxParsingContext, StatusWord> {
+        let finished_with_inputs = self.num_inputs_parsed >= (self.metadata.num_inputs - 1);
+
+        if finished_with_inputs {
+            // Update hash for input commitments and proceed with outputs
+            self.tx_hasher
+                .update(&self.metadata.num_inputs.to_le_bytes())
+                .map_err(|_| StatusWord::TxHashFail)?;
+
+            let mut input_commitments_hash: [u8; 64] = [0u8; 64];
+            self.input_commitments_hasher
+                .finalize(&mut input_commitments_hash)
+                .map_err(|_| StatusWord::TxHashFail)?;
+
+            Ok(TxParsingContext::ParsingInputCommitments(
+                TxParsingInputCommitmentsContext {
+                    metadata: self.metadata,
+                    tx_hasher: self.tx_hasher,
+                    input_commitments_hasher: Blake2b_512::new(),
+                    input_commitments_hash,
+                    summary: self.summary,
+                    inputs: self.inputs,
+                    spinner: self.spinner,
+                    num_inputs_parsed: self.num_inputs_parsed,
+                },
+            ))
+        } else {
+            self.num_inputs_parsed = self.num_inputs_parsed + 1;
+            Ok(TxParsingContext::ParsingInputs(self))
+        }
+    }
+}
+
+pub struct TxParsingOutputsContext {
+    metadata: TxMetadata,
+
+    tx_hasher: Blake2b_512,
+
+    summary: TxSummaryCollector,
+    inputs: Vec<InputCompressed>,
+
+    spinner: NbglSpinner,
+
+    num_outputs_parsed: Index,
+}
+
+impl TxParsingOutputsContext {
+    pub fn coin(&self) -> PCoinType {
+        self.metadata.coin
+    }
+
+    pub fn summary(&self) -> &TxSummaryCollector {
+        &self.summary
+    }
+
+    fn advance_next_output_state<'a>(
+        mut self,
+        review: &'a NbglStreamingReview,
+        output: &TxOutput,
+    ) -> Result<TxParsingContext, StatusWord> {
+        if self.num_outputs_parsed < (self.metadata.num_outputs - 1) {
+            self.num_outputs_parsed = self.num_outputs_parsed + 1;
+            Ok(TxParsingContext::ParsingOutputs(self))
+        } else {
+            // Finalize the tx hash for signing
+            let mut message_hash: [u8; 64] = [0u8; 64];
+            self.tx_hasher
+                .finalize(&mut message_hash)
+                .map_err(|_| StatusWord::TxHashFail)?;
+
+            let tx_hash = mintlayer_hash(&message_hash[0..32])?;
+
+            if ui_approve_streaming_review(review, output, &self)? {
+                Ok(TxParsingContext::Signing(TxSigningContext {
+                    metadata: self.metadata,
+                    inputs: self.inputs,
+                    spinner: self.spinner,
+                    num_inputs_signed: 0,
+                    tx_hash,
+                }))
+            } else {
+                Err(StatusWord::Deny)
+            }
+        }
+    }
+}
+
+pub struct TxSigningContext {
+    metadata: TxMetadata,
+    tx_hash: H256,
+
+    inputs: Vec<InputCompressed>,
+
+    spinner: NbglSpinner,
+
+    num_inputs_signed: Index,
+}
+
+impl TxSigningContext {
+    fn compute_signature_and_append(
+        mut self,
+    ) -> Result<(TxInputSignatureResponse, TxParsingContext), StatusWord> {
+        let address = self
+            .inputs
+            .get(self.num_inputs_signed as usize)
+            .ok_or(StatusWord::WrongContext)?;
+
+        let [p1, p2, p3] = address.path;
+        let addr = [BIP44, self.metadata.coin.bip44_coin_type(), p1, p2, p3];
+
+        let private_key = Secp256k1::derive_from_path(&addr);
+        let sig = schnorr_sign(&private_key, self.tx_hash.as_bytes())?;
+
+        let signature = Signature(sig);
+        let input_idx = address.input_idx;
+        let multisig_idx = address.multisig_idx;
+
+        let has_next = ((self.num_inputs_signed + 1) as usize) < self.inputs.len();
+
+        let response = TxInputSignatureResponse {
+            signature,
+            multisig_idx,
+            input_idx,
+            has_next,
+        };
+
+        let new_ctx = if has_next {
+            self.num_inputs_signed = self.num_inputs_signed + 1;
+            TxParsingContext::Signing(self)
+        } else {
+            TxParsingContext::Finished
+        };
+
+        Ok((response, new_ctx))
+    }
+}
+
+pub enum TxParsingContext {
+    ParsingInputs(TxParsingInputsContext),
+    ParsingInputCommitments(TxParsingInputCommitmentsContext),
+    ParsingOutputs(TxParsingOutputsContext),
+    Signing(TxSigningContext),
+    Finished,
+}
+
+impl TxParsingContext {
     pub fn from_v1(
         coin: CoinType,
         TxMetadataV1Req {
             num_inputs,
             num_outputs,
         }: TxMetadataV1Req,
-    ) -> Result<TxContext, StatusWord> {
+    ) -> Result<Self, StatusWord> {
         const VERSION_1: u8 = 1;
         let mut tx_hasher = Blake2b_512::new();
         // mode
@@ -176,463 +339,155 @@ impl TxContext {
             .update(&[0; 16])
             .map_err(|_| StatusWord::TxHashFail)?;
 
-        Ok(TxContext {
-            coin: coin.into(),
-            raw_buf: Vec::with_capacity(251),
-            num_inputs,
-            num_outputs,
-            review_finished: false,
+        tx_hasher
+            .update(&num_inputs.to_le_bytes())
+            .map_err(|_| StatusWord::TxHashFail)?;
+
+        Ok(Self::ParsingInputs(TxParsingInputsContext {
+            metadata: TxMetadata {
+                coin: coin.into(),
+                num_inputs,
+                num_outputs,
+            },
             tx_hasher,
-            input_commitments_hasher: Blake2b_512::new(),
-            state: TxParsingState::Input(0),
-            summary: TxSummaryCollector::new(),
-            inputs: Vec::with_capacity(20),
             spinner: NbglSpinner::new(),
-        })
+            summary: TxSummaryCollector::new(),
+            num_inputs_parsed: 0,
+            input_commitments_hasher: Blake2b_512::new(),
+            inputs: Vec::new(),
+        }))
     }
 
-    pub fn coin(&self) -> PCoinType {
-        self.coin
-    }
-
-    pub fn summary(&self) -> &TxSummaryCollector {
-        &self.summary
-    }
-
-    pub fn summary_mut(&mut self) -> &mut TxSummaryCollector {
-        &mut self.summary
-    }
-
-    pub fn tx_type(&self) -> Option<TxType> {
-        self.summary.tx_type()
-    }
-
-    pub fn total_inputs(&self) -> &BTreeMap<CoinOrTokenId, Amount> {
-        self.summary.total_inputs()
-    }
-
-    pub fn total_outputs(&self) -> &BTreeMap<CoinOrTokenId, Amount> {
-        self.summary.total_outputs()
-    }
-
-    fn state(&self) -> &TxParsingState {
-        &self.state
-    }
-
-    fn update_hash<T: Encode>(&mut self, data: &T) -> Result<(), StatusWord> {
-        update_hash(&mut self.raw_buf, data, &mut self.tx_hasher)
-    }
-
-    fn update_input_commitments_hash<T: Encode>(&mut self, data: &T) -> Result<(), StatusWord> {
-        update_hash(&mut self.raw_buf, data, &mut self.input_commitments_hasher)
-    }
-
-    fn completed_all_signatures(&self) -> bool {
-        self.state == TxParsingState::Finished
-    }
-
-    // Get review status
-    #[allow(dead_code)]
-    pub fn finished(&self) -> bool {
-        self.review_finished
-    }
-
-    fn advance_next_input_step<'a>(
-        &mut self,
-        current_input_step: u32,
-    ) -> Result<SigningState<'a>, StatusWord> {
-        let finished_with_inputs = current_input_step >= (self.num_inputs - 1);
-
-        self.state = if finished_with_inputs {
-            // Update hash for input commitments and proceed with outputs
-            self.tx_hasher
-                .update(&self.num_inputs.to_le_bytes())
-                .map_err(|_| StatusWord::TxHashFail)?;
-
-            let mut input_commitments_hash: [u8; 64] = [0u8; 64];
-            self.input_commitments_hasher
-                .finalize(&mut input_commitments_hash)
-                .map_err(|_| StatusWord::TxHashFail)?;
-
-            self.input_commitments_hasher = Blake2b_512::new();
-
-            TxParsingState::InputCommitment {
-                inp_idx: 0,
-                input_commitments_hash,
-            }
-        } else {
-            TxParsingState::Input(current_input_step + 1)
-        };
-
-        Ok(SigningState::TxParsingNotComplete)
-    }
-
-    fn advance_next_input_additional_info_step<'a>(
-        &mut self,
-        current_input_step: u32,
-        expected_input_commitments_hash: [u8; 64],
-        review: &'a Review,
-    ) -> Result<SigningState<'a>, StatusWord> {
-        let finished_with_inputs = current_input_step >= (self.num_inputs - 1);
-
-        let signing_state = if finished_with_inputs {
-            // Make sure the hashes match before continuing with the outputs
-            let mut input_commitments_hash: [u8; 64] = [0u8; 64];
-            self.input_commitments_hasher
-                .finalize(&mut input_commitments_hash)
-                .map_err(|_| StatusWord::TxHashFail)?;
-
-            if input_commitments_hash != expected_input_commitments_hash {
-                return Err(StatusWord::DifferentInputCommitmentHash);
-            }
-
-            self.state = TxParsingState::Output(0);
-
-            match review {
-                Review::Review(_) => SigningState::TxParsingNotComplete,
-                Review::StreamingReview(review) => SigningState::StreamingReviewStart(review),
-            }
-        } else {
-            self.state = TxParsingState::InputCommitment {
-                inp_idx: current_input_step + 1,
-                input_commitments_hash: expected_input_commitments_hash,
-            };
-            SigningState::TxParsingNotComplete
-        };
-
-        Ok(signing_state)
-    }
-
-    // After processing an output advance the internal state
-    fn advance_next_output_state(
-        &mut self,
-        n: u32,
-    ) -> Result<NextTxOutputParsingState, StatusWord> {
-        let next_state = if n < (self.num_outputs - 1) {
-            NextTxOutputParsingState::Output(n + 1)
-        } else {
-            let inp_idx = 0;
-            // Finalize the tx hash for signing
-            let mut message_hash: [u8; 64] = [0u8; 64];
-            self.tx_hasher
-                .finalize(&mut message_hash)
-                .map_err(|_| StatusWord::TxHashFail)?;
-
-            let message_hash2 = mintlayer_hash(&message_hash[0..32])?;
-
-            NextTxOutputParsingState::CompleteNotApproved {
-                inp_idx,
-                sighash: message_hash2,
-            }
-        };
-
-        self.state = match next_state {
-            NextTxOutputParsingState::Output(out) => TxParsingState::Output(out),
-            NextTxOutputParsingState::CompleteNotApproved { inp_idx, sighash } => {
-                TxParsingState::CompleteNotApproved { inp_idx, sighash }
-            }
-        };
-
-        Ok(next_state)
-    }
-
-    // After processing a signature advance the internal state
-    fn advance_next_signing_step(&mut self, inp_idx: u32, sighash: &H256) {
-        self.state = if ((inp_idx + 1) as usize) < self.inputs.len() {
-            TxParsingState::ApprovedNotFinishedSigning {
-                inp_idx: inp_idx + 1,
-                sighash: *sighash,
-            }
-        } else {
-            TxParsingState::Finished
-        };
-    }
-
-    // show a spinner for bigger transactions
+    /// Shows a spinner while processing the inputs and input commitments if there are more than a few
+    /// as well as while signing and returning the signatures.
     pub fn show_spinner(&mut self) {
-        let is_transaction_big = self.num_inputs * 2 + self.num_outputs > 10;
-        let returning_signatures = match self.state {
-            TxParsingState::ApprovedNotFinishedSigning {
-                inp_idx: _,
-                sighash: _,
+        let (metadata, spinner) = match self {
+            Self::ParsingInputs(ctx) => (&ctx.metadata, &mut ctx.spinner),
+            Self::ParsingInputCommitments(ctx) => (&ctx.metadata, &mut ctx.spinner),
+            Self::Signing(ctx) => {
+                ctx.spinner.show("Signing...");
+                return;
             }
-            | TxParsingState::CompleteNotApproved {
-                inp_idx: _,
-                sighash: _,
-            } => true,
-            TxParsingState::Input(_)
-            | TxParsingState::InputCommitment {
-                inp_idx: _,
-                input_commitments_hash: _,
-            }
-            | TxParsingState::Finished
-            | TxParsingState::Output(_) => false,
+            // While parsing outputs we are showing the review and not the spinner
+            Self::ParsingOutputs(_) | Self::Finished => return,
         };
 
-        if returning_signatures && self.num_inputs > 1 {
-            self.spinner.show("Signing...");
-        } else if is_transaction_big {
-            self.spinner.show("Parsing transaction...");
+        // We show a spinner while processing the inputs and input commitments if there are more than 5
+        // 5 was chosen somewhat arbitrarily
+        let transaction_has_many_inputs = metadata.num_inputs > 5;
+
+        if transaction_has_many_inputs {
+            spinner.show("Parsing transaction...");
+        }
+    }
+
+    pub fn finished(&self) -> bool {
+        match self {
+            Self::Finished => true,
+            _ => false,
         }
     }
 }
 
-pub fn setup_sign_tx(req: TxMetadataReq, ctx: &mut DataContext) -> Result<(), StatusWord> {
+pub fn setup_sign_tx(req: TxMetadataReq) -> Result<DataContext, StatusWord> {
     let mut tx_ctx = match req.version {
-        TxMetadataVersionReq::V1(v1_req) => TxContext::from_v1(req.coin, v1_req)?,
+        TxMetadataVersionReq::V1(v1_req) => TxParsingContext::from_v1(req.coin, v1_req)?,
     };
 
     tx_ctx.show_spinner();
 
-    // if the tx has many outputs use a streaming review
-    if tx_ctx.num_outputs > 10 {
-        *ctx = DataContext::TxContext(tx_ctx, Review::StreamingReview(new_streaming_review()));
-    } else {
-        *ctx = DataContext::TxContext(tx_ctx, Review::Review(Vec::new()));
-    }
-
-    Ok(())
+    Ok(DataContext::TxContext(tx_ctx, ui_new_streaming_review()))
 }
 
-fn handle_input_commitment_req<'a>(
-    req: SighashInputCommitment,
-    input_step: u32,
-    input_commitments_hash: [u8; 64],
-    ctx: &mut TxContext,
-    review: &'a mut Review,
-) -> Result<SigningState<'a>, StatusWord> {
-    ctx.update_input_commitments_hash(&req)?;
-    ctx.update_hash(&req)?;
-    ctx.advance_next_input_additional_info_step(input_step, input_commitments_hash, review)
-}
-
-fn handle_input_req<'a>(
+fn handle_input_req(
     req: TxInputReq,
-    input_step: u32,
-    ctx: &mut TxContext,
-) -> Result<SigningState<'a>, StatusWord> {
-    let addresses = req
+    mut ctx: TxParsingInputsContext,
+) -> Result<TxParsingContext, StatusWord> {
+    let num_inputs_parsed = ctx.num_inputs_parsed;
+    let compressed_inputs = req
         .addresses
         .into_iter()
-        .map(|a| InputCompressed::new(a, input_step, ctx.coin))
+        .map(|a| InputCompressed::new(a, num_inputs_parsed, ctx.metadata.coin))
         .collect::<Result<Vec<_>, StatusWord>>()?;
-    ctx.inputs.extend(addresses);
+    ctx.inputs.extend(compressed_inputs);
 
     ctx.summary.process_input(&req.inp)?;
 
     let (input, commitment) = req.inp.into_input_and_commitment();
-    ctx.update_input_commitments_hash(&commitment)?;
+    update_hash(&commitment, &mut ctx.input_commitments_hasher)?;
+    update_hash(&input, &mut ctx.tx_hasher)?;
+    ctx.advance_next_input_step()
+}
 
-    if input_step == 0 {
-        ctx.tx_hasher
-            .update(&ctx.num_inputs.to_le_bytes())
-            .map_err(|_| StatusWord::TxHashFail)?;
-    }
-    ctx.update_hash(&input)?;
-    ctx.advance_next_input_step(input_step)
+fn handle_input_commitment_req<'a>(
+    req: SighashInputCommitment,
+    mut ctx: TxParsingInputCommitmentsContext,
+    review: &'a NbglStreamingReview,
+) -> Result<TxParsingContext, StatusWord> {
+    update_hash(&req, &mut ctx.input_commitments_hasher)?;
+    update_hash(&req, &mut ctx.tx_hasher)?;
+    ctx.advance_next_input_additional_info_step(review)
 }
 
 fn handle_output_req<'a>(
     req: TxOutputReq,
-    output_step: u32,
-    ctx: &mut TxContext,
-    review: &'a mut Review,
-) -> Result<SigningState<'a>, StatusWord> {
-    ctx.summary.process_output(&req.out)?;
-    // on the first output add the number of outputs to the hash
-    if output_step == 0 {
-        ctx.tx_hasher
-            .update(&encode_as_compact(ctx.num_outputs))
-            .map_err(|_| StatusWord::TxHashFail)?;
+    mut ctx: TxParsingOutputsContext,
+    review: &'a NbglStreamingReview,
+) -> Result<TxParsingContext, StatusWord> {
+    if ui_streaming_review_show_output(review, &req.out, ctx.metadata.coin)? {
+        ctx.summary.process_output(&req.out)?;
+        update_hash(&req.out, &mut ctx.tx_hasher)?;
+        ctx.advance_next_output_state(review, &req.out)
+    } else {
+        Err(StatusWord::Deny)
     }
-    ctx.update_hash(&req.out)?;
-    let next_step = ctx.advance_next_output_state(output_step)?;
-    let signin_state = match review {
-        Review::Review(outputs) => {
-            outputs.push(req.out);
-            match next_step {
-                NextTxOutputParsingState::Output(_) => SigningState::TxParsingNotComplete,
-                NextTxOutputParsingState::CompleteNotApproved { inp_idx, sighash } => {
-                    SigningState::CompleteNotApproved {
-                        inp_idx,
-                        sighash,
-                        outputs,
-                    }
-                }
-            }
-        }
-        Review::StreamingReview(review) => {
-            // on last output show it and ask for approval
-            match next_step {
-                NextTxOutputParsingState::Output(_) => {
-                    SigningState::StreamingReviewOutput(review, req.out)
-                }
-                NextTxOutputParsingState::CompleteNotApproved { inp_idx, sighash } => {
-                    SigningState::StreamingReviewApprove {
-                        review,
-                        output: req.out,
-                        inp_idx,
-                        sighash,
-                    }
-                }
-            }
-        }
-    };
-
-    Ok(signin_state)
 }
 
 pub fn handle_sign_tx(
     req: SignTxReq,
-    ctx: &mut TxContext,
-    review: &mut Review,
-) -> Result<Response, StatusWord> {
-    let signing_state = match (req, ctx.state()) {
-        (SignTxReq::Input(req), TxParsingState::Input(n)) => handle_input_req(req, *n, ctx)?,
-        (
-            SignTxReq::InputCommitment(req),
-            TxParsingState::InputCommitment {
-                inp_idx,
-                input_commitments_hash,
-            },
-        ) => handle_input_commitment_req(req, *inp_idx, *input_commitments_hash, ctx, review)?,
-        (SignTxReq::Output(req), TxParsingState::Output(n)) => {
-            handle_output_req(req, *n, ctx, review)?
+    ctx: TxParsingContext,
+    review: &mut NbglStreamingReview,
+) -> Result<(Response, TxParsingContext), StatusWord> {
+    let new_ctx = match (req, ctx) {
+        (SignTxReq::Input(req), TxParsingContext::ParsingInputs(ctx)) => {
+            handle_input_req(req, ctx)?
         }
-        (
-            SignTxReq::NextSignature,
-            TxParsingState::ApprovedNotFinishedSigning { inp_idx, sighash },
-        ) => SigningState::ApprovedNotFinishedSigning {
-            inp_idx: *inp_idx,
-            sighash: *sighash,
-        },
-        (
-            SignTxReq::NextSignature,
-            TxParsingState::CompleteNotApproved {
-                inp_idx: _,
-                sighash: _,
-            },
-        ) => return Err(StatusWord::Deny),
-        (SignTxReq::NextSignature, TxParsingState::Finished) => {
+        (SignTxReq::InputCommitment(req), TxParsingContext::ParsingInputCommitments(ctx)) => {
+            handle_input_commitment_req(req, ctx, review)?
+        }
+        (SignTxReq::Output(req), TxParsingContext::ParsingOutputs(ctx)) => {
+            handle_output_req(req, ctx, review)?
+        }
+        (SignTxReq::NextSignature, TxParsingContext::Signing(ctx)) => {
+            TxParsingContext::Signing(ctx)
+        }
+        (SignTxReq::NextSignature, TxParsingContext::Finished) => {
             return Err(StatusWord::TxAlreadyFinished)
         }
-        (_, _) => return Err(StatusWord::WrongP1P2),
+        _ => return Err(StatusWord::WrongP1P2),
     };
 
-    match signing_state {
-        SigningState::TxParsingNotComplete => Ok(Response::TxNext),
-        SigningState::StreamingReviewStart(review) => {
-            if start_streaming_review(review) {
-                Ok(Response::TxNext)
-            } else {
-                ctx.review_finished = true;
-                Err(StatusWord::Deny)
-            }
+    let new_ctx = match new_ctx {
+        ctx @ (TxParsingContext::ParsingInputs(_)
+        | TxParsingContext::Finished
+        | TxParsingContext::ParsingInputCommitments(_)
+        | TxParsingContext::ParsingOutputs(_)) => ctx,
+        TxParsingContext::Signing(ctx) => {
+            let (response, mut new_ctx) = ctx.compute_signature_and_append()?;
+            new_ctx.show_spinner();
+
+            return Ok((Response::TxSignature(response), new_ctx));
         }
-        SigningState::StreamingReviewOutput(review, output) => {
-            if streaming_review_show_output(review, &output, ctx.coin)? {
-                Ok(Response::TxNext)
-            } else {
-                ctx.review_finished = true;
-                Err(StatusWord::Deny)
-            }
-        }
-        SigningState::StreamingReviewApprove {
-            review,
-            output,
-            inp_idx,
-            sighash,
-        } => {
-            if approve_streaming_review(review, &output, ctx)? {
-                let response = compute_signature_and_append(ctx, inp_idx, &sighash)?;
-                if ctx.completed_all_signatures() {
-                    ctx.review_finished = true;
-                } else {
-                    ctx.show_spinner();
-                }
-                Ok(Response::TxSignature(response))
-            } else {
-                ctx.review_finished = true;
-                Err(StatusWord::Deny)
-            }
-        }
-        SigningState::CompleteNotApproved {
-            inp_idx,
-            sighash,
-            outputs,
-        } => {
-            // Display transaction. If user approves the transaction, sign it.
-            // Otherwise, return a "deny" status word.
-            if ui_display_tx(ctx, outputs)? {
-                let response = compute_signature_and_append(ctx, inp_idx, &sighash)?;
-                if ctx.completed_all_signatures() {
-                    ctx.review_finished = true;
-                } else {
-                    ctx.show_spinner();
-                }
-
-                Ok(Response::TxSignature(response))
-            } else {
-                ctx.review_finished = true;
-                Err(StatusWord::Deny)
-            }
-        }
-        SigningState::ApprovedNotFinishedSigning { inp_idx, sighash } => {
-            // Already approved sign and return the next signature
-            let response = compute_signature_and_append(ctx, inp_idx, &sighash)?;
-            if ctx.completed_all_signatures() {
-                ctx.review_finished = true;
-            } else {
-                ctx.show_spinner();
-            }
-
-            Ok(Response::TxSignature(response))
-        }
-    }
-}
-
-
-fn compute_signature_and_append(
-    ctx: &mut TxContext,
-    inp_idx: u32,
-    sighash: &H256,
-) -> Result<TxInputSignatureResponse, StatusWord> {
-    let address = ctx
-        .inputs
-        .get(inp_idx as usize)
-        .ok_or(StatusWord::WrongContext)?;
-
-    let [p1, p2, p3] = address.path;
-    let addr = [BIP44, ctx.coin.bip44_coin_type(), p1, p2, p3];
-
-    let private_key = Secp256k1::derive_from_path(&addr);
-    let sig = schnorr_sign(&private_key, sighash.as_bytes())?;
-
-    let signature = Signature(sig);
-    let input_idx = address.input_idx;
-    let multisig_idx = address.multisig_idx;
-
-    ctx.advance_next_signing_step(inp_idx, sighash);
-    let response = TxInputSignatureResponse {
-        signature,
-        multisig_idx,
-        input_idx,
-        has_next: ctx.state != TxParsingState::Finished,
     };
 
-    Ok(response)
+    Ok((Response::TxNext, new_ctx))
 }
 
-fn update_hash<T: Encode>(
-    raw_buf: &mut Vec<u8>,
-    data: &T,
-    hasher: &mut Blake2b_512,
-) -> Result<(), StatusWord> {
-    raw_buf.clear();
-    encode_to(data, raw_buf);
+fn update_hash<T: Encode>(data: &T, hasher: &mut Blake2b_512) -> Result<(), StatusWord> {
+    let mut buf = Vec::<u8>::new();
+    encode_to(data, &mut buf);
     hasher
-        .update(raw_buf.as_slice())
+        .update(buf.as_slice())
         .map_err(|_| StatusWord::TxHashFail)?;
-    raw_buf.clear();
     Ok(())
 }

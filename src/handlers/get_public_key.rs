@@ -21,11 +21,14 @@ use messages::{mlcp::CoinType, ChainCode, GetPublicKeyResponse, PublicKey, Publi
 
 use ledger_device_sdk::ecc::{Secp256k1, SeedDerive};
 
+// Path should be at least [bip44, coin_type, account_index]
+const MIN_PATH_LEN: usize = 3;
+
 pub fn handle_get_public_key(
     req: PublicKeyReq,
     display: bool,
 ) -> Result<GetPublicKeyResponse, StatusWord> {
-    if req.path.as_ref().len() < 3 {
+    if req.path.as_ref().len() < MIN_PATH_LEN {
         return Err(StatusWord::InvalidPath);
     }
     let coin_type: CoinType = req.coin_type.into();

@@ -40,14 +40,14 @@ use alloc::vec::Vec;
 
 use ledger_device_sdk::{
     io::{ApduHeader, Comm, Reply},
-    nbgl::{init_comm, NbglHomeAndSettings, NbglReviewStatus, StatusType},
+    nbgl::{init_comm, NbglHomeAndSettings, NbglReviewStatus, NbglStreamingReview, StatusType},
 };
 
 use app_ui::menu::ui_menu_main;
 use handlers::{
     get_public_key::handle_get_public_key,
     sign_message::{handle_sign_message, setup_sign_message, SignMessageContext},
-    sign_tx::{setup_sign_tx, Review, TxContext},
+    sign_tx::{setup_sign_tx, TxParsingContext},
 };
 use messages::{
     decode_all, encode, Ins, PubKeyP1, Response, SignP1, StatusWord, APDU_CLASS, MAX_ADPU_DATA_LEN,
@@ -100,7 +100,11 @@ impl ApduTransport {
 
         // Validation: If we are in the middle of a stream, INS and P1 must match
         if let (Some(curr_ins), Some(curr_p1)) = (self.current_ins, self.current_p1) {
-            if header.ins != curr_ins || header.p1 != curr_p1 {
+            if header.ins != curr_ins {
+                self.reset();
+                return Err(StatusWord::WrongInstruction);
+            }
+            if header.p1 != curr_p1 {
                 self.reset();
                 return Err(StatusWord::WrongP1P2);
             }
@@ -172,7 +176,7 @@ impl TryFrom<RawInstruction> for Command {
     }
 }
 
-fn show_status_and_home_if_needed(cmd: &Command, ctx: &mut Context, status: &StatusWord) {
+fn show_status_and_home_if_needed(cmd: &Command, ctx: &mut AppContext, status: &StatusWord) {
     let (show_status, status_type) = match (cmd, status) {
         (Command::GetPubkey { p1, .. }, StatusWord::Deny | StatusWord::Ok) if p1.display() => {
             (true, StatusType::Address)
@@ -202,30 +206,28 @@ fn show_status_and_home_if_needed(cmd: &Command, ctx: &mut Context, status: &Sta
 }
 
 pub enum DataContext {
-    Empty,
-    TxContext(TxContext, Review),
+    TxContext(TxParsingContext, NbglStreamingReview),
     SignMessageContext(SignMessageContext),
 }
 
-struct Context {
-    pub data: DataContext,
+struct AppContext {
+    pub data_context: Option<DataContext>,
     pub home: NbglHomeAndSettings,
 }
 
-impl Context {
+impl AppContext {
     fn new() -> Self {
         Self {
-            data: DataContext::Empty,
+            data_context: None,
             home: Default::default(),
         }
     }
 
     fn finished(&self) -> bool {
-        match &self.data {
-            DataContext::Empty => false,
+        self.data_context.as_ref().is_some_and(|ctx| match ctx {
             DataContext::SignMessageContext(ctx) => ctx.finished(),
             DataContext::TxContext(ctx, _) => ctx.finished(),
-        }
+        })
     }
 }
 
@@ -233,7 +235,7 @@ impl Context {
 extern "C" fn sample_main() {
     let mut comm = Comm::new().set_expected_cla(APDU_CLASS);
 
-    let mut tx_ctx = Context::new();
+    let mut tx_ctx = AppContext::new();
 
     // Initialize reference to Comm instance for NBGL API calls.
     init_comm(&mut comm);
@@ -281,7 +283,7 @@ extern "C" fn sample_main() {
     }
 }
 
-fn handle_command(cmd: &Command, ctx: &mut Context) -> Result<Response, StatusWord> {
+fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, StatusWord> {
     match cmd {
         Command::GetPubkey { p1, data } => {
             let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
@@ -290,29 +292,43 @@ fn handle_command(cmd: &Command, ctx: &mut Context) -> Result<Response, StatusWo
         Command::SignTx { p1, data } => match p1 {
             SignP1::Start => {
                 let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
-                setup_sign_tx(req, &mut ctx.data)?;
+                ctx.data_context = Some(setup_sign_tx(req)?);
                 Ok(Response::TxSetup)
             }
             SignP1::Next => {
-                let (tx_ctx, review) = match &mut ctx.data {
-                    DataContext::TxContext(c, r) => (c, r),
+                let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
+
+                let (mut tx_ctx, mut review) = match ctx.data_context.take() {
+                    Some(DataContext::TxContext(c, r)) => (c, r),
                     _ => return Err(StatusWord::WrongContext),
                 };
 
                 tx_ctx.show_spinner();
 
-                let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
-                handle_sign_tx(req, tx_ctx, review)
+                match handle_sign_tx(req, tx_ctx, &mut review) {
+                    Ok((response, new_ctx)) => {
+                        ctx.data_context = Some(DataContext::TxContext(new_ctx, review));
+                        Ok(response)
+                    }
+                    Err(sw) => {
+                        ctx.data_context = None;
+                        Err(sw)
+                    }
+                }
             }
         },
         Command::SignMessage { p1, data } => match p1 {
             SignP1::Start => {
                 let req = decode_all(&data).ok_or(StatusWord::DeserializeFail)?;
-                setup_sign_message(req, &mut ctx.data)?;
+                ctx.data_context = Some(setup_sign_message(req));
                 Ok(Response::MessageSetup)
             }
             SignP1::Next => {
-                handle_sign_message(&data, &mut ctx.data).map(Response::MessageSignature)
+                let msg_ctx = match ctx.data_context.as_mut() {
+                    Some(DataContext::SignMessageContext(ctx)) => ctx,
+                    _ => return Err(StatusWord::WrongContext),
+                };
+                handle_sign_message(&data, msg_ctx).map(Response::MessageSignature)
             }
         },
         Command::Ping => Ok(Response::Pong),
