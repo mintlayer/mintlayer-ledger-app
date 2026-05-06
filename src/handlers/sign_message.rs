@@ -20,7 +20,7 @@ use crate::{
     DataContext, StatusWord,
 };
 use messages::{
-    mlcp::CoinType, AddrType, Bip32Path, MsgSignatureResponse, SignMessageReq, Signature,
+    mlcp::CoinType, AddrType, Bip32Path, MsgSignatureResponse, SignMessageReq, SignatureResponse,
 };
 
 use alloc::vec::Vec;
@@ -94,7 +94,7 @@ fn compute_signature<const N: usize>(
     let sig = schnorr_sign(private_key, message_hash2.as_bytes())?;
 
     let response = MsgSignatureResponse {
-        signature: Signature(sig),
+        signature: SignatureResponse(sig),
     };
 
     Ok(response)

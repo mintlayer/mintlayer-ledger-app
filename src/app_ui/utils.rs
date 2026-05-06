@@ -70,7 +70,7 @@ pub fn compress_public_key<const T: char>(
     let mut compressed_key = [0u8; 33];
 
     let y_coordinate = &uncompressed_key[33..65];
-    let prefix = if y_coordinate[31] % 2 == 0 {
+    let prefix = if y_coordinate[31].is_multiple_of(2) {
         0x02
     } else {
         0x03

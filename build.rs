@@ -35,7 +35,7 @@ fn main() {
         .unwrap();
 
     let output = Command::new("git")
-        .args(&["rev-parse", "HEAD"])
+        .args(["rev-parse", "HEAD"])
         .output()
         .expect("Failed to execute git command");
 

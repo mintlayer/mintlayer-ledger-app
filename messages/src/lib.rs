@@ -269,11 +269,11 @@ pub struct GetPublicKeyResponse {
 }
 
 #[derive(Encode, Decode)]
-pub struct Signature(pub [u8; 64]);
+pub struct SignatureResponse(pub [u8; 64]);
 
 #[derive(Encode, Decode)]
 pub struct TxInputSignatureResponse {
-    pub signature: Signature,
+    pub signature: SignatureResponse,
     pub input_idx: u32,
     pub multisig_idx: Option<u32>,
     pub has_next: bool,
@@ -281,7 +281,7 @@ pub struct TxInputSignatureResponse {
 
 #[derive(Encode, Decode)]
 pub struct MsgSignatureResponse {
-    pub signature: Signature,
+    pub signature: SignatureResponse,
 }
 
 #[derive(Encode, Decode)]
@@ -416,54 +416,44 @@ pub enum StatusWord {
     // App Specific Errors (0xB...)
     #[display("Transaction display failed")]
     TxDisplayFail = 0xB000,
-    #[display("Address display failed")]
-    AddrDisplayFail = 0xB001,
+    #[display("Transaction lock time value is invalid")]
+    TxLockTimeInvalid = 0xB001,
     #[display("Transaction wrong length")]
     TxWrongLength = 0xB002,
-    #[display("Transaction parsing failed")]
-    TxParsingFail = 0xB003,
     #[display("Transaction hashing failed")]
-    TxHashFail = 0xB004,
+    TxHashFail = 0xB003,
     #[display("Transaction address failed")]
-    TxAddressFail = 0xB005,
-    #[display("Transaction signing failed")]
-    TxSignFail = 0xB006,
-    #[display("Key derivation failed")]
-    KeyDeriveFail = 0xB007,
-    #[display("Version parsing failed")]
-    VersionParsingFail = 0xB008,
-    #[display("Wrong context")]
-    WrongContext = 0xB009,
-    #[display("Deserialization failed")]
-    DeserializeFail = 0xB00A,
-    #[display("Invalid input UTXO")]
-    TxInvalidInputUtxo = 0xB00B,
-    #[display("Numeric operation failed")]
-    TxNumericOperationFail = 0xB00C,
-    #[display("Tx fee underflow")]
-    TxFeeUnderflow = 0xB00D,
-    #[display("Unsupported input")]
-    TxUnsupportedInput = 0xB00E,
-    #[display("Invalid Token V0")]
-    TxInvalidTokenV0 = 0xB00F,
-    #[display("Invalid input path")]
-    TxInvalidInputPath = 0xB010,
-    #[display("Nothing to sign")]
-    NothingToSign = 0xB011,
-    #[display("Transaction already finished")]
-    TxAlreadyFinished = 0xB012,
-    #[display("Invalid path")]
-    InvalidPath = 0xB013,
-    #[display("Invalid uncompressed public key")]
-    InvalidUncompressedPublicKey = 0xB014,
-    #[display("Max buffer length exceeded")]
-    MaxBufferLenExceeded = 0xB015,
-    #[display("Different input commitment hash")]
-    DifferentInputCommitmentHash = 0xB016,
-    #[display("Orders V0 not supported")]
-    OrdersV0NotSupported = 0xB017,
+    TxAddressFail = 0xB004,
     #[display("Different instruction than expected")]
-    WrongInstruction = 0xB018,
+    WrongInstruction = 0xB005,
+    #[display("Key derivation failed")]
+    KeyDeriveFail = 0xB006,
+    #[display("Orders V0 not supported")]
+    OrdersV0NotSupported = 0xB007,
+    #[display("Wrong context")]
+    WrongContext = 0xB008,
+    #[display("Deserialization failed")]
+    DeserializeFail = 0xB009,
+    #[display("Invalid input UTXO")]
+    TxInvalidInputUtxo = 0xB00A,
+    #[display("Numeric operation failed")]
+    TxNumericOperationFail = 0xB00B,
+    #[display("Tx fee underflow")]
+    TxFeeUnderflow = 0xB00C,
+    #[display("Invalid input path")]
+    TxInvalidInputPath = 0xB00D,
+    #[display("Nothing to sign")]
+    NothingToSign = 0xB00E,
+    #[display("Transaction already finished")]
+    TxAlreadyFinished = 0xB00F,
+    #[display("Invalid path")]
+    InvalidPath = 0xB010,
+    #[display("Invalid uncompressed public key")]
+    InvalidUncompressedPublicKey = 0xB011,
+    #[display("Max buffer length exceeded")]
+    MaxBufferLenExceeded = 0xB012,
+    #[display("Different input commitment hash")]
+    DifferentInputCommitmentHash = 0xB013,
 
     // Ecc Errors
     #[display("ECC Carry")]

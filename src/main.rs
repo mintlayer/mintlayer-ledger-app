@@ -36,7 +36,10 @@ mod errors;
 
 // Required for using String, Vec, format!...
 extern crate alloc;
-use alloc::vec::Vec;
+use alloc::{
+    vec::Vec,
+    boxed::Box
+};
 
 use ledger_device_sdk::{
     io::{ApduHeader, Comm, Reply},
@@ -80,14 +83,17 @@ pub struct ApduTransport {
     current_p1: Option<u8>,
 }
 
-impl ApduTransport {
-    pub fn new() -> Self {
+impl Default for ApduTransport {
+    fn default() -> Self {
         Self {
-            buffer: Vec::with_capacity(255), // Pre-alloc for at least one standard APDU
+            buffer: Vec::with_capacity(u8::MAX as usize), // Pre-alloc for at least one standard APDU
             current_ins: None,
             current_p1: None,
         }
     }
+}
+
+impl ApduTransport {
 
     /// Reads the next APDU from `comm`.
     ///
@@ -115,6 +121,7 @@ impl ApduTransport {
         }
 
         if self.buffer.len() + data.len() > MAX_BUFFER_LEN {
+            self.reset();
             return Err(StatusWord::MaxBufferLenExceeded);
         }
 
@@ -206,7 +213,7 @@ fn show_status_and_home_if_needed(cmd: &Command, ctx: &mut AppContext, status: &
 }
 
 pub enum DataContext {
-    TxContext(TxParsingContext, NbglStreamingReview),
+    TxContext(Box<TxParsingContext>, NbglStreamingReview),
     SignMessageContext(SignMessageContext),
 }
 
@@ -242,7 +249,7 @@ extern "C" fn sample_main() {
     tx_ctx.home = ui_menu_main();
     tx_ctx.home.show_and_return();
 
-    let mut transport = ApduTransport::new();
+    let mut transport = ApduTransport::default();
 
     loop {
         let raw_instruction = match transport.receive(&mut comm) {
@@ -305,9 +312,9 @@ fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, Statu
 
                 tx_ctx.show_spinner();
 
-                match handle_sign_tx(req, tx_ctx, &mut review) {
+                match handle_sign_tx(req, *tx_ctx, &mut review) {
                     Ok((response, new_ctx)) => {
-                        ctx.data_context = Some(DataContext::TxContext(new_ctx, review));
+                        ctx.data_context = Some(DataContext::TxContext(Box::new(new_ctx), review));
                         Ok(response)
                     }
                     Err(sw) => {
@@ -319,7 +326,7 @@ fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, Statu
         },
         Command::SignMessage { p1, data } => match p1 {
             SignP1::Start => {
-                let req = decode_all(&data).ok_or(StatusWord::DeserializeFail)?;
+                let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
                 ctx.data_context = Some(setup_sign_message(req));
                 Ok(Response::MessageSetup)
             }
@@ -328,7 +335,7 @@ fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, Statu
                     Some(DataContext::SignMessageContext(ctx)) => ctx,
                     _ => return Err(StatusWord::WrongContext),
                 };
-                handle_sign_message(&data, msg_ctx).map(Response::MessageSignature)
+                handle_sign_message(data, msg_ctx).map(Response::MessageSignature)
             }
         },
         Command::Ping => Ok(Response::Pong),

@@ -15,7 +15,10 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use alloc::vec::Vec;
+use alloc::{
+    vec::Vec,
+    boxed::Box,
+};
 
 use crate::{
     app_ui::sign::{
@@ -28,7 +31,7 @@ use crate::{
 use messages::{
     encode_as_compact, encode_to,
     mlcp::{CoinType as PCoinType, SighashInputCommitment, TxOutput, H256},
-    CoinType, Encode, InputAddressPath, Response, SignTxReq, Signature, TxInputReq,
+    CoinType, Encode, InputAddressPath, Response, SignTxReq, SignatureResponse, TxInputReq,
     TxInputSignatureResponse, TxMetadataReq, TxMetadataV1Req, TxMetadataVersionReq, TxOutputReq,
 };
 
@@ -120,9 +123,9 @@ pub struct TxParsingInputCommitmentsContext {
 }
 
 impl TxParsingInputCommitmentsContext {
-    fn advance_next_input_additional_info_step<'a>(
+    fn advance_next_input_additional_info_step(
         mut self,
-        review: &'a NbglStreamingReview,
+        review: &NbglStreamingReview,
     ) -> Result<TxParsingContext, StatusWord> {
         let finished_with_inputs = self.num_inputs_parsed >= (self.metadata.num_inputs - 1);
 
@@ -164,7 +167,7 @@ impl TxParsingInputCommitmentsContext {
             });
             Ok(new_context)
         } else {
-            self.num_inputs_parsed = self.num_inputs_parsed + 1;
+            self.num_inputs_parsed += 1;
             Ok(TxParsingContext::ParsingInputCommitments(self))
         }
     }
@@ -172,9 +175,14 @@ impl TxParsingInputCommitmentsContext {
 
 impl TxParsingInputsContext {
     fn advance_next_input_step(mut self) -> Result<TxParsingContext, StatusWord> {
-        let finished_with_inputs = self.num_inputs_parsed >= (self.metadata.num_inputs - 1);
+        self.num_inputs_parsed += 1;
+        let finished_with_inputs = self.num_inputs_parsed >= self.metadata.num_inputs;
 
         if finished_with_inputs {
+            if self.inputs.is_empty() {
+                return Err(StatusWord::NothingToSign);
+            }
+
             // Update hash for input commitments and proceed with outputs
             self.tx_hasher
                 .update(&self.metadata.num_inputs.to_le_bytes())
@@ -198,7 +206,6 @@ impl TxParsingInputsContext {
                 },
             ))
         } else {
-            self.num_inputs_parsed = self.num_inputs_parsed + 1;
             Ok(TxParsingContext::ParsingInputs(self))
         }
     }
@@ -226,13 +233,13 @@ impl TxParsingOutputsContext {
         &self.summary
     }
 
-    fn advance_next_output_state<'a>(
+    fn advance_next_output_state(
         mut self,
-        review: &'a NbglStreamingReview,
+        review: &NbglStreamingReview,
         output: &TxOutput,
     ) -> Result<TxParsingContext, StatusWord> {
         if self.num_outputs_parsed < (self.metadata.num_outputs - 1) {
-            self.num_outputs_parsed = self.num_outputs_parsed + 1;
+            self.num_outputs_parsed += 1;
             Ok(TxParsingContext::ParsingOutputs(self))
         } else {
             // Finalize the tx hash for signing
@@ -284,7 +291,7 @@ impl TxSigningContext {
         let private_key = Secp256k1::derive_from_path(&addr);
         let sig = schnorr_sign(&private_key, self.tx_hash.as_bytes())?;
 
-        let signature = Signature(sig);
+        let signature = SignatureResponse(sig);
         let input_idx = address.input_idx;
         let multisig_idx = address.multisig_idx;
 
@@ -298,7 +305,7 @@ impl TxSigningContext {
         };
 
         let new_ctx = if has_next {
-            self.num_inputs_signed = self.num_inputs_signed + 1;
+            self.num_inputs_signed += 1;
             TxParsingContext::Signing(self)
         } else {
             TxParsingContext::Finished
@@ -382,10 +389,7 @@ impl TxParsingContext {
     }
 
     pub fn finished(&self) -> bool {
-        match self {
-            Self::Finished => true,
-            _ => false,
-        }
+        matches!(self, Self::Finished)
     }
 }
 
@@ -396,7 +400,7 @@ pub fn setup_sign_tx(req: TxMetadataReq) -> Result<DataContext, StatusWord> {
 
     tx_ctx.show_spinner();
 
-    Ok(DataContext::TxContext(tx_ctx, ui_new_streaming_review()))
+    Ok(DataContext::TxContext(Box::new(tx_ctx), ui_new_streaming_review()))
 }
 
 fn handle_input_req(
@@ -419,20 +423,20 @@ fn handle_input_req(
     ctx.advance_next_input_step()
 }
 
-fn handle_input_commitment_req<'a>(
+fn handle_input_commitment_req(
     req: SighashInputCommitment,
     mut ctx: TxParsingInputCommitmentsContext,
-    review: &'a NbglStreamingReview,
+    review: &NbglStreamingReview,
 ) -> Result<TxParsingContext, StatusWord> {
     update_hash(&req, &mut ctx.input_commitments_hasher)?;
     update_hash(&req, &mut ctx.tx_hasher)?;
     ctx.advance_next_input_additional_info_step(review)
 }
 
-fn handle_output_req<'a>(
+fn handle_output_req(
     req: TxOutputReq,
     mut ctx: TxParsingOutputsContext,
-    review: &'a NbglStreamingReview,
+    review: &NbglStreamingReview,
 ) -> Result<TxParsingContext, StatusWord> {
     if ui_streaming_review_show_output(review, &req.out, ctx.metadata.coin)? {
         ctx.summary.process_output(&req.out)?;
@@ -464,7 +468,7 @@ pub fn handle_sign_tx(
         (SignTxReq::NextSignature, TxParsingContext::Finished) => {
             return Err(StatusWord::TxAlreadyFinished)
         }
-        _ => return Err(StatusWord::WrongP1P2),
+        _ => return Err(StatusWord::WrongContext),
     };
 
     let new_ctx = match new_ctx {

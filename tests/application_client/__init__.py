@@ -392,13 +392,24 @@ def init_mintlayer_types():
                     ["signature", "Signature"],
                 ],
             },
+            "TxMetadataVersionReq": {
+                "type": "enum",
+                "type_mapping": [
+                    ["V1", "TxMetadataV1Req"],
+                ],
+            },
+            "TxMetadataV1Req": {
+                "type": "struct",
+                "type_mapping": [
+                    ["num_inputs", "u32"],
+                    ["num_outputs", "u32"],
+                ],
+            },
             "TxMetadataReq": {
                 "type": "struct",
                 "type_mapping": [
                     ["coin", "u8"],
-                    ["version", "u8"],
-                    ["num_inputs", "u32"],
-                    ["num_outputs", "u32"],
+                    ["version", "TxMetadataVersionReq"],
                 ],
             },
             "TxInputReq": {
@@ -442,17 +453,48 @@ def init_mintlayer_types():
                     ["NextSignature", "()"],
                 ],
             },
+            "SignatureResponse": "[u8; 64]",
             "MsgSignature": {
                 "type": "struct",
                 "type_mapping": [
-                    ["signature", "[u8; 64]"],
+                    ["signature", "SignatureResponse"],
                 ],
             },
+            "TxInputSignatureResponse": {
+                "type": "struct",
+                "type_mapping": [
+                    ["signature", "SignatureResponse"],
+                    ["input_idx", "u32"],
+                    ["multisig_idx", "Option<u32>"],
+                    ["has_next", "bool"],
+                ],
+            },
+            "PublicKeyResponse": "[u8; 65]",
+            "ChainCodeResponse": "[u8; 32]",
             "GetPublicKeyResponse": {
                 "type": "struct",
                 "type_mapping": [
-                    ["public_key", "[u8; 65]"],
-                    ["chain_code", "[u8; 32]"],
+                    ["public_key", "PublicKeyResponse"],
+                    ["chain_code", "ChainCodeResponse"],
+                ],
+            },
+            "MsgSignatureResponse": {
+                "type": "struct",
+                "type_mapping": [
+                    ["signature", "SignatureResponse"],
+                ],
+            },
+            "Response": {
+                "type": "enum",
+                "type_mapping": [
+                    ["ExpectingNextChunk", "()"],
+                    ["PublicKey", "GetPublicKeyResponse"],
+                    ["TxSetup", "()"],
+                    ["TxNext", "()"],
+                    ["TxSignature", "TxInputSignatureResponse"],
+                    ["MessageSetup", "()"],
+                    ["MessageSignature", "MsgSignatureResponse"],
+                    ["Pong", "()"],
                 ],
             },
             "SemVer": {

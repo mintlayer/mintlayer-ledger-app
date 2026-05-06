@@ -213,7 +213,7 @@ pub fn ui_display_message<const T: char>(
     let addr = to_address(&dest, coin_type)?;
 
     let message_str = match core::str::from_utf8(message) {
-        Ok(s) if s.bytes().all(|b| b >= 0x20 && b <= 0x7E) => s.to_string(),
+        Ok(s) if s.bytes().all(|b| (0x20..=0x7E).contains(&b)) => s.to_string(),
         Ok(_) | Err(_) => format!("0x{}", hex::encode(message)),
     };
 
@@ -282,11 +282,11 @@ fn format_value(value: &OutputValue, coin: CoinType) -> Result<String, StatusWor
 fn format_timestamp(seconds_u64: u64) -> Result<String, StatusWord> {
     let seconds_i64: i64 = seconds_u64
         .try_into()
-        .map_err(|_| StatusWord::TxDisplayFail)?;
+        .map_err(|_| StatusWord::TxLockTimeInvalid)?;
     let datetime = Utc
         .timestamp_opt(seconds_i64, 0)
         .earliest()
-        .ok_or(StatusWord::TxDisplayFail)?;
+        .ok_or(StatusWord::TxLockTimeInvalid)?;
 
     Ok(datetime.format("%Y-%m-%d %H:%M:%S").to_string())
 }
@@ -421,9 +421,7 @@ fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormatedOutput, St
         }
 
         TxOutput::IssueNft(_nft_id, data, destination) => {
-            let data = match data {
-                NftIssuance::V0(data) => data,
-            };
+            let NftIssuance::V0(data) = data;
             let address_short = format!(
                 "Name: {}\nCreator: {}\nTicker: {}\nAddress: {}\nIcon URI: {}\nAdditional metadata URI: {}\nMedia URI: {}",
                 String::from_utf8_lossy(data.name.as_ref()),

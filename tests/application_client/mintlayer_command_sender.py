@@ -18,16 +18,23 @@ MAX_APDU_LEN: int = 255
 
 CLA: int = 0xE1
 
-
-class P1(IntEnum):
+class GetAppAndVersionP1(IntEnum):
     # Parameter 1 for first APDU number.
     P1_START = 0x00
-    P1_TX_INPUT = 0x01
-    P1_TX_INPUT_COMMITMENT = 0x02
-    P1_TX_OUTPUT = 0x03
-    P1_TX_NEXT_SIG = 0x04
-    # Parameter 1 for maximum APDU number.
-    P1_MAX = 0x03
+    P1_NEXT = 0x01
+
+class SignTxP1(IntEnum):
+    # Parameter 1 for first APDU number.
+    P1_START = 0x00
+    P1_NEXT = 0x01
+
+class SignMessageP1(IntEnum):
+    # Parameter 1 for first APDU number.
+    P1_START = 0x00
+    P1_NEXT = 0x01
+
+class GetPublicKeyP1(IntEnum):
+    P1_START = 0x00
     # Parameter 1 for screen confirmation for GET_PUBLIC_KEY.
     P1_CONFIRM = 0x01
 
@@ -71,7 +78,7 @@ class MintlayerCommandSender:
         return self.backend.exchange(
             cla=0xB0,  # specific CLA for BOLOS
             ins=0x01,  # specific INS for get_app_and_version
-            p1=P1.P1_START,
+            p1=GetAppAndVersionP1.P1_START,
             p2=P2.P2_LAST,
             data=b"",
         )
@@ -82,7 +89,7 @@ class MintlayerCommandSender:
         return self.backend.exchange(
             cla=CLA,
             ins=InsType.GET_PUBLIC_KEY,
-            p1=P1.P1_START,
+            p1=GetPublicKeyP1.P1_START,
             p2=P2.P2_LAST,
             data=data,
         )
@@ -96,7 +103,7 @@ class MintlayerCommandSender:
         with self.backend.exchange_async(
             cla=CLA,
             ins=InsType.GET_PUBLIC_KEY,
-            p1=P1.P1_CONFIRM,
+            p1=GetPublicKeyP1.P1_CONFIRM,
             p2=P2.P2_LAST,
             data=data,
         ) as response:
@@ -113,18 +120,17 @@ class MintlayerCommandSender:
         )
 
         self.backend.exchange(
-            cla=CLA, ins=InsType.SIGN_MESSAGE, p1=P1.P1_START, p2=P2.P2_LAST, data=data
+            cla=CLA, ins=InsType.SIGN_MESSAGE, p1=SignMessageP1.P1_START, p2=P2.P2_LAST, data=data
         )
         chunks = split_message(message, MAX_APDU_LEN)
-        idx: int = P1.P1_START + 1
 
         for chunk in chunks[:-1]:
             self.backend.exchange(
-                cla=CLA, ins=InsType.SIGN_MESSAGE, p1=idx, p2=P2.P2_MORE, data=chunk
+                cla=CLA, ins=InsType.SIGN_MESSAGE, p1=SignMessageP1.P1_NEXT, p2=P2.P2_MORE, data=chunk
             )
 
         with self.backend.exchange_async(
-            cla=CLA, ins=InsType.SIGN_MESSAGE, p1=idx, p2=P2.P2_LAST, data=chunks[-1]
+            cla=CLA, ins=InsType.SIGN_MESSAGE, p1=SignMessageP1.P1_NEXT, p2=P2.P2_LAST, data=chunks[-1]
         ) as response:
             yield response
 
@@ -133,28 +139,33 @@ class MintlayerCommandSender:
         metadata = tx_metadata_obj.encode(
             {
                 "coin": transaction.coin,
-                "version": 1,
-                "num_inputs": len(transaction.inputs),
-                "num_outputs": len(transaction.outputs),
+                "version": {
+                    "V1": {
+                        "num_inputs": len(transaction.inputs),
+                        "num_outputs": len(transaction.outputs),
+                    },
+                },
             }
         ).data
 
         res = self.backend.exchange(
             cla=CLA,
             ins=InsType.SIGN_TX,
-            p1=P1.P1_START,
+            p1=SignTxP1.P1_START,
             p2=P2.P2_LAST,
             data=bytes(metadata),
         )
         print("metadata ", res)
 
+        print("sending inputs", len(transaction.inputs))
         for inp in transaction.inputs:
+            print("sending inp")
             chunks = split_message(inp, MAX_APDU_LEN)
             for chunk in chunks[:-1]:
                 res = self.backend.exchange(
                     cla=CLA,
                     ins=InsType.SIGN_TX,
-                    p1=P1.P1_TX_INPUT,
+                    p1=SignTxP1.P1_NEXT,
                     p2=P2.P2_MORE,
                     data=chunk,
                 )
@@ -163,30 +174,33 @@ class MintlayerCommandSender:
             res = self.backend.exchange(
                 cla=CLA,
                 ins=InsType.SIGN_TX,
-                p1=P1.P1_TX_INPUT,
+                p1=SignTxP1.P1_NEXT,
                 p2=P2.P2_LAST,
                 data=chunks[-1],
             )
             print("inp ", res)
 
+        print("sending input commitments")
         for inp in transaction.input_commitments:
             chunks = split_message(inp, MAX_APDU_LEN)
             for chunk in chunks[:-1]:
                 res = self.backend.exchange(
                     cla=CLA,
                     ins=InsType.SIGN_TX,
-                    p1=P1.P1_TX_INPUT_COMMITMENT,
+                    p1=SignTxP1.P1_NEXT,
                     p2=P2.P2_MORE,
                     data=chunk,
                 )
+                print("inp commitment chunk ", res)
 
             res = self.backend.exchange(
                 cla=CLA,
                 ins=InsType.SIGN_TX,
-                p1=P1.P1_TX_INPUT_COMMITMENT,
+                p1=SignTxP1.P1_NEXT,
                 p2=P2.P2_LAST,
                 data=chunks[-1],
             )
+            print("inp commitment ", res)
 
         for out in transaction.outputs[:-1]:
             chunks = split_message(out, MAX_APDU_LEN)
@@ -194,7 +208,7 @@ class MintlayerCommandSender:
                 res = self.backend.exchange(
                     cla=CLA,
                     ins=InsType.SIGN_TX,
-                    p1=P1.P1_TX_OUTPUT,
+                    p1=SignTxP1.P1_NEXT,
                     p2=P2.P2_MORE,
                     data=chunk,
                 )
@@ -202,7 +216,7 @@ class MintlayerCommandSender:
             res = self.backend.exchange(
                 cla=CLA,
                 ins=InsType.SIGN_TX,
-                p1=P1.P1_TX_OUTPUT,
+                p1=SignTxP1.P1_NEXT,
                 p2=P2.P2_LAST,
                 data=chunks[-1],
             )
@@ -214,7 +228,7 @@ class MintlayerCommandSender:
             res = self.backend.exchange(
                 cla=CLA,
                 ins=InsType.SIGN_TX,
-                p1=P1.P1_TX_OUTPUT,
+                p1=SignTxP1.P1_NEXT,
                 p2=P2.P2_MORE,
                 data=chunk,
             )
@@ -223,7 +237,7 @@ class MintlayerCommandSender:
         with self.backend.exchange_async(
             cla=CLA,
             ins=InsType.SIGN_TX,
-            p1=P1.P1_TX_OUTPUT,
+            p1=SignTxP1.P1_NEXT,
             p2=P2.P2_LAST,
             data=chunks[-1],
         ) as response:
@@ -242,7 +256,7 @@ class MintlayerCommandSender:
             res = self.backend.exchange(
                 cla=CLA,
                 ins=InsType.SIGN_TX,
-                p1=P1.P1_TX_NEXT_SIG,
+                p1=SignTxP1.P1_NEXT,
                 p2=P2.P2_LAST,
                 data=next_sig,
             )
