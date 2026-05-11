@@ -16,8 +16,9 @@ def test_sign_message(backend, scenario_navigator):
         scenario_navigator.review_approve()
 
     response = scalecodec.base.ScaleBytes(client.get_async_response().data)
-    msg_signature_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("MsgSignature", data=response)
-    sig = msg_signature_obj.decode()
+    response_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("Response", data=response)
+    response = response_obj.decode()
+    assert response["MessageSignature"] is not None
 
 def test_sign_message_pkh(backend, scenario_navigator):
     path = "m/44'/19788'/0'/0/0"
@@ -27,8 +28,9 @@ def test_sign_message_pkh(backend, scenario_navigator):
         scenario_navigator.review_approve()
 
     response = scalecodec.base.ScaleBytes(client.get_async_response().data)
-    msg_signature_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("MsgSignature", data=response)
-    sig = msg_signature_obj.decode()
+    response_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("Response", data=response)
+    response = response_obj.decode()
+    assert response["MessageSignature"] is not None
 
 
 # Message signing refused test

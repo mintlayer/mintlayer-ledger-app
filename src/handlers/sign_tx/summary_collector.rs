@@ -59,6 +59,7 @@ pub enum TxType {
 }
 
 pub enum InputCommand {
+    AccountSpending(AccountSpending),
     AccountCommand(AccountCommand),
     OrderCommand(OrderAccountCommand),
 }
@@ -207,10 +208,13 @@ impl TxSummaryCollector {
                     };
                 }
             },
-            TxInputWithAdditionalInfo::Account(acc) => match acc.spending {
-                AccountSpending::DelegationBalance(_, amount) => {
-                    self.tx_type = merge_tx_type(self.tx_type, TxType::DelegationWithdrawl);
-                    self.increase_input_totals(CoinOrTokenId::Coin, amount)?;
+            TxInputWithAdditionalInfo::Account(acc) => {
+                self.input_command = Some(InputCommand::AccountSpending(acc.spending.clone()));
+                match acc.spending {
+                    AccountSpending::DelegationBalance(_, amount) => {
+                        self.tx_type = merge_tx_type(self.tx_type, TxType::DelegationWithdrawl);
+                        self.increase_input_totals(CoinOrTokenId::Coin, amount)?;
+                    }
                 }
             },
             TxInputWithAdditionalInfo::AccountCommand(_, cmd) => {

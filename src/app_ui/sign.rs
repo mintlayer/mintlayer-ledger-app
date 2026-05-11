@@ -29,9 +29,9 @@ use crate::{
 use messages::{
     encode,
     mlcp::{
-        AccountCommand, Amount, CoinType, Destination, IsTokenFreezable, IsTokenUnfreezable,
-        NftIssuance, OrderAccountCommand, OutputTimeLock, OutputValue, PublicKey, TokenIssuance,
-        TokenTotalSupply, TxOutput, VrfPublicKey, H256,
+        AccountCommand, AccountSpending, Amount, CoinType, Destination, IsTokenFreezable,
+        IsTokenUnfreezable, NftIssuance, OrderAccountCommand, OutputTimeLock, OutputValue,
+        PublicKey, TokenIssuance, TokenTotalSupply, TxOutput, VrfPublicKey, H256,
     },
     AddrType,
 };
@@ -104,14 +104,9 @@ pub fn ui_streaming_review_show_output(
 
 pub fn ui_approve_streaming_review(
     review: &NbglStreamingReview,
-    output: &TxOutput,
     ctx: &TxParsingOutputsContext,
 ) -> Result<bool, StatusWord> {
     let coin = ctx.coin();
-    if !ui_streaming_review_show_output(review, output, coin)? {
-        return Ok(false);
-    }
-
     let fees = ctx.summary().fees_iter().try_fold(
         String::new(),
         |mut acc, res| -> Result<_, StatusWord> {
@@ -473,6 +468,20 @@ fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormatedOutput, St
 
 fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, StatusWord> {
     let (name, value) = match input {
+        InputCommand::AccountSpending(cmd) => match cmd {
+            AccountSpending::DelegationBalance(delegation_id, amount) => {
+                let address_short = format!(
+                    "Delegation ID: {}\nAmount: {}",
+                    id_to_address(delegation_id.hash(), coin.delegation_id_address_prefix())?,
+                    format_amount(*amount, coin)
+                );
+                if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
+                    ("Del Wdrwl", address_short)
+                } else {
+                    ("Delegation withdrawl", address_short)
+                }
+            }
+        },
         InputCommand::AccountCommand(cmd) => match cmd {
             AccountCommand::MintTokens(token_id, amount) => {
                 let address_short = format!(
@@ -494,7 +503,11 @@ fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, 
                     "Token ID: {}",
                     id_to_address(token_id.hash(), coin.token_id_address_prefix())?
                 );
-                ("Lock token supply", address_short)
+                if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
+                    ("Lock token", address_short)
+                } else {
+                    ("Lock token supply", address_short)
+                }
             }
             AccountCommand::FreezeToken(token_id, is_unfreezable) => {
                 let address_short = format!(
@@ -513,7 +526,11 @@ fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, 
                     "Token ID: {}",
                     id_to_address(token_id.hash(), coin.token_id_address_prefix())?,
                 );
-                ("Unfreeze token", address_short)
+                if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
+                    ("Unfrz token", address_short)
+                } else {
+                    ("Unfreeze token", address_short)
+                }
             }
             AccountCommand::ChangeTokenAuthority(token_id, new_authority) => {
                 let address_short = format!(
@@ -521,7 +538,11 @@ fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, 
                     id_to_address(token_id.hash(), coin.token_id_address_prefix())?,
                     to_address(new_authority, coin)?
                 );
-                ("Change token authority", address_short)
+                if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
+                    ("Chg token auth", address_short)
+                } else {
+                    ("Change token authority", address_short)
+                }
             }
             AccountCommand::ChangeTokenMetadataUri(token_id, new_metadata_uri) => {
                 let address_short = format!(
@@ -529,7 +550,11 @@ fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, 
                     id_to_address(token_id.hash(), coin.token_id_address_prefix())?,
                     String::from_utf8_lossy(new_metadata_uri)
                 );
-                ("Change token metadata URI", address_short)
+                if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
+                    ("Chg token meta", address_short)
+                } else {
+                    ("Change token metadata URI", address_short)
+                }
             }
             AccountCommand::ConcludeOrder(_) | AccountCommand::FillOrder(_, _, _) => {
                 return Err(StatusWord::OrdersV0NotSupported)
@@ -556,7 +581,11 @@ fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, 
                     "Order ID: {}",
                     id_to_address(order_id.hash(), coin.order_id_address_prefix())?
                 );
-                ("Conclude order", address_short)
+                if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
+                    ("Conclude ord", address_short)
+                } else {
+                    ("Conclude order", address_short)
+                }
             }
         },
     };

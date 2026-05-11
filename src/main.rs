@@ -303,12 +303,12 @@ fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, Statu
                 Ok(Response::TxSetup)
             }
             SignP1::Next => {
-                let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
-
                 let (mut tx_ctx, mut review) = match ctx.data_context.take() {
                     Some(DataContext::TxContext(c, r)) => (c, r),
                     _ => return Err(StatusWord::WrongContext),
                 };
+
+                let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
 
                 tx_ctx.show_spinner();
 
@@ -335,7 +335,8 @@ fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, Statu
                     Some(DataContext::SignMessageContext(ctx)) => ctx,
                     _ => return Err(StatusWord::WrongContext),
                 };
-                handle_sign_message(data, msg_ctx).map(Response::MessageSignature)
+                let response = handle_sign_message(data, msg_ctx).map(Response::MessageSignature);
+                response
             }
         },
         Command::Ping => Ok(Response::Pong),

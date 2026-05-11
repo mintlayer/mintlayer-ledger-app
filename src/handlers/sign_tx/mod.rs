@@ -30,7 +30,7 @@ use crate::{
 };
 use messages::{
     encode_as_compact, encode_to,
-    mlcp::{CoinType as PCoinType, SighashInputCommitment, TxOutput, H256},
+    mlcp::{CoinType as PCoinType, SighashInputCommitment, H256},
     CoinType, Encode, InputAddressPath, Response, SignTxReq, SignatureResponse, TxInputReq,
     TxInputSignatureResponse, TxMetadataReq, TxMetadataV1Req, TxMetadataVersionReq, TxOutputReq,
 };
@@ -202,7 +202,7 @@ impl TxParsingInputsContext {
                     summary: self.summary,
                     inputs: self.inputs,
                     spinner: self.spinner,
-                    num_inputs_parsed: self.num_inputs_parsed,
+                    num_inputs_parsed: 0,
                 },
             ))
         } else {
@@ -236,7 +236,6 @@ impl TxParsingOutputsContext {
     fn advance_next_output_state(
         mut self,
         review: &NbglStreamingReview,
-        output: &TxOutput,
     ) -> Result<TxParsingContext, StatusWord> {
         if self.num_outputs_parsed < (self.metadata.num_outputs - 1) {
             self.num_outputs_parsed += 1;
@@ -250,7 +249,7 @@ impl TxParsingOutputsContext {
 
             let tx_hash = mintlayer_hash(&message_hash[0..32])?;
 
-            if ui_approve_streaming_review(review, output, &self)? {
+            if ui_approve_streaming_review(review, &self)? {
                 Ok(TxParsingContext::Signing(TxSigningContext {
                     metadata: self.metadata,
                     inputs: self.inputs,
@@ -441,7 +440,7 @@ fn handle_output_req(
     if ui_streaming_review_show_output(review, &req.out, ctx.metadata.coin)? {
         ctx.summary.process_output(&req.out)?;
         update_hash(&req.out, &mut ctx.tx_hasher)?;
-        ctx.advance_next_output_state(review, &req.out)
+        ctx.advance_next_output_state(review)
     } else {
         Err(StatusWord::Deny)
     }

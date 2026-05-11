@@ -1,9 +1,12 @@
 from contextlib import contextmanager
+from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any, Generator, List, Optional
 
 import scalecodec  # type: ignore
 from ragger.backend.interface import RAPDU, BackendInterface
+from ragger.navigator import NavInsID
+from ragger.navigator.navigation_scenario import NavigationScenarioData, UseCase
 
 from .mintlayer_transaction import Transaction
 
@@ -15,8 +18,15 @@ sign_tx_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
 )
 
 MAX_APDU_LEN: int = 255
+TX_RESPONSE_SIZE: int = 71
 
 CLA: int = 0xE1
+
+
+@dataclass
+class SignTxStep:
+    kind: str
+    index: int | None = None
 
 class GetAppAndVersionP1(IntEnum):
     # Parameter 1 for first APDU number.
@@ -55,15 +65,16 @@ class InsType(IntEnum):
 class Errors(IntEnum):
     SW_DENY = 0x6985
     SW_CLA_NOT_SUPPORTED = 0x6E00
-    SW_INS_NOT_SUPPORTED = 0x6E01
-    SW_WRONG_P1P2 = 0x6E02
+    SW_INS_NOT_SUPPORTED = 0x6D00
+    SW_WRONG_P1P2 = 0x6B00
     SW_WRONG_APDU_LENGTH = 0x6E03
+
     SW_WRONG_RESPONSE_LENGTH = 0xB000
     SW_DISPLAY_BIP32_PATH_FAIL = 0xB001
     SW_WRONG_TX_LENGTH = 0xB002
-    SW_WRONG_CONTEXT = 0xB009
-    SW_DESERIALIZE_FAIL = 0xB00A
-    SW_MAX_BUFFER_LEN_EXCEEDED = 0xB014
+    SW_WRONG_CONTEXT = 0xB008
+    SW_DESERIALIZE_FAIL = 0xB009
+    SW_MAX_BUFFER_LEN_EXCEEDED = 0xB012
 
 
 def split_message(message: bytes, max_size: int) -> List[bytes]:
@@ -134,8 +145,8 @@ class MintlayerCommandSender:
         ) as response:
             yield response
 
-    @contextmanager
-    def sign_tx(self, transaction: Transaction) -> Generator[None, None, None]:
+    def sign_tx(self, transaction: Transaction) -> Generator[SignTxStep, None, None]:
+        # ---- METADATA ----
         metadata = tx_metadata_obj.encode(
             {
                 "coin": transaction.coin,
@@ -157,91 +168,90 @@ class MintlayerCommandSender:
         )
         print("metadata ", res)
 
+        # ---- INPUTS ----
         print("sending inputs", len(transaction.inputs))
+
         for inp in transaction.inputs:
-            print("sending inp")
-            chunks = split_message(inp, MAX_APDU_LEN)
-            for chunk in chunks[:-1]:
-                res = self.backend.exchange(
-                    cla=CLA,
-                    ins=InsType.SIGN_TX,
-                    p1=SignTxP1.P1_NEXT,
-                    p2=P2.P2_MORE,
-                    data=chunk,
-                )
-                print("inp chunk ", res)
+            self._send_chunked_sync(inp)
 
-            res = self.backend.exchange(
-                cla=CLA,
-                ins=InsType.SIGN_TX,
-                p1=SignTxP1.P1_NEXT,
-                p2=P2.P2_LAST,
-                data=chunks[-1],
-            )
-            print("inp ", res)
-
+        # ---- INPUT COMMITMENTS ----
         print("sending input commitments")
-        for inp in transaction.input_commitments:
-            chunks = split_message(inp, MAX_APDU_LEN)
-            for chunk in chunks[:-1]:
-                res = self.backend.exchange(
-                    cla=CLA,
-                    ins=InsType.SIGN_TX,
-                    p1=SignTxP1.P1_NEXT,
-                    p2=P2.P2_MORE,
-                    data=chunk,
-                )
-                print("inp commitment chunk ", res)
 
-            res = self.backend.exchange(
-                cla=CLA,
-                ins=InsType.SIGN_TX,
-                p1=SignTxP1.P1_NEXT,
-                p2=P2.P2_LAST,
-                data=chunks[-1],
-            )
-            print("inp commitment ", res)
+        for inp in transaction.input_commitments[:-1]:
+            self._send_chunked_sync(inp)
 
-        for out in transaction.outputs[:-1]:
-            chunks = split_message(out, MAX_APDU_LEN)
-            for chunk in chunks[:-1]:
-                res = self.backend.exchange(
-                    cla=CLA,
-                    ins=InsType.SIGN_TX,
-                    p1=SignTxP1.P1_NEXT,
-                    p2=P2.P2_MORE,
-                    data=chunk,
-                )
-                print("Out chunk ", res)
-            res = self.backend.exchange(
-                cla=CLA,
-                ins=InsType.SIGN_TX,
-                p1=SignTxP1.P1_NEXT,
-                p2=P2.P2_LAST,
-                data=chunks[-1],
-            )
-            print("Out ", res)
+        chunks = split_message(transaction.input_commitments[-1], MAX_APDU_LEN)
 
-        chunks = split_message(transaction.outputs[-1], MAX_APDU_LEN)
-
+        # all but last chunk sync
         for chunk in chunks[:-1]:
-            res = self.backend.exchange(
+            self.backend.exchange(
                 cla=CLA,
                 ins=InsType.SIGN_TX,
                 p1=SignTxP1.P1_NEXT,
                 p2=P2.P2_MORE,
                 data=chunk,
             )
-            print("Last Out chunk ", res)
 
+        # last chunk async -> UI review
         with self.backend.exchange_async(
             cla=CLA,
             ins=InsType.SIGN_TX,
             p1=SignTxP1.P1_NEXT,
             p2=P2.P2_LAST,
             data=chunks[-1],
-        ) as response:
-            yield response
+        ):
+            kind = "start"
+            yield SignTxStep(kind=kind, index=0)
+        
+
+        # ---- OUTPUTS ----
+        print("streaming outputs")
+
+        for idx, out in enumerate(transaction.outputs):
+            print(f"sending output {idx}")
+
+            chunks = split_message(out, MAX_APDU_LEN)
+
+            # all but last chunk sync
+            for chunk in chunks[:-1]:
+                self.backend.exchange(
+                    cla=CLA,
+                    ins=InsType.SIGN_TX,
+                    p1=SignTxP1.P1_NEXT,
+                    p2=P2.P2_MORE,
+                    data=chunk,
+                )
+
+            # last chunk async -> UI review
+            with self.backend.exchange_async(
+                cla=CLA,
+                ins=InsType.SIGN_TX,
+                p1=SignTxP1.P1_NEXT,
+                p2=P2.P2_LAST,
+                data=chunks[-1],
+            ):
+                kind = "final" if idx == len(transaction.outputs) - 1 else "output"
+                yield SignTxStep(kind=kind, index=idx)
+
+    def _send_chunked_sync(self, data: bytes):
+        chunks = split_message(data, MAX_APDU_LEN)
+
+        for chunk in chunks[:-1]:
+            self.backend.exchange(
+                cla=CLA,
+                ins=InsType.SIGN_TX,
+                p1=SignTxP1.P1_NEXT,
+                p2=P2.P2_MORE,
+                data=chunk,
+            )
+
+        self.backend.exchange(
+            cla=CLA,
+            ins=InsType.SIGN_TX,
+            p1=SignTxP1.P1_NEXT,
+            p2=P2.P2_LAST,
+            data=chunks[-1],
+        )
 
     def get_async_response(self) -> Optional[RAPDU]:
         return self.backend.last_async_response
@@ -289,3 +299,91 @@ def pack_derivation_path(derivation_path: str) -> bytes:
             path.append(int(value))
 
     return path_obj.encode(path).data
+
+
+def sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input, review_custom_screen_text):
+    start_idx = 0
+    if not device.is_nano:
+        instruction = NavInsID.SWIPE_CENTER_TO_LEFT
+    else:
+        instruction = NavInsID.RIGHT_CLICK
+
+    last_page_pattern=r".*\((\d+)/\1\)$"
+
+    for step in client.sign_tx(transaction):
+        print("step kind: ", step.kind)
+        if step.kind == "start":
+            navigator.navigate_and_compare(
+                path=scenario_navigator.screenshot_path,
+                test_case_name=scenario_navigator.test_name,
+                instructions=[instruction],
+                screen_change_before_first_instruction=False,
+                screen_change_after_last_instruction=False,
+                snap_start_idx=start_idx,
+            )
+            start_idx += 10
+
+            if has_command_input:
+                if device.is_nano:
+                    navigator.navigate_until_text_and_compare(
+                        navigate_instruction=instruction,
+                        validation_instructions=[instruction],
+                        text=last_page_pattern,
+                        path=scenario_navigator.screenshot_path,
+                        test_case_name=scenario_navigator.test_name,
+                        screen_change_before_first_instruction=False,
+                        screen_change_after_last_instruction=False,
+                        snap_start_idx=start_idx,
+                    )
+                else:
+                    navigator.navigate_and_compare(
+                        path=scenario_navigator.screenshot_path,
+                        test_case_name=scenario_navigator.test_name,
+                        instructions=[instruction] * 2,
+                        screen_change_before_first_instruction=False,
+                        screen_change_after_last_instruction=False,
+                        snap_start_idx=start_idx,
+                    )
+                start_idx += 10
+
+        if step.kind == "output":
+            if device.is_nano:
+                navigator.navigate_until_text_and_compare(
+                    navigate_instruction=instruction,
+                    validation_instructions=[instruction],
+                    text=last_page_pattern,
+                    path=scenario_navigator.screenshot_path,
+                    test_case_name=scenario_navigator.test_name,
+                    screen_change_before_first_instruction=False,
+                    screen_change_after_last_instruction=False,
+                    snap_start_idx=start_idx,
+                )
+            else:
+                navigator.navigate_and_compare(
+                    path=scenario_navigator.screenshot_path,
+                    test_case_name=scenario_navigator.test_name,
+                    instructions=[instruction] * 2,
+                    screen_change_before_first_instruction=False,
+                    screen_change_after_last_instruction=False,
+                    snap_start_idx=start_idx,
+                )
+            start_idx += 10
+
+        elif step.kind == "final":
+            scenario = NavigationScenarioData(scenario_navigator.device, scenario_navigator.backend, UseCase.TX_REVIEW, True)
+            navigator.navigate_until_text_and_compare(
+                navigate_instruction=scenario.navigation,
+                validation_instructions=scenario.validation,
+                text=review_custom_screen_text,
+                path=scenario_navigator.screenshot_path,
+                test_case_name=scenario_navigator.test_name,
+                screen_change_after_last_instruction=False,
+                snap_start_idx=start_idx,
+                )
+
+    # The device as yielded the result, parse it and ensure that the signature is correct
+    responses = client.get_all_signatures(transaction)
+
+    assert len(responses) == len(transaction.inputs)
+    for response in responses:
+        assert len(response) == TX_RESPONSE_SIZE
