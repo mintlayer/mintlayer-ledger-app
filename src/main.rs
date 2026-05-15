@@ -47,7 +47,7 @@ use app_ui::menu::ui_menu_main;
 use handlers::{
     get_public_key::handle_get_public_key,
     sign_message::{handle_sign_message, setup_sign_message, SignMessageContext},
-    sign_tx::{setup_sign_tx, Review, TxContext},
+    sign_tx::{setup_sign_tx, TxContext},
 };
 use messages::{
     decode_all, encode, Ins, PubKeyP1, Response, SignP1, StatusWord, APDU_CLASS, MAX_ADPU_DATA_LEN,
@@ -203,7 +203,7 @@ fn show_status_and_home_if_needed(cmd: &Command, ctx: &mut Context, status: &Sta
 
 pub enum DataContext {
     Empty,
-    TxContext(TxContext, Review),
+    TxContext(TxContext),
     SignMessageContext(SignMessageContext),
 }
 
@@ -224,7 +224,7 @@ impl Context {
         match &self.data {
             DataContext::Empty => false,
             DataContext::SignMessageContext(ctx) => ctx.finished(),
-            DataContext::TxContext(ctx, _) => ctx.finished(),
+            DataContext::TxContext(ctx) => ctx.finished(),
         }
     }
 }
@@ -294,15 +294,15 @@ fn handle_command(cmd: &Command, ctx: &mut Context) -> Result<Response, StatusWo
                 Ok(Response::TxSetup)
             }
             SignP1::Next => {
-                let (tx_ctx, review) = match &mut ctx.data {
-                    DataContext::TxContext(c, r) => (c, r),
+                let tx_ctx = match &mut ctx.data {
+                    DataContext::TxContext(c) => c,
                     _ => return Err(StatusWord::WrongContext),
                 };
 
                 tx_ctx.show_spinner();
 
                 let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
-                handle_sign_tx(req, tx_ctx, review)
+                handle_sign_tx(req, tx_ctx)
             }
         },
         Command::SignMessage { p1, data } => match p1 {

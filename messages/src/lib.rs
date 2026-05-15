@@ -440,26 +440,30 @@ pub enum StatusWord {
     TxInvalidInputUtxo = 0xB00B,
     #[display("Numeric operation failed")]
     TxNumericOperationFail = 0xB00C,
+    #[display("Tx fee underflow")]
+    TxFeeUnderflow = 0xB00D,
     #[display("Unsupported input")]
-    TxUnsupportedInput = 0xB00D,
+    TxUnsupportedInput = 0xB00E,
     #[display("Invalid Token V0")]
-    TxInvalidTokenV0 = 0xB00E,
+    TxInvalidTokenV0 = 0xB00F,
     #[display("Invalid input path")]
-    TxInvalidInputPath = 0xB00F,
+    TxInvalidInputPath = 0xB010,
     #[display("Nothing to sign")]
-    NothingToSign = 0xB010,
+    NothingToSign = 0xB011,
     #[display("Transaction already finished")]
-    TxAlreadyFinished = 0xB011,
+    TxAlreadyFinished = 0xB012,
     #[display("Invalid path")]
-    InvalidPath = 0xB012,
+    InvalidPath = 0xB013,
     #[display("Invalid uncompressed public key")]
-    InvalidUncompressedPublicKey = 0xB013,
+    InvalidUncompressedPublicKey = 0xB014,
     #[display("Max buffer length exceeded")]
-    MaxBufferLenExceeded = 0xB014,
+    MaxBufferLenExceeded = 0xB015,
     #[display("Different input commitment hash")]
-    DifferentInputCommitmentHash = 0xB015,
+    DifferentInputCommitmentHash = 0xB016,
     #[display("Orders V0 not supported")]
-    OrdersV0NotSupported = 0xB016,
+    OrdersV0NotSupported = 0xB017,
+    #[display("Different instruction than expected")]
+    WrongInstruction = 0xB018,
 
     // Ecc Errors
     #[display("ECC Carry")]

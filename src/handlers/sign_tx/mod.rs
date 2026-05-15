@@ -20,21 +20,17 @@ use alloc::vec::Vec;
 
 use crate::{
     app_ui::sign::{
-        approve_streaming_review, new_streaming_review, start_streaming_review,
-        streaming_review_show_output, ui_display_tx,
+        ui_approve_streaming_review, ui_new_streaming_review, ui_start_streaming_review,
+        ui_streaming_review_show_input, ui_streaming_review_show_output,
     },
     handlers::{sign_message::schnorr_sign, utils::mintlayer_hash},
     DataContext, StatusWord,
 };
 use messages::{
     encode_as_compact, encode_to,
-    mlcp::{
-        Amount, CoinType as PCoinType,
-        SighashInputCommitment, TxOutput, H256,
-    },
-    CoinType, Encode, InputAddressPath, Response,
-    SignTxReq, Signature, TxInputReq, TxInputSignatureResponse,
-    TxMetadataReq, TxMetadataV1Req, TxMetadataVersionReq, TxOutputReq,
+    mlcp::{Amount, CoinType as PCoinType, SighashInputCommitment, TxOutput, H256},
+    CoinType, Encode, InputAddressPath, Response, SignTxReq, Signature, TxInputReq,
+    TxInputSignatureResponse, TxMetadataReq, TxMetadataV1Req, TxMetadataVersionReq, TxOutputReq,
 };
 
 use ledger_device_sdk::{
@@ -45,7 +41,7 @@ use ledger_device_sdk::{
 
 mod summary_collector;
 use summary_collector::TxSummaryCollector;
-pub use summary_collector::{TxType, CoinOrTokenId};
+pub use summary_collector::{CoinOrTokenId, InputCommand, TxType};
 
 const BIP44: u32 = 44 + (1 << 31);
 
@@ -125,28 +121,18 @@ pub struct TxContext {
     inputs: Vec<InputCompressed>,
 
     spinner: NbglSpinner,
+    review: NbglStreamingReview,
 }
 
-pub enum Review {
-    Review(Vec<TxOutput>),
-    StreamingReview(NbglStreamingReview),
-}
-
-pub enum SigningState<'a> {
-    StreamingReviewStart(&'a NbglStreamingReview),
-    StreamingReviewOutput(&'a NbglStreamingReview, TxOutput),
+pub enum SigningState {
+    StreamingReviewStart,
+    StreamingReviewOutput(TxOutput),
     StreamingReviewApprove {
-        review: &'a NbglStreamingReview,
         output: TxOutput,
         inp_idx: u32,
         sighash: H256,
     },
     TxParsingNotComplete,
-    CompleteNotApproved {
-        inp_idx: u32,
-        sighash: H256,
-        outputs: &'a [TxOutput],
-    },
     ApprovedNotFinishedSigning {
         inp_idx: u32,
         sighash: H256,
@@ -188,6 +174,7 @@ impl TxContext {
             summary: TxSummaryCollector::new(),
             inputs: Vec::with_capacity(20),
             spinner: NbglSpinner::new(),
+            review: ui_new_streaming_review(),
         })
     }
 
@@ -237,10 +224,10 @@ impl TxContext {
         self.review_finished
     }
 
-    fn advance_next_input_step<'a>(
+    fn advance_next_input_step(
         &mut self,
         current_input_step: u32,
-    ) -> Result<SigningState<'a>, StatusWord> {
+    ) -> Result<SigningState, StatusWord> {
         let finished_with_inputs = current_input_step >= (self.num_inputs - 1);
 
         self.state = if finished_with_inputs {
@@ -267,12 +254,11 @@ impl TxContext {
         Ok(SigningState::TxParsingNotComplete)
     }
 
-    fn advance_next_input_additional_info_step<'a>(
+    fn advance_next_input_additional_info_step(
         &mut self,
         current_input_step: u32,
         expected_input_commitments_hash: [u8; 64],
-        review: &'a Review,
-    ) -> Result<SigningState<'a>, StatusWord> {
+    ) -> Result<SigningState, StatusWord> {
         let finished_with_inputs = current_input_step >= (self.num_inputs - 1);
 
         let signing_state = if finished_with_inputs {
@@ -287,11 +273,7 @@ impl TxContext {
             }
 
             self.state = TxParsingState::Output(0);
-
-            match review {
-                Review::Review(_) => SigningState::TxParsingNotComplete,
-                Review::StreamingReview(review) => SigningState::StreamingReviewStart(review),
-            }
+            SigningState::StreamingReviewStart
         } else {
             self.state = TxParsingState::InputCommitment {
                 inp_idx: current_input_step + 1,
@@ -384,33 +366,27 @@ pub fn setup_sign_tx(req: TxMetadataReq, ctx: &mut DataContext) -> Result<(), St
 
     tx_ctx.show_spinner();
 
-    // if the tx has many outputs use a streaming review
-    if tx_ctx.num_outputs > 10 {
-        *ctx = DataContext::TxContext(tx_ctx, Review::StreamingReview(new_streaming_review()));
-    } else {
-        *ctx = DataContext::TxContext(tx_ctx, Review::Review(Vec::new()));
-    }
+    *ctx = DataContext::TxContext(tx_ctx);
 
     Ok(())
 }
 
-fn handle_input_commitment_req<'a>(
+fn handle_input_commitment_req(
     req: SighashInputCommitment,
     input_step: u32,
     input_commitments_hash: [u8; 64],
     ctx: &mut TxContext,
-    review: &'a mut Review,
-) -> Result<SigningState<'a>, StatusWord> {
+) -> Result<SigningState, StatusWord> {
     ctx.update_input_commitments_hash(&req)?;
     ctx.update_hash(&req)?;
-    ctx.advance_next_input_additional_info_step(input_step, input_commitments_hash, review)
+    ctx.advance_next_input_additional_info_step(input_step, input_commitments_hash)
 }
 
-fn handle_input_req<'a>(
+fn handle_input_req(
     req: TxInputReq,
     input_step: u32,
     ctx: &mut TxContext,
-) -> Result<SigningState<'a>, StatusWord> {
+) -> Result<SigningState, StatusWord> {
     let addresses = req
         .addresses
         .into_iter()
@@ -432,12 +408,11 @@ fn handle_input_req<'a>(
     ctx.advance_next_input_step(input_step)
 }
 
-fn handle_output_req<'a>(
+fn handle_output_req(
     req: TxOutputReq,
     output_step: u32,
     ctx: &mut TxContext,
-    review: &'a mut Review,
-) -> Result<SigningState<'a>, StatusWord> {
+) -> Result<SigningState, StatusWord> {
     ctx.summary.process_output(&req.out)?;
     // on the first output add the number of outputs to the hash
     if output_step == 0 {
@@ -447,33 +422,15 @@ fn handle_output_req<'a>(
     }
     ctx.update_hash(&req.out)?;
     let next_step = ctx.advance_next_output_state(output_step)?;
-    let signin_state = match review {
-        Review::Review(outputs) => {
-            outputs.push(req.out);
-            match next_step {
-                NextTxOutputParsingState::Output(_) => SigningState::TxParsingNotComplete,
-                NextTxOutputParsingState::CompleteNotApproved { inp_idx, sighash } => {
-                    SigningState::CompleteNotApproved {
-                        inp_idx,
-                        sighash,
-                        outputs,
-                    }
-                }
-            }
-        }
-        Review::StreamingReview(review) => {
-            // on last output show it and ask for approval
-            match next_step {
-                NextTxOutputParsingState::Output(_) => {
-                    SigningState::StreamingReviewOutput(review, req.out)
-                }
-                NextTxOutputParsingState::CompleteNotApproved { inp_idx, sighash } => {
-                    SigningState::StreamingReviewApprove {
-                        review,
-                        output: req.out,
-                        inp_idx,
-                        sighash,
-                    }
+    let signin_state = {
+        // on last output show it and ask for approval
+        match next_step {
+            NextTxOutputParsingState::Output(_) => SigningState::StreamingReviewOutput(req.out),
+            NextTxOutputParsingState::CompleteNotApproved { inp_idx, sighash } => {
+                SigningState::StreamingReviewApprove {
+                    output: req.out,
+                    inp_idx,
+                    sighash,
                 }
             }
         }
@@ -482,11 +439,7 @@ fn handle_output_req<'a>(
     Ok(signin_state)
 }
 
-pub fn handle_sign_tx(
-    req: SignTxReq,
-    ctx: &mut TxContext,
-    review: &mut Review,
-) -> Result<Response, StatusWord> {
+pub fn handle_sign_tx(req: SignTxReq, ctx: &mut TxContext) -> Result<Response, StatusWord> {
     let signing_state = match (req, ctx.state()) {
         (SignTxReq::Input(req), TxParsingState::Input(n)) => handle_input_req(req, *n, ctx)?,
         (
@@ -495,10 +448,8 @@ pub fn handle_sign_tx(
                 inp_idx,
                 input_commitments_hash,
             },
-        ) => handle_input_commitment_req(req, *inp_idx, *input_commitments_hash, ctx, review)?,
-        (SignTxReq::Output(req), TxParsingState::Output(n)) => {
-            handle_output_req(req, *n, ctx, review)?
-        }
+        ) => handle_input_commitment_req(req, *inp_idx, *input_commitments_hash, ctx)?,
+        (SignTxReq::Output(req), TxParsingState::Output(n)) => handle_output_req(req, *n, ctx)?,
         (
             SignTxReq::NextSignature,
             TxParsingState::ApprovedNotFinishedSigning { inp_idx, sighash },
@@ -521,16 +472,25 @@ pub fn handle_sign_tx(
 
     match signing_state {
         SigningState::TxParsingNotComplete => Ok(Response::TxNext),
-        SigningState::StreamingReviewStart(review) => {
-            if start_streaming_review(review) {
-                Ok(Response::TxNext)
+        SigningState::StreamingReviewStart => {
+            if ui_start_streaming_review(&ctx.review) {
+                if let Some(inp_command) = ctx.summary.input_command() {
+                    if ui_streaming_review_show_input(&ctx.review, inp_command, ctx.coin)? {
+                        Ok(Response::TxNext)
+                    } else {
+                        ctx.review_finished = true;
+                        Err(StatusWord::Deny)
+                    }
+                } else {
+                    Ok(Response::TxNext)
+                }
             } else {
                 ctx.review_finished = true;
                 Err(StatusWord::Deny)
             }
         }
-        SigningState::StreamingReviewOutput(review, output) => {
-            if streaming_review_show_output(review, &output, ctx.coin)? {
+        SigningState::StreamingReviewOutput(output) => {
+            if ui_streaming_review_show_output(&ctx.review, &output, ctx.coin)? {
                 Ok(Response::TxNext)
             } else {
                 ctx.review_finished = true;
@@ -538,39 +498,17 @@ pub fn handle_sign_tx(
             }
         }
         SigningState::StreamingReviewApprove {
-            review,
             output,
             inp_idx,
             sighash,
         } => {
-            if approve_streaming_review(review, &output, ctx)? {
+            if ui_approve_streaming_review(&ctx.review, &output, ctx)? {
                 let response = compute_signature_and_append(ctx, inp_idx, &sighash)?;
                 if ctx.completed_all_signatures() {
                     ctx.review_finished = true;
                 } else {
                     ctx.show_spinner();
                 }
-                Ok(Response::TxSignature(response))
-            } else {
-                ctx.review_finished = true;
-                Err(StatusWord::Deny)
-            }
-        }
-        SigningState::CompleteNotApproved {
-            inp_idx,
-            sighash,
-            outputs,
-        } => {
-            // Display transaction. If user approves the transaction, sign it.
-            // Otherwise, return a "deny" status word.
-            if ui_display_tx(ctx, outputs)? {
-                let response = compute_signature_and_append(ctx, inp_idx, &sighash)?;
-                if ctx.completed_all_signatures() {
-                    ctx.review_finished = true;
-                } else {
-                    ctx.show_spinner();
-                }
-
                 Ok(Response::TxSignature(response))
             } else {
                 ctx.review_finished = true;
@@ -590,7 +528,6 @@ pub fn handle_sign_tx(
         }
     }
 }
-
 
 fn compute_signature_and_append(
     ctx: &mut TxContext,

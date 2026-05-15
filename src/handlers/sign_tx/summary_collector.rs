@@ -20,11 +20,9 @@ use alloc::collections::BTreeMap;
 use crate::StatusWord;
 use messages::{
     mlcp::{
-        AccountCommand, AccountSpending, Amount, OrderAccountCommand,
-        TxOutput, H256, OutputValue,
+        AccountCommand, AccountSpending, Amount, OrderAccountCommand, OutputValue, TxOutput, H256,
     },
-    AdditionalOrderInfo, AdditionalUtxoInfo,
-    TxInputWithAdditionalInfo,
+    AdditionalOrderInfo, AdditionalUtxoInfo, TxInputWithAdditionalInfo,
 };
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
@@ -56,12 +54,18 @@ pub enum TxType {
     FreezeOrder,
     CreateOrder,
     ConcludeOrder,
-    ComplexTransaction,
     DataDeposit,
+    ComplexTransaction,
+}
+
+pub enum InputCommand {
+    AccountCommand(AccountCommand),
+    OrderCommand(OrderAccountCommand),
 }
 
 pub struct TxSummaryCollector {
     tx_type: Option<TxType>,
+    input_command: Option<InputCommand>,
     total_inputs: BTreeMap<CoinOrTokenId, Amount>,
     total_outputs: BTreeMap<CoinOrTokenId, Amount>,
 }
@@ -70,9 +74,14 @@ impl TxSummaryCollector {
     pub fn new() -> Self {
         Self {
             tx_type: None,
+            input_command: None,
             total_inputs: BTreeMap::new(),
             total_outputs: BTreeMap::new(),
         }
+    }
+
+    pub fn input_command(&self) -> Option<&InputCommand> {
+        self.input_command.as_ref()
     }
 
     pub fn tx_type(&self) -> Option<TxType> {
@@ -90,19 +99,21 @@ impl TxSummaryCollector {
     pub fn fees_iter(
         &self,
     ) -> impl Iterator<Item = Result<(&CoinOrTokenId, u128), StatusWord>> + '_ {
-        self.total_inputs().iter().map(move |(coin_or_token, amount)| {
-            let out = *self
-                .total_outputs()
-                .get(coin_or_token)
-                .unwrap_or(&Amount::ZERO);
+        self.total_inputs()
+            .iter()
+            .map(move |(coin_or_token, amount)| {
+                let out = *self
+                    .total_outputs()
+                    .get(coin_or_token)
+                    .unwrap_or(&Amount::ZERO);
 
-            let fee = amount
-                .into_atoms()
-                .checked_sub(out.into_atoms())
-                .ok_or(StatusWord::TxNumericOperationFail)?;
+                let fee = amount
+                    .into_atoms()
+                    .checked_sub(out.into_atoms())
+                    .ok_or(StatusWord::TxFeeUnderflow)?;
 
-            Ok((coin_or_token, fee))
-        })
+                Ok((coin_or_token, fee))
+            })
     }
 
     pub fn process_output(&mut self, out: &TxOutput) -> Result<(), StatusWord> {
@@ -147,8 +158,11 @@ impl TxSummaryCollector {
             TxOutput::IssueNft(_, _, _) => {
                 self.tx_type = merge_tx_type(self.tx_type, TxType::CreateNft);
             }
-            TxOutput::CreateOrder(_) => {
+            TxOutput::CreateOrder(order_data) => {
                 self.tx_type = merge_tx_type(self.tx_type, TxType::CreateOrder);
+                let (coin_or_token_id, amount) =
+                    into_coin_or_token_id_and_amount(&order_data.give)?;
+                self.increase_output_totals(coin_or_token_id, amount)?;
             }
         }
 
@@ -162,6 +176,7 @@ impl TxSummaryCollector {
                     utxo: _,
                     staker_balance,
                 } => {
+                    self.tx_type = merge_tx_type(self.tx_type, TxType::DecommissionStakePool);
                     self.increase_input_totals(CoinOrTokenId::Coin, *staker_balance)?;
                 }
                 AdditionalUtxoInfo::Utxo(utxo) => {
@@ -198,36 +213,39 @@ impl TxSummaryCollector {
                     self.increase_input_totals(CoinOrTokenId::Coin, amount)?;
                 }
             },
-            TxInputWithAdditionalInfo::AccountCommand(_, cmd) => match cmd {
-                AccountCommand::MintTokens(token_id, amount) => {
-                    self.tx_type = merge_tx_type(self.tx_type, TxType::MintTokens);
-                    self.increase_input_totals(
-                        CoinOrTokenId::TokenId(*token_id.hash()),
-                        *amount,
-                    )?;
+            TxInputWithAdditionalInfo::AccountCommand(_, cmd) => {
+                self.input_command = Some(InputCommand::AccountCommand(cmd.clone()));
+                match cmd {
+                    AccountCommand::MintTokens(token_id, amount) => {
+                        self.tx_type = merge_tx_type(self.tx_type, TxType::MintTokens);
+                        self.increase_input_totals(
+                            CoinOrTokenId::TokenId(*token_id.hash()),
+                            *amount,
+                        )?;
+                    }
+                    AccountCommand::ConcludeOrder(_) | AccountCommand::FillOrder(_, _, _) => {
+                        return Err(StatusWord::OrdersV0NotSupported)
+                    }
+                    AccountCommand::UnmintTokens(_) => {
+                        self.tx_type = merge_tx_type(self.tx_type, TxType::UnmintTokens);
+                    }
+                    AccountCommand::LockTokenSupply(_) => {
+                        self.tx_type = merge_tx_type(self.tx_type, TxType::LockTokenSupply);
+                    }
+                    AccountCommand::FreezeToken(_, _) => {
+                        self.tx_type = merge_tx_type(self.tx_type, TxType::FreezeToken);
+                    }
+                    AccountCommand::UnfreezeToken(_) => {
+                        self.tx_type = merge_tx_type(self.tx_type, TxType::UnfreezeToken);
+                    }
+                    AccountCommand::ChangeTokenAuthority(_, _) => {
+                        self.tx_type = merge_tx_type(self.tx_type, TxType::ChangeTokenAuthority);
+                    }
+                    AccountCommand::ChangeTokenMetadataUri(_, _) => {
+                        self.tx_type = merge_tx_type(self.tx_type, TxType::ChangeTokenMetadataUri);
+                    }
                 }
-                AccountCommand::ConcludeOrder(_) | AccountCommand::FillOrder(_, _, _) => {
-                    return Err(StatusWord::OrdersV0NotSupported)
-                }
-                AccountCommand::UnmintTokens(_) => {
-                    self.tx_type = merge_tx_type(self.tx_type, TxType::UnmintTokens);
-                }
-                AccountCommand::LockTokenSupply(_) => {
-                    self.tx_type = merge_tx_type(self.tx_type, TxType::LockTokenSupply);
-                }
-                AccountCommand::FreezeToken(_, _) => {
-                    self.tx_type = merge_tx_type(self.tx_type, TxType::FreezeToken);
-                }
-                AccountCommand::UnfreezeToken(_) => {
-                    self.tx_type = merge_tx_type(self.tx_type, TxType::UnfreezeToken);
-                }
-                AccountCommand::ChangeTokenAuthority(_, _) => {
-                    self.tx_type = merge_tx_type(self.tx_type, TxType::ChangeTokenAuthority);
-                }
-                AccountCommand::ChangeTokenMetadataUri(_, _) => {
-                    self.tx_type = merge_tx_type(self.tx_type, TxType::ChangeTokenMetadataUri);
-                }
-            },
+            }
             TxInputWithAdditionalInfo::OrderAccountCommand(
                 cmd,
                 AdditionalOrderInfo {
@@ -236,39 +254,44 @@ impl TxSummaryCollector {
                     ask_balance,
                     give_balance,
                 },
-            ) => match cmd {
-                OrderAccountCommand::FillOrder(_, fill_amount) => {
-                    let (fill_coin_or_token_id, asked_amount) =
-                        into_coin_or_token_id_and_amount(&initially_asked)?;
-                    let (given_coin_or_token_id, given_amount) =
-                        into_coin_or_token_id_and_amount(&initially_given)?;
+            ) => {
+                self.input_command = Some(InputCommand::OrderCommand(cmd.clone()));
+                match cmd {
+                    OrderAccountCommand::FillOrder(_, fill_amount) => {
+                        let (fill_coin_or_token_id, asked_amount) =
+                            into_coin_or_token_id_and_amount(&initially_asked)?;
+                        let (given_coin_or_token_id, given_amount) =
+                            into_coin_or_token_id_and_amount(&initially_given)?;
 
-                    self.increase_output_totals(fill_coin_or_token_id, *fill_amount)?;
+                        self.increase_output_totals(fill_coin_or_token_id, *fill_amount)?;
 
-                    let atoms = given_amount
-                        .into_atoms()
-                        .checked_mul(fill_amount.into_atoms())
-                        .ok_or(StatusWord::TxNumericOperationFail)?
-                        .checked_div(asked_amount.into_atoms())
-                        .ok_or(StatusWord::TxNumericOperationFail)?;
-                    let amount = Amount::from_atoms(atoms);
-                    self.increase_input_totals(given_coin_or_token_id, amount)?;
+                        let atoms = given_amount
+                            .into_atoms()
+                            .checked_mul(fill_amount.into_atoms())
+                            .ok_or(StatusWord::TxNumericOperationFail)?
+                            .checked_div(asked_amount.into_atoms())
+                            .ok_or(StatusWord::TxNumericOperationFail)?;
+                        let amount = Amount::from_atoms(atoms);
+                        self.increase_input_totals(given_coin_or_token_id, amount)?;
 
-                    self.tx_type = merge_tx_type(self.tx_type, TxType::FillOrder);
+                        self.tx_type = merge_tx_type(self.tx_type, TxType::FillOrder);
+                    }
+                    OrderAccountCommand::ConcludeOrder(_) => {
+                        let (coin_or_token_id, _) =
+                            into_coin_or_token_id_and_amount(&initially_asked)?;
+                        self.increase_input_totals(coin_or_token_id, *ask_balance)?;
+
+                        let (coin_or_token_id, _) =
+                            into_coin_or_token_id_and_amount(&initially_given)?;
+                        self.increase_input_totals(coin_or_token_id, *give_balance)?;
+
+                        self.tx_type = merge_tx_type(self.tx_type, TxType::ConcludeOrder);
+                    }
+                    OrderAccountCommand::FreezeOrder(_) => {
+                        self.tx_type = merge_tx_type(self.tx_type, TxType::FreezeOrder);
+                    }
                 }
-                OrderAccountCommand::ConcludeOrder(_) => {
-                    let (coin_or_token_id, _) = into_coin_or_token_id_and_amount(&initially_asked)?;
-                    self.increase_input_totals(coin_or_token_id, *ask_balance)?;
-
-                    let (coin_or_token_id, _) = into_coin_or_token_id_and_amount(&initially_given)?;
-                    self.increase_input_totals(coin_or_token_id, *give_balance)?;
-
-                    self.tx_type = merge_tx_type(self.tx_type, TxType::ConcludeOrder);
-                }
-                OrderAccountCommand::FreezeOrder(_) => {
-                    self.tx_type = merge_tx_type(self.tx_type, TxType::FreezeOrder);
-                }
-            },
+            }
         };
 
         Ok(())
@@ -279,7 +302,10 @@ impl TxSummaryCollector {
         key: CoinOrTokenId,
         amount: Amount,
     ) -> Result<(), StatusWord> {
-        let total = self.total_inputs.entry(key).or_insert(Amount::from_atoms(0));
+        let total = self
+            .total_inputs
+            .entry(key)
+            .or_insert(Amount::from_atoms(0));
         let new_total = total
             .into_atoms()
             .checked_add(amount.into_atoms())
@@ -293,7 +319,10 @@ impl TxSummaryCollector {
         key: CoinOrTokenId,
         amount: Amount,
     ) -> Result<(), StatusWord> {
-        let total = self.total_outputs.entry(key).or_insert(Amount::from_atoms(0));
+        let total = self
+            .total_outputs
+            .entry(key)
+            .or_insert(Amount::from_atoms(0));
         let new_total = total
             .into_atoms()
             .checked_add(amount.into_atoms())
