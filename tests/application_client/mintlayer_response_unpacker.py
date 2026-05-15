@@ -56,17 +56,18 @@ def unpack_get_app_and_version_response(response: bytes) -> Tuple[str, str]:
 #            chain_code_len (1)
 #            chain_code (var)
 def unpack_get_public_key_response(response: bytes) -> Tuple[int, bytes, int, bytes]:
+    print("response bytes: ", len(response))
     response_bytes = scalecodec.base.ScaleBytes(response)
-    msg_signature_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
-        "GetPublicKeyResponse", data=response_bytes
+    response_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
+        "Response", data=response_bytes
     )
-    sig = msg_signature_obj.decode()
+    msg = response_obj.decode()
 
-    print(sig)
+    print(msg)
 
-    pub_key = bytes.fromhex(sig["public_key"][2:])
+    pub_key = bytes.fromhex(msg["PublicKey"]["public_key"][2:])
     pub_key_len = len(pub_key)
-    chain_code = bytes.fromhex(sig["chain_code"][2:])
+    chain_code = bytes.fromhex(msg["PublicKey"]["chain_code"][2:])
     chain_code_len = len(chain_code)
 
     print(pub_key_len, pub_key)

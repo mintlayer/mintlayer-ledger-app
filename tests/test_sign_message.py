@@ -1,17 +1,10 @@
 import pytest
 import scalecodec  # type: ignore
-from ragger.bip import CurveChoice, calculate_public_key_and_chaincode
 from ragger.error import ExceptionRAPDU
-from ragger.navigator import NavIns, NavInsID
 
 from application_client import MAINNET
 from application_client.mintlayer_command_sender import (
     Errors, MintlayerCommandSender)
-from application_client.mintlayer_response_unpacker import \
-    unpack_sign_message_response
-from utils import ROOT_SCREENSHOT_PATH
-
-MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
 
 # In this test we check that the message signing works

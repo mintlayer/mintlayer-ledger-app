@@ -3,7 +3,7 @@ import scalecodec  # type: ignore
 from ragger.error import ExceptionRAPDU
 
 from application_client import MAINNET
-from application_client.mintlayer_command_sender import (CLA, P1, P2, Errors,
+from application_client.mintlayer_command_sender import (CLA, GetAppAndVersionP1, SignTxP1, P2, Errors,
                                                          InsType)
 
 tx_metadata_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("TxMetadataReq")
@@ -28,18 +28,18 @@ def test_wrong_p1p2(backend):
     # Wrong P2
     with pytest.raises(ExceptionRAPDU) as e:
         backend.exchange(
-            cla=CLA, ins=InsType.GET_PUBLIC_KEY, p1=P1.P1_START, p2=123
+            cla=CLA, ins=InsType.GET_PUBLIC_KEY, p1=GetAppAndVersionP1.P1_START, p2=123
         )
     assert e.value.status == Errors.SW_WRONG_P1P2
 
     backend.exchange(
-            cla=CLA, ins=InsType.GET_PUBLIC_KEY, p1=P1.P1_START, p2=P2.P2_MORE
+            cla=CLA, ins=InsType.GET_PUBLIC_KEY, p1=GetAppAndVersionP1.P1_START, p2=P2.P2_MORE
         )
     
     # Wrong P1 after sending MORE
     with pytest.raises(ExceptionRAPDU) as e:
         backend.exchange(
-            cla=CLA, ins=InsType.GET_PUBLIC_KEY, p1=P1.P1_START + 1, p2=P2.P2_MORE
+            cla=CLA, ins=InsType.GET_PUBLIC_KEY, p1=GetAppAndVersionP1.P1_START + 1, p2=P2.P2_MORE
         )
     assert e.value.status == Errors.SW_WRONG_P1P2
 
@@ -62,7 +62,7 @@ def test_invalid_state(backend):
         backend.exchange(
             cla=CLA,
             ins=InsType.SIGN_TX,
-            p1=P1.P1_TX_INPUT,  # Try to continue a flow instead of start a new one
+            p1=SignTxP1.P1_NEXT,  # Try to continue a flow instead of start a new one
             p2=P2.P2_LAST,
         )
     assert e.value.status == Errors.SW_WRONG_CONTEXT
@@ -85,7 +85,7 @@ def test_sign_tx_invalid_coin(backend, scenario_navigator, device, navigator):
         res = backend.exchange(
             cla=CLA,
             ins=InsType.SIGN_TX,
-            p1=P1.P1_START,
+            p1=SignTxP1.P1_START,
             p2=P2.P2_LAST,
             data=bytes(metadata),
         )
@@ -112,7 +112,7 @@ def test_sign_tx_invalid_P2_for_input(backend, scenario_navigator, device, navig
     res = backend.exchange(
         cla=CLA,
         ins=InsType.SIGN_TX,
-        p1=P1.P1_START,
+        p1=SignTxP1.P1_START,
         p2=P2.P2_LAST,
         data=bytes(metadata),
     )
@@ -123,7 +123,7 @@ def test_sign_tx_invalid_P2_for_input(backend, scenario_navigator, device, navig
         res = backend.exchange(
             cla=CLA,
             ins=InsType.SIGN_TX,
-            p1=P1.P1_TX_OUTPUT,
+            p1=SignTxP1.P1_NEXT,
             p2=P2.P2_LAST,
             data=sign_tx_req_obj.encode(
                 {
@@ -172,7 +172,7 @@ def test_sign_tx_invalid_input(backend, scenario_navigator, device, navigator):
         res = backend.exchange(
             cla=CLA,
             ins=InsType.SIGN_TX,
-            p1=P1.P1_TX_INPUT,
+            p1=SignTxP1.P1_NEXT,
             p2=P2.P2_LAST,
             data=bytes([0] * 10),
         )
@@ -195,7 +195,7 @@ def test_sign_tx_too_large_data(backend, scenario_navigator, device, navigator):
     res = backend.exchange(
         cla=CLA,
         ins=InsType.SIGN_TX,
-        p1=P1.P1_START,
+        p1=SignTxP1.P1_START,
         p2=P2.P2_LAST,
         data=bytes(metadata),
     )
@@ -207,7 +207,7 @@ def test_sign_tx_too_large_data(backend, scenario_navigator, device, navigator):
             res = backend.exchange(
                 cla=CLA,
                 ins=InsType.SIGN_TX,
-                p1=P1.P1_TX_INPUT,
+                p1=SignTxP1.P1_NEXT,
                 p2=P2.P2_MORE,
                 data=b"big_input_data",
             )

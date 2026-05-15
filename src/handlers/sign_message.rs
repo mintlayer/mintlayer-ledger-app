@@ -20,7 +20,7 @@ use crate::{
     DataContext, StatusWord,
 };
 use messages::{
-    mlcp::CoinType, AddrType, Bip32Path, MsgSignatureResponse, SignMessageReq, Signature,
+    mlcp::CoinType, AddrType, Bip32Path, MsgSignatureResponse, SignMessageReq, SignatureResponse,
 };
 
 use alloc::vec::Vec;
@@ -49,20 +49,14 @@ impl SignMessageContext {
     }
 }
 
-pub fn setup_sign_message(req: SignMessageReq, ctx: &mut DataContext) -> Result<(), StatusWord> {
-    *ctx = DataContext::SignMessageContext(SignMessageContext::new(req));
-    Ok(())
+pub fn setup_sign_message(req: SignMessageReq) -> DataContext {
+    DataContext::SignMessageContext(SignMessageContext::new(req))
 }
 
 pub fn handle_sign_message(
     message: &[u8],
-    ctx: &mut DataContext,
+    ctx: &mut SignMessageContext,
 ) -> Result<MsgSignatureResponse, StatusWord> {
-    let ctx = match ctx {
-        DataContext::SignMessageContext(ctx) => ctx,
-        _ => return Err(StatusWord::WrongContext),
-    };
-
     let private_key = Secp256k1::derive_from_path(ctx.path.as_ref());
     let public_key = private_key
         .public_key()
@@ -100,7 +94,7 @@ fn compute_signature<const N: usize>(
     let sig = schnorr_sign(private_key, message_hash2.as_bytes())?;
 
     let response = MsgSignatureResponse {
-        signature: Signature(sig),
+        signature: SignatureResponse(sig),
     };
 
     Ok(response)

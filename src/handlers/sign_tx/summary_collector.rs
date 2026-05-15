@@ -185,7 +185,7 @@ impl TxSummaryCollector {
                         | TxOutput::LockThenTransfer(value, _, _)
                         | TxOutput::Htlc(value, _) => {
                             let (coin_or_token_id, amount) =
-                                into_coin_or_token_id_and_amount(&value)?;
+                                into_coin_or_token_id_and_amount(value)?;
                             self.increase_input_totals(coin_or_token_id, amount)?;
                         }
                         TxOutput::Burn(_)
@@ -259,9 +259,9 @@ impl TxSummaryCollector {
                 match cmd {
                     OrderAccountCommand::FillOrder(_, fill_amount) => {
                         let (fill_coin_or_token_id, asked_amount) =
-                            into_coin_or_token_id_and_amount(&initially_asked)?;
+                            into_coin_or_token_id_and_amount(initially_asked)?;
                         let (given_coin_or_token_id, given_amount) =
-                            into_coin_or_token_id_and_amount(&initially_given)?;
+                            into_coin_or_token_id_and_amount(initially_given)?;
 
                         self.increase_output_totals(fill_coin_or_token_id, *fill_amount)?;
 
@@ -278,11 +278,11 @@ impl TxSummaryCollector {
                     }
                     OrderAccountCommand::ConcludeOrder(_) => {
                         let (coin_or_token_id, _) =
-                            into_coin_or_token_id_and_amount(&initially_asked)?;
+                            into_coin_or_token_id_and_amount(initially_asked)?;
                         self.increase_input_totals(coin_or_token_id, *ask_balance)?;
 
                         let (coin_or_token_id, _) =
-                            into_coin_or_token_id_and_amount(&initially_given)?;
+                            into_coin_or_token_id_and_amount(initially_given)?;
                         self.increase_input_totals(coin_or_token_id, *give_balance)?;
 
                         self.tx_type = merge_tx_type(self.tx_type, TxType::ConcludeOrder);

@@ -29,7 +29,7 @@ use crate::{
 use messages::{
     encode_as_compact, encode_to,
     mlcp::{Amount, CoinType as PCoinType, SighashInputCommitment, TxOutput, H256},
-    CoinType, Encode, InputAddressPath, Response, SignTxReq, Signature, TxInputReq,
+    CoinType, Encode, InputAddressPath, Response, SignTxReq, SignatureResponse, TxInputReq,
     TxInputSignatureResponse, TxMetadataReq, TxMetadataV1Req, TxMetadataVersionReq, TxOutputReq,
 };
 
@@ -467,7 +467,7 @@ pub fn handle_sign_tx(req: SignTxReq, ctx: &mut TxContext) -> Result<Response, S
         (SignTxReq::NextSignature, TxParsingState::Finished) => {
             return Err(StatusWord::TxAlreadyFinished)
         }
-        (_, _) => return Err(StatusWord::WrongP1P2),
+        (_, _) => return Err(StatusWord::WrongContext),
     };
 
     match signing_state {
@@ -545,7 +545,7 @@ fn compute_signature_and_append(
     let private_key = Secp256k1::derive_from_path(&addr);
     let sig = schnorr_sign(&private_key, sighash.as_bytes())?;
 
-    let signature = Signature(sig);
+    let signature = SignatureResponse(sig);
     let input_idx = address.input_idx;
     let multisig_idx = address.multisig_idx;
 
