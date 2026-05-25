@@ -1,10 +1,12 @@
 import pytest
-import scalecodec  # type: ignore
 from ragger.error import ExceptionRAPDU
 
 from application_client import MAINNET
 from application_client.mintlayer_command_sender import (
     Errors, MintlayerCommandSender)
+from application_client.mintlayer_response_unpacker import (
+    unpack_sign_message_response,
+)
 
 
 # In this test we check that the message signing works
@@ -15,9 +17,8 @@ def test_sign_message(backend, scenario_navigator):
     with client.sign_message(coin=MAINNET, addr_type=0, path=path, message=message):
         scenario_navigator.review_approve()
 
-    response = scalecodec.base.ScaleBytes(client.get_async_response().data)
-    msg_signature_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("MsgSignature", data=response)
-    sig = msg_signature_obj.decode()
+    sig = unpack_sign_message_response(client.get_async_response().data)
+    assert len(sig) == 64
 
 def test_sign_message_pkh(backend, scenario_navigator):
     path = "m/44'/19788'/0'/0/0"
@@ -26,9 +27,8 @@ def test_sign_message_pkh(backend, scenario_navigator):
     with client.sign_message(coin=MAINNET, addr_type=1, path=path, message=message):
         scenario_navigator.review_approve()
 
-    response = scalecodec.base.ScaleBytes(client.get_async_response().data)
-    msg_signature_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("MsgSignature", data=response)
-    sig = msg_signature_obj.decode()
+    sig = unpack_sign_message_response(client.get_async_response().data)
+    assert len(sig) == 64
 
 
 # Message signing refused test

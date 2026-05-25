@@ -75,9 +75,12 @@ def test_sign_tx_invalid_coin(backend, scenario_navigator, device, navigator):
     metadata = tx_metadata_obj.encode(
         {
             "coin": invalid_coin,
-            "version": 1,
-            "num_inputs": num_inputs,
-            "num_outputs": num_outputs,
+            "version": {
+                "V1": {
+                    "num_inputs": num_inputs,
+                    "num_outputs": num_outputs,
+                },
+            },
         }
     ).data
 
@@ -93,19 +96,22 @@ def test_sign_tx_invalid_coin(backend, scenario_navigator, device, navigator):
     assert e.value.status == Errors.SW_DESERIALIZE_FAIL
 
 
-def test_sign_tx_invalid_P2_for_input(backend, scenario_navigator, device, navigator):
+def test_sign_tx_invalid_context(backend, scenario_navigator, device, navigator):
     """
     After metadata try to pass an output instead of the input
-    expect an error for wrong P1/P2
+    expect an error for wrong context
     """
     num_inputs = 2
     num_outputs = 2
     metadata = tx_metadata_obj.encode(
         {
             "coin": MAINNET,
-            "version": 1,
-            "num_inputs": num_inputs,
-            "num_outputs": num_outputs,
+            "version": {
+                "V1": {
+                    "num_inputs": num_inputs,
+                    "num_outputs": num_outputs,
+                },
+            },
         }
     ).data
 
@@ -142,7 +148,7 @@ def test_sign_tx_invalid_P2_for_input(backend, scenario_navigator, device, navig
                 }
             ).data,
         )
-    assert e.value.status == Errors.SW_WRONG_P1P2
+    assert e.value.status == Errors.SW_WRONG_CONTEXT
 
 
 def test_sign_tx_invalid_input(backend, scenario_navigator, device, navigator):
@@ -151,16 +157,19 @@ def test_sign_tx_invalid_input(backend, scenario_navigator, device, navigator):
     metadata = tx_metadata_obj.encode(
         {
             "coin": MAINNET,
-            "version": 1,
-            "num_inputs": num_inputs,
-            "num_outputs": num_outputs,
+            "version": {
+                "V1": {
+                    "num_inputs": num_inputs,
+                    "num_outputs": num_outputs,
+                },
+            },
         }
     ).data
 
     res = backend.exchange(
         cla=CLA,
         ins=InsType.SIGN_TX,
-        p1=P1.P1_START,
+        p1=SignTxP1.P1_START,
         p2=P2.P2_LAST,
         data=bytes(metadata),
     )
@@ -186,9 +195,12 @@ def test_sign_tx_too_large_data(backend, scenario_navigator, device, navigator):
     metadata = tx_metadata_obj.encode(
         {
             "coin": MAINNET,
-            "version": 1,
-            "num_inputs": num_inputs,
-            "num_outputs": num_outputs,
+            "version": {
+                "V1": {
+                    "num_inputs": num_inputs,
+                    "num_outputs": num_outputs,
+                },
+            },
         }
     ).data
 
@@ -209,7 +221,7 @@ def test_sign_tx_too_large_data(backend, scenario_navigator, device, navigator):
                 ins=InsType.SIGN_TX,
                 p1=SignTxP1.P1_NEXT,
                 p2=P2.P2_MORE,
-                data=b"big_input_data",
+                data=b"big_input_data"*10,
             )
 
     assert e.value.status == Errors.SW_MAX_BUFFER_LEN_EXCEEDED

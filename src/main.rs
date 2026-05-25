@@ -44,21 +44,22 @@ use ledger_device_sdk::{
 };
 
 use app_ui::menu::ui_menu_main;
+use errors::sdk_err_to_status;
 use handlers::{
     get_public_key::handle_get_public_key,
     sign_message::{handle_sign_message, setup_sign_message, SignMessageContext},
-    sign_tx::{setup_sign_tx, TxContext},
+    sign_tx::{handle_sign_tx, setup_sign_tx, TxContext},
 };
 use messages::{
     decode_all, encode, Ins, PubKeyP1, Response, SignP1, StatusWord, APDU_CLASS, MAX_ADPU_DATA_LEN,
     P2_DONE, P2_MORE,
 };
 
-use crate::handlers::sign_tx::handle_sign_tx;
-
 ledger_device_sdk::set_panic!(ledger_device_sdk::exiting_panic);
 
-pub const MAX_BUFFER_LEN: usize = 4 * MAX_ADPU_DATA_LEN;
+/// 18 * MAX_ADPU_DATA_LEN seems to be the upper limit for all devices
+/// we set it to less than half of that so it can have space to deserialize the data.
+pub const MAX_BUFFER_LEN: usize = 8 * MAX_ADPU_DATA_LEN;
 
 /// Represents a fully assembled Low-Level Instruction.
 /// Contains the aggregated data from one or more APDUs (if P2 indicated more data).
@@ -80,10 +81,16 @@ pub struct ApduTransport {
     current_p1: Option<u8>,
 }
 
+impl Default for ApduTransport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ApduTransport {
     pub fn new() -> Self {
         Self {
-            buffer: Vec::with_capacity(255), // Pre-alloc for at least one standard APDU
+            buffer: Vec::with_capacity(MAX_ADPU_DATA_LEN),
             current_ins: None,
             current_p1: None,
         }
@@ -96,11 +103,15 @@ impl ApduTransport {
     /// - If `P2 == P2_DONE`, it finishes accumulation and returns `Ok(Some(RawInstruction))`.
     pub fn receive(&mut self, comm: &mut Comm) -> Result<ReceiveInstructionResult, StatusWord> {
         let header: ApduHeader = comm.next_command();
-        let data = comm.get_data().map_err(|_| StatusWord::WrongApduLength)?;
+        let data = comm.get_data().map_err(sdk_err_to_status)?;
 
         // Validation: If we are in the middle of a stream, INS and P1 must match
         if let (Some(curr_ins), Some(curr_p1)) = (self.current_ins, self.current_p1) {
-            if header.ins != curr_ins || header.p1 != curr_p1 {
+            if header.ins != curr_ins {
+                self.reset();
+                return Err(StatusWord::WrongInstruction);
+            }
+            if header.p1 != curr_p1 {
                 self.reset();
                 return Err(StatusWord::WrongP1P2);
             }
@@ -201,6 +212,9 @@ fn show_status_and_home_if_needed(cmd: &Command, ctx: &mut Context, status: &Sta
     }
 }
 
+// Adding a dependency to Box increases the firmware size by 3 to 4kb
+// and causes memory related failures on nanox, so we avoid using it here.
+#[allow(clippy::large_enum_variant)]
 pub enum DataContext {
     Empty,
     TxContext(TxContext),
@@ -307,12 +321,16 @@ fn handle_command(cmd: &Command, ctx: &mut Context) -> Result<Response, StatusWo
         },
         Command::SignMessage { p1, data } => match p1 {
             SignP1::Start => {
-                let req = decode_all(&data).ok_or(StatusWord::DeserializeFail)?;
-                setup_sign_message(req, &mut ctx.data)?;
+                let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
+                ctx.data = setup_sign_message(req);
                 Ok(Response::MessageSetup)
             }
             SignP1::Next => {
-                handle_sign_message(&data, &mut ctx.data).map(Response::MessageSignature)
+                let msg_ctx = match &mut ctx.data {
+                    DataContext::SignMessageContext(c) => c,
+                    _ => return Err(StatusWord::WrongContext),
+                };
+                handle_sign_message(data, msg_ctx).map(Response::MessageSignature)
             }
         },
         Command::Ping => Ok(Response::Pong),

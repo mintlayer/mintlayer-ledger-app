@@ -23,6 +23,7 @@ use ledger_device_sdk::ecc::{Secp256k1, SeedDerive};
 
 // Path should be at least [bip44, coin_type, account_index]
 const MIN_PATH_LEN: usize = 3;
+const COIN_TYPE_INDEX: usize = 1;
 
 pub fn handle_get_public_key(
     req: PublicKeyReq,
@@ -32,7 +33,7 @@ pub fn handle_get_public_key(
         return Err(StatusWord::InvalidPath);
     }
     let coin_type: CoinType = req.coin_type.into();
-    if req.path.as_ref()[1] != coin_type.bip44_coin_type() {
+    if req.path.as_ref()[COIN_TYPE_INDEX] != coin_type.bip44_coin_type() {
         return Err(StatusWord::InvalidPath);
     }
 

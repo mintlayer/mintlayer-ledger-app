@@ -22,5 +22,7 @@ __pycache__/
 # Related to the Ledger VSCode extension
 # Virtual env for sideload (macOS and Windows)
 ledger/
+venv/
+.vscode/
 # Build directory
 build/

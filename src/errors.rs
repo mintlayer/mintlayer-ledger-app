@@ -39,3 +39,18 @@ pub fn cx_err_to_status(e: CxError) -> StatusWord {
         CxError::GenericError => StatusWord::EccGenericError,
     }
 }
+
+pub fn sdk_err_to_status(e: ledger_device_sdk::io::StatusWords) -> StatusWord {
+    match e {
+        ledger_device_sdk::io::StatusWords::Ok => StatusWord::Ok,
+        ledger_device_sdk::io::StatusWords::BadCla => StatusWord::ClaNotSupported,
+        ledger_device_sdk::io::StatusWords::NothingReceived => StatusWord::NothingReceived,
+        ledger_device_sdk::io::StatusWords::BadIns => StatusWord::InsNotSupported,
+        ledger_device_sdk::io::StatusWords::BadP1P2 => StatusWord::WrongP1P2,
+        ledger_device_sdk::io::StatusWords::BadLen => StatusWord::WrongApduLength,
+        ledger_device_sdk::io::StatusWords::UserCancelled => StatusWord::Deny,
+        ledger_device_sdk::io::StatusWords::Unknown => StatusWord::Unknown,
+        ledger_device_sdk::io::StatusWords::Panic => StatusWord::Panic,
+        ledger_device_sdk::io::StatusWords::DeviceLocked => StatusWord::DeviceLocked,
+    }
+}
