@@ -18,6 +18,20 @@
  *****************************************************************************/
 
 #![no_std]
+// The following is needed to be able to generate a test executable that can be run on speculos.
+// 1. Disable the generation of `fn main`.
+#![cfg_attr(test, no_main)]
+// 2. "custom_test_frameworks" must be enabled to be able to specify the custom runner and use
+// the `#[test_case]` attribute (used internally by `testmacro::test_item`).
+#![feature(custom_test_frameworks)]
+// 3. Specify the custom test runner. All test cases collected by `#[test_case]` will be passed
+// to this function. In particular, `sdk_test_runner` will loop over the array of test cases and:
+// a) fix references stored inside the test case via pic_rs/pic;
+// b) invoke the closure associated with the test case.
+#![test_runner(ledger_device_sdk::testing::sdk_test_runner)]
+// 4. This will put `fn test_main` at the test crate's root, which will call the runner that we've
+// specified above; we'll call it from our `sample_main`.
+#![reexport_test_harness_main = "test_main"]
 
 mod app_ui {
     pub mod address;
@@ -33,6 +47,8 @@ mod handlers {
 }
 
 mod errors;
+#[cfg(test)]
+mod testing;
 
 // Required for using String, Vec, format!...
 extern crate alloc;

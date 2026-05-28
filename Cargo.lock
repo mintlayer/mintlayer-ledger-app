@@ -725,6 +725,7 @@ dependencies = [
  "ledger_secure_sdk_sys",
  "mintlayer-core-primitives",
  "mintlayer-messages",
+ "testmacro",
 ]
 
 [[package]]
@@ -1323,6 +1324,16 @@ name = "target-lexicon"
 version = "0.12.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
+
+[[package]]
+name = "testmacro"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e81321e8c082256753e5af547c7352ff5a9f1958c4c7e7de1eb8289ce65884f2"
+dependencies = [
+ "quote",
+ "syn 1.0.109",
+]
 
 [[package]]
 name = "thiserror"

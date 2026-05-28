@@ -13,6 +13,10 @@ ledger_secure_sdk_sys.workspace = true
 mintlayer-core-primitives.workspace = true
 mintlayer-messages.workspace = true
 
+[dev-dependencies]
+ledger_device_sdk = { workspace = true, features = ["unit_test"] }
+testmacro.workspace = true
+
 [features]
 default = ["ledger_device_sdk/nano_nbgl"]
 debug = ["ledger_device_sdk/debug"]
