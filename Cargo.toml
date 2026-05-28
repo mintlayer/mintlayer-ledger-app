@@ -52,6 +52,15 @@ mintlayer-app-core.workspace = true
 [build-dependencies]
 image.workspace = true
 
+[[bin]]
+# Note: we only have this section to disable tests, but Cargo inists that "name" should also
+# be specified.
+name = "mintlayer-app"
+# The app bin crate is a thin wrapper around `mintlayer-app-core` and it's not supposed to have
+# unit tests of its own. So we disable tests completely to prevent Cargo from producing an uncompilable
+# test binary.
+test = false
+
 [package.metadata.ledger]
 curve = ["secp256k1"]
 flags = "0"
