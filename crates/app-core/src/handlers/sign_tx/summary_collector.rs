@@ -18,7 +18,7 @@
 use alloc::collections::BTreeMap;
 
 use crate::StatusWord;
-use messages::{
+use mintlayer_messages::{
     mlcp::{
         AccountCommand, AccountSpending, Amount, OrderAccountCommand, OutputValue, TxOutput, H256,
     },

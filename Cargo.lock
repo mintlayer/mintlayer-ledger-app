@@ -690,16 +690,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a282da65faaf38286cf3be983213fcf1d2e2a58700e808f83f4ea9a4804bc0"
 
 [[package]]
-name = "messages"
-version = "0.1.0"
-dependencies = [
- "derive_more",
- "mintlayer-core-primitives",
- "num_enum",
- "parity-scale-codec",
-]
-
-[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -720,6 +710,7 @@ name = "mintlayer-app"
 version = "0.1.0"
 dependencies = [
  "image",
+ "ledger_device_sdk",
  "mintlayer-app-core",
 ]
 
@@ -732,8 +723,8 @@ dependencies = [
  "hex",
  "ledger_device_sdk",
  "ledger_secure_sdk_sys",
- "messages",
  "mintlayer-core-primitives",
+ "mintlayer-messages",
 ]
 
 [[package]]
@@ -745,6 +736,16 @@ dependencies = [
  "fixed-hash",
  "parity-scale-codec",
  "strum",
+]
+
+[[package]]
+name = "mintlayer-messages"
+version = "0.1.0"
+dependencies = [
+ "derive_more",
+ "mintlayer-core-primitives",
+ "num_enum",
+ "parity-scale-codec",
 ]
 
 [[package]]

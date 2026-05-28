@@ -25,7 +25,7 @@ use crate::{
     handlers::{sign_message::schnorr_sign, utils::mintlayer_hash},
     DataContext, StatusWord,
 };
-use messages::{
+use mintlayer_messages::{
     encode_as_compact, encode_to,
     mlcp::{CoinType as PCoinType, SighashInputCommitment, H256},
     CoinType, Encode, InputAddressPath, Response, SignTxReq, SignatureResponse, TxInputReq,

@@ -1,13 +1,52 @@
 [package]
 name = "mintlayer-app"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 
+[workspace]
+members = ["crates/app-core", "crates/messages"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+
+[workspace.dependencies]
+bech32 = { version = "0.11", default-features = false }
+chrono = { version = "0.4", default-features = false }
+derive_more = { version = "2.1.1", default-features = false }
+hex = { version = "0.4.3", default-features = false }
+image = "0.25.8"
+ledger_device_sdk = "1.35.1"
+ledger_secure_sdk_sys = "1.16.1"
+num_enum = { version = "0.7.5", default-features = false }
+
+mintlayer-app-core = { path = "crates/app-core" }
+mintlayer-messages = { path = "crates/messages" }
+
+[workspace.dependencies.parity-scale-codec]
+git = "https://github.com/paritytech/parity-scale-codec.git"
+# Use the specific commit "5021525697edc0661591ebc71392c48d950a10b0",
+# which includes a fix for NanoX devices that do not support certain
+# atomic operations.
+#
+# Fix reference: https://github.com/paritytech/parity-scale-codec/pull/751
+# This fix should be included in releases after version 3.7.5.
+rev = "5021525697edc0661591ebc71392c48d950a10b0"
+default-features = false
+
+[workspace.dependencies.mintlayer-core-primitives]
+git = "https://github.com/mintlayer/mintlayer-core-primitives"
+# The commit "Merge pull request #4 from mintlayer/fix_typo".
+rev = "8644bfe06d932d687075939d2d175183ba1c369d"
+package = "mintlayer-core-primitives"
+
 [dependencies]
-mintlayer-app-core = { path = "./crates/app-core" }
+ledger_device_sdk.workspace = true
+
+mintlayer-app-core.workspace = true
 
 [build-dependencies]
-image = "0.25.8"
+image.workspace = true
 
 [package.metadata.ledger]
 curve = ["secp256k1"]

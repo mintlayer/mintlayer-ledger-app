@@ -19,7 +19,7 @@ use crate::{
     app_ui::sign::ui_display_message, errors::cx_err_to_status, handlers::utils::mintlayer_hash,
     DataContext, StatusWord,
 };
-use messages::{
+use mintlayer_messages::{
     mlcp::CoinType, AddrType, Bip32Path, MsgSignatureResponse, SignMessageReq, SignatureResponse,
 };
 

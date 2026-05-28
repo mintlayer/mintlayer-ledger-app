@@ -1,4 +1,5 @@
 /*****************************************************************************
+ *
  *   Mintlayer Ledger App.
  *   (c) 2023 Ledger SAS.
  *   (c) 2025 RBB S.r.l.
@@ -43,22 +44,16 @@ use ledger_device_sdk::{
 };
 
 use app_ui::menu::ui_menu_main;
+use errors::sdk_err_to_status;
 use handlers::{
     get_public_key::handle_get_public_key,
     sign_message::{handle_sign_message, setup_sign_message, SignMessageContext},
-    sign_tx::{setup_sign_tx,handle_sign_tx, TxParsingContext},
+    sign_tx::{handle_sign_tx, setup_sign_tx, TxParsingContext},
 };
-use errors::sdk_err_to_status;
-use messages::{
+use mintlayer_messages::{
     decode_all, encode, Ins, PubKeyP1, Response, SignP1, StatusWord, APDU_CLASS, MAX_ADPU_DATA_LEN,
     P2_DONE, P2_MORE,
 };
-
-
-// The app crate can use this and avoid direct dependency on the sdk crate.
-pub mod sdk_reexports {
-    pub use ledger_device_sdk::*;
-}
 
 pub const MAX_BUFFER_LEN: usize = 4 * MAX_ADPU_DATA_LEN;
 

@@ -25,7 +25,7 @@ use ledger_device_sdk::{
 };
 
 use crate::StatusWord;
-use messages::{
+use mintlayer_messages::{
     encode,
     mlcp::{CoinType, Destination, PublicKeyHash, Secp256k1PublicKey},
 };
