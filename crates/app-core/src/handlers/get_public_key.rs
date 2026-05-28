@@ -17,7 +17,9 @@
 
 use crate::app_ui::address::ui_display_pk;
 use crate::StatusWord;
-use messages::{mlcp::CoinType, ChainCode, GetPublicKeyResponse, PublicKey, PublicKeyReq};
+use mintlayer_messages::{
+    mlcp::CoinType, ChainCode, GetPublicKeyResponse, PublicKey, PublicKeyReq,
+};
 
 use ledger_device_sdk::ecc::{Secp256k1, SeedDerive};
 

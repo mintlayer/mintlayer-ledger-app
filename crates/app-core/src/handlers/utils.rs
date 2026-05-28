@@ -17,7 +17,7 @@
 
 use crate::StatusWord;
 
-use messages::mlcp::H256;
+use mintlayer_messages::mlcp::H256;
 
 use ledger_device_sdk::hash::{blake2::Blake2b_512, HashInit};
 

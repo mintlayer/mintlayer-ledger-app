@@ -19,9 +19,9 @@
 #![no_std]
 #![no_main]
 
-use mintlayer_app_core::{mintlayer_main, sdk_reexports as sdk};
+use mintlayer_app_core::mintlayer_main;
 
-sdk::set_panic!(sdk::exiting_panic);
+ledger_device_sdk::set_panic!(ledger_device_sdk::exiting_panic);
 
 #[no_mangle]
 extern "C" fn sample_main() {

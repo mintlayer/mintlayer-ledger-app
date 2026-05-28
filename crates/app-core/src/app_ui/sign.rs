@@ -26,7 +26,7 @@ use crate::{
     handlers::sign_tx::{CoinOrTokenId, InputCommand, TxParsingOutputsContext, TxType},
     StatusWord,
 };
-use messages::{
+use mintlayer_messages::{
     encode,
     mlcp::{
         AccountCommand, AccountSpending, Amount, CoinType, Destination, IsTokenFreezable,

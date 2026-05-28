@@ -1,4 +1,5 @@
 /*****************************************************************************
+ *
  *   Mintlayer Ledger App.
  *   (c) 2023 Ledger SAS.
  *   (c) 2025 RBB S.r.l.
@@ -48,17 +49,12 @@ use handlers::{
     sign_message::{handle_sign_message, setup_sign_message, SignMessageContext},
     sign_tx::{setup_sign_tx, TxParsingContext},
 };
-use messages::{
+use mintlayer_messages::{
     decode_all, encode, Ins, PubKeyP1, Response, SignP1, StatusWord, APDU_CLASS, MAX_ADPU_DATA_LEN,
     P2_DONE, P2_MORE,
 };
 
 use crate::handlers::sign_tx::handle_sign_tx;
-
-// The app crate can use this and avoid direct dependency on the sdk crate.
-pub mod sdk_reexports {
-    pub use ledger_device_sdk::*;
-}
 
 pub const MAX_BUFFER_LEN: usize = 4 * MAX_ADPU_DATA_LEN;
 
