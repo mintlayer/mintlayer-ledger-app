@@ -1,0 +1,27 @@
+[package]
+name = "mintlayer-app-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+messages = { path = "../messages" }
+ledger_device_sdk = "1.35.1"
+ledger_secure_sdk_sys = "1.16.1"
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+bech32 = { version = "0.11", default-features = false, features = ["alloc"] }
+chrono = { version = "0.4", default-features = false, features = ["alloc"] }
+
+[dependencies.mintlayer-core-primitives]
+git = "https://github.com/mintlayer/mintlayer-core-primitives"
+# The commit "Merge pull request #4 from mintlayer/fix_typo".
+rev = "8644bfe06d932d687075939d2d175183ba1c369d"
+package = "mintlayer-core-primitives"
+
+[features]
+default = ["ledger_device_sdk/nano_nbgl"]
+debug = ["ledger_device_sdk/debug"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(target_os, values("apex_p", "stax", "flex", "nanos", "nanox", "nanosplus"))',
+] }

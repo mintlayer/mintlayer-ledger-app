@@ -48,13 +48,13 @@ pub fn to_address(destination: &Destination, coin: CoinType) -> Result<String, S
 pub const fn load_glyph() -> NbglGlyph<'static> {
     #[cfg(target_os = "apex_p")]
     const MINTLAYER: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_48x48.png", NBGL));
+        NbglGlyph::from_include(include_gif!("../../glyphs/mintlayer_48x48.png", NBGL));
     #[cfg(any(target_os = "stax", target_os = "flex"))]
     const MINTLAYER: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("glyphs/mintlayer_64x64.gif", NBGL));
+        NbglGlyph::from_include(include_gif!("../../glyphs/mintlayer_64x64.gif", NBGL));
     #[cfg(any(target_os = "nanosplus", target_os = "nanox"))]
     const MINTLAYER: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("icons/mintlayer_14x14.gif", NBGL));
+        NbglGlyph::from_include(include_gif!("../../icons/mintlayer_14x14.gif", NBGL));
 
     MINTLAYER
 }
