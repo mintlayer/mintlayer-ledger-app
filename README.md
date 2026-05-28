@@ -143,3 +143,7 @@ The following workflows are executed in [GitHub Actions](https://github.com/feat
 - Various lint checks :
   - Source code lint checks with `cargo fmt`
   - Python functional test code lint checks with `pylint` and `mypy`
+
+## Additional documentation
+
+For development guidelines related to the app's memory usage see [docs/memory_usage.md](docs/memory_usage.md).
