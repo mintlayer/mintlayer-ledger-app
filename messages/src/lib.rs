@@ -20,7 +20,7 @@
 // Required for using String, Vec, format!...
 extern crate alloc;
 
-use alloc::vec::Vec;
+use alloc::{boxed::Box, vec::Vec};
 use core::iter::ExactSizeIterator;
 
 use derive_more::Display;
@@ -95,9 +95,9 @@ pub struct SignMessageReq {
 
 #[derive(Encode, Decode)]
 pub enum SignTxReq {
-    Input(TxInputReq),
-    InputCommitment(mlcp::SighashInputCommitment),
-    Output(TxOutputReq),
+    Input(Box<TxInputReq>),
+    InputCommitment(Box<mlcp::SighashInputCommitment>),
+    Output(Box<TxOutputReq>),
     NextSignature,
 }
 

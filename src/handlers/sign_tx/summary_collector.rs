@@ -216,7 +216,7 @@ impl TxSummaryCollector {
                         self.increase_input_totals(CoinOrTokenId::Coin, amount)?;
                     }
                 }
-            },
+            }
             TxInputWithAdditionalInfo::AccountCommand(_, cmd) => {
                 self.input_command = Some(InputCommand::AccountCommand(cmd.clone()));
                 match cmd {

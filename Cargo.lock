@@ -628,9 +628,9 @@ dependencies = [
 
 [[package]]
 name = "ledger_secure_sdk_sys"
-version = "1.15.0"
+version = "1.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f18ccb022d22741651f4a13bb417e2e5f4f2d68b832409b80bdc3726e76b1bd9"
+checksum = "58d50b8764859daf1b5176c5aad8ccc989494c16b08fa266e22c7907e60956e9"
 dependencies = [
  "bindgen",
  "cc",

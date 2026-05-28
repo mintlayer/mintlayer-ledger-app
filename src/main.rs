@@ -36,10 +36,7 @@ mod errors;
 
 // Required for using String, Vec, format!...
 extern crate alloc;
-use alloc::{
-    vec::Vec,
-    boxed::Box
-};
+use alloc::vec::Vec;
 
 use ledger_device_sdk::{
     io::{ApduHeader, Comm, Reply},
@@ -94,7 +91,6 @@ impl Default for ApduTransport {
 }
 
 impl ApduTransport {
-
     /// Reads the next APDU from `comm`.
     ///
     /// - If `P2 == P2_MORE`, it accumulates the data and returns `Ok(None)`.
@@ -213,7 +209,7 @@ fn show_status_and_home_if_needed(cmd: &Command, ctx: &mut AppContext, status: &
 }
 
 pub enum DataContext {
-    TxContext(Box<TxParsingContext>, NbglStreamingReview),
+    TxContext(TxParsingContext, NbglStreamingReview),
     SignMessageContext(SignMessageContext),
 }
 
@@ -312,9 +308,9 @@ fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, Statu
 
                 tx_ctx.show_spinner();
 
-                match handle_sign_tx(req, *tx_ctx, &mut review) {
+                match handle_sign_tx(req, tx_ctx, &mut review) {
                     Ok((response, new_ctx)) => {
-                        ctx.data_context = Some(DataContext::TxContext(Box::new(new_ctx), review));
+                        ctx.data_context = Some(DataContext::TxContext(new_ctx, review));
                         Ok(response)
                     }
                     Err(sw) => {

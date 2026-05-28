@@ -24,3 +24,6 @@ __pycache__/
 ledger/
 # Build directory
 build/
+
+# VSCode
+.vscode/
