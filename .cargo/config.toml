@@ -1,9 +1,3 @@
-[target.apex_p]
-runner = "speculos -m apex_p"
-
-[build]
-target = "apex_p"
-
 [profile.release]
 opt-level = 'z'
 lto = true
