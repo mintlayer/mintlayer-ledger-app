@@ -5,6 +5,16 @@ set -o nounset
 
 # Run some extra checks (for now its mostly clippy).
 
+# Notes about clippy:
+# 1. Ledger's guideline enforcer also runs it. But at the moment of writing this it doesn't check
+#    tests, see https://github.com/LedgerHQ/ledger-app-workflows/blob/master/scripts/check_all.sh.
+#    Besides, we want to enable some additional checks, similar to what we do in Mintlayer Core,
+#    so we do a separate clippy run here.
+# 2. The guideline enforcer runs it for all existing device models, but in this additional run this
+#    is redundant, so we use one arbitrarily chosen model.
+# 3. Unlike in Mintlayer Core, we can't disable certain annoying and mostly useless checks (such as
+#    let-and-return), because the guideline enforcer will run them anyway.
+
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
 cd "$SCRIPT_DIR"
@@ -12,7 +22,6 @@ cd "$SCRIPT_DIR"
 echo "Running cargo fmt"
 cargo fmt --check -- --config newline_style=Unix
 
-# It doesn't matter which one we use, but we need to specify one.
 CLIPPY_TARGET_ARG=--target=apex_p
 
 echo "Running clippy (any code)"
@@ -23,10 +32,7 @@ cargo clippy "$CLIPPY_TARGET_ARG" --all-features --workspace --bins --lib --test
     -D clippy::map_unwrap_or \
     -D clippy::unnested_or_patterns \
     -D clippy::mut_mut \
-    -D clippy::todo \
-    -A clippy::let-and-return \
-    -A clippy::unnecessary-lazy-evaluations \
-    -A clippy::boxed-local
+    -D clippy::todo
 
 echo "Running clippy (production code)"
 # TODO: consider also enabling `unwrap_used` and `items_after_statements`.
