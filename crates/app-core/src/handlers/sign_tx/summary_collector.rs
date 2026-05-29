@@ -371,18 +371,16 @@ mod tests {
     fn sample_test() {
         let mut collector = TxSummaryCollector::new();
 
-        collector
-            .process_input(&TxInputWithAdditionalInfo::Utxo(
-                mlcp::UtxoOutPoint::new(
-                    mlcp::OutPointSourceId::Transaction(mlcp::Id::new(mlcp::H256::zero())),
-                    0,
-                ),
-                AdditionalUtxoInfo::Utxo(mlcp::TxOutput::Transfer(
-                    mlcp::OutputValue::Coin(mlcp::Amount::from_atoms(123)),
-                    mlcp::Destination::AnyoneCanSpend,
-                )),
-            ))
-            .unwrap();
+        collector.process_input(&TxInputWithAdditionalInfo::Utxo(
+            mlcp::UtxoOutPoint::new(
+                mlcp::OutPointSourceId::Transaction(mlcp::Id::new(mlcp::H256::zero())),
+                0,
+            ),
+            AdditionalUtxoInfo::Utxo(mlcp::TxOutput::Transfer(
+                mlcp::OutputValue::Coin(mlcp::Amount::from_atoms(123)),
+                mlcp::Destination::AnyoneCanSpend,
+            )),
+        ));
 
         collector
             .process_output(&mlcp::TxOutput::Transfer(
