@@ -344,8 +344,7 @@ fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, Statu
                     Some(DataContext::SignMessageContext(ctx)) => ctx,
                     _ => return Err(StatusWord::WrongContext),
                 };
-                let response = handle_sign_message(data, msg_ctx).map(Response::MessageSignature);
-                response
+                handle_sign_message(data, msg_ctx).map(Response::MessageSignature)
             }
         },
         Command::Ping => Ok(Response::Pong),

@@ -23,10 +23,7 @@ cargo clippy "$CLIPPY_TARGET_ARG" --all-features --workspace --bins --lib --test
     -D clippy::map_unwrap_or \
     -D clippy::unnested_or_patterns \
     -D clippy::mut_mut \
-    -D clippy::todo \
-    -A clippy::let-and-return \
-    -A clippy::unnecessary-lazy-evaluations \
-    -A clippy::boxed-local
+    -D clippy::todo
 
 echo "Running clippy (production code)"
 # TODO: consider also enabling `unwrap_used` and `items_after_statements`.

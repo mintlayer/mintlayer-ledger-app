@@ -1,0 +1,3 @@
+# Clippy will complain if objects smaller that this are boxed.
+# The default is 200 and we sometimes box slightly smaller objects.
+too-large-for-stack = 150
