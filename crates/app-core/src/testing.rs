@@ -26,14 +26,12 @@ pub mod prelude {
     pub use testmacro::test_item;
 }
 
-#[cfg(test)]
 #[no_mangle]
 extern "C" fn sample_main() {
     crate::test_main();
     ledger_device_sdk::exit_app(0);
 }
 
-#[cfg(test)]
 #[panic_handler]
 fn handle_panic(info: &core::panic::PanicInfo) -> ! {
     ledger_device_sdk::error!(
