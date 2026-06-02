@@ -44,17 +44,16 @@ use ledger_device_sdk::{
 };
 
 use app_ui::menu::ui_menu_main;
+use errors::sdk_err_to_status;
 use handlers::{
     get_public_key::handle_get_public_key,
     sign_message::{handle_sign_message, setup_sign_message, SignMessageContext},
-    sign_tx::{setup_sign_tx, TxParsingContext},
+    sign_tx::{handle_sign_tx, setup_sign_tx, TxParsingContext},
 };
 use messages::{
     decode_all, encode, Ins, PubKeyP1, Response, SignP1, StatusWord, APDU_CLASS, MAX_ADPU_DATA_LEN,
     P2_DONE, P2_MORE,
 };
-
-use crate::handlers::sign_tx::handle_sign_tx;
 
 ledger_device_sdk::set_panic!(ledger_device_sdk::exiting_panic);
 
@@ -98,7 +97,7 @@ impl ApduTransport {
     /// - If `P2 == P2_DONE`, it finishes accumulation and returns `Ok(Some(RawInstruction))`.
     pub fn receive(&mut self, comm: &mut Comm) -> Result<ReceiveInstructionResult, StatusWord> {
         let header: ApduHeader = comm.next_command();
-        let data = comm.get_data().map_err(|_| StatusWord::WrongApduLength)?;
+        let data = comm.get_data().map_err(sdk_err_to_status)?;
 
         // Validation: If we are in the middle of a stream, INS and P1 must match
         if let (Some(curr_ins), Some(curr_p1)) = (self.current_ins, self.current_p1) {
@@ -331,8 +330,7 @@ fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, Statu
                     Some(DataContext::SignMessageContext(ctx)) => ctx,
                     _ => return Err(StatusWord::WrongContext),
                 };
-                let response = handle_sign_message(data, msg_ctx).map(Response::MessageSignature);
-                response
+                handle_sign_message(data, msg_ctx).map(Response::MessageSignature)
             }
         },
         Command::Ping => Ok(Response::Pong),

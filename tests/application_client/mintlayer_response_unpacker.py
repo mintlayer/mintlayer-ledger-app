@@ -51,12 +51,7 @@ def unpack_get_app_and_version_response(response: bytes) -> Tuple[str, str]:
 
 
 # Unpack from response:
-# response = pub_key_len (1)
-#            pub_key (var)
-#            chain_code_len (1)
-#            chain_code (var)
 def unpack_get_public_key_response(response: bytes) -> Tuple[int, bytes, int, bytes]:
-    print("response bytes: ", len(response))
     response_bytes = scalecodec.base.ScaleBytes(response)
     response_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
         "Response", data=response_bytes
@@ -79,24 +74,13 @@ def unpack_get_public_key_response(response: bytes) -> Tuple[int, bytes, int, by
 
 
 # Unpack from response:
-# response = sig_len (1)
-#            sig (var)
-def unpack_sign_message_response(response: bytes) -> Tuple[int, bytes]:
-    response, sig_len, sig = pop_size_prefixed_buf_from_buf(response)
-
-    assert sig_len == 64
-    assert len(response) == 0
-    return sig_len, sig
-
-
-# Unpack from response:
-# response = der_sig_len (1)
-#            der_sig (var)
-#            v (1)
-def unpack_sign_tx_response(response: bytes) -> Tuple[int, bytes, int]:
-    response, der_sig_len, der_sig = pop_size_prefixed_buf_from_buf(response)
-    response, v = pop_sized_buf_from_buffer(response, 1)
-
-    assert len(response) == 0
-
-    return der_sig_len, der_sig, int.from_bytes(v, byteorder="big")
+def unpack_sign_message_response(response: bytes) -> bytes:
+    response_bytes = scalecodec.base.ScaleBytes(response)
+    response_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
+        "Response", data=response_bytes
+    )
+    resp = response_obj.decode()
+    assert resp["MessageSignature"] is not None
+    signature = bytes.fromhex(resp["MessageSignature"]["signature"][2:])
+    assert len(signature) == 64
+    return signature

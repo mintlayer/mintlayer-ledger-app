@@ -420,17 +420,17 @@ fn handle_input_req(
 }
 
 fn handle_input_commitment_req(
-    req: Box<SighashInputCommitment>,
+    req: &SighashInputCommitment,
     mut ctx: Box<TxParsingInputCommitmentsContext>,
     review: &NbglStreamingReview,
 ) -> Result<TxParsingContext, StatusWord> {
-    update_hash(&req, &mut ctx.input_commitments_hasher)?;
-    update_hash(&req, &mut ctx.tx_hasher)?;
+    update_hash(req, &mut ctx.input_commitments_hasher)?;
+    update_hash(req, &mut ctx.tx_hasher)?;
     ctx.advance_next_input_additional_info_step(review)
 }
 
 fn handle_output_req(
-    req: Box<TxOutputReq>,
+    req: &TxOutputReq,
     mut ctx: Box<TxParsingOutputsContext>,
     review: &NbglStreamingReview,
 ) -> Result<TxParsingContext, StatusWord> {
@@ -453,10 +453,10 @@ pub fn handle_sign_tx(
             handle_input_req(req, ctx)?
         }
         (SignTxReq::InputCommitment(req), TxParsingContext::ParsingInputCommitments(ctx)) => {
-            handle_input_commitment_req(req, ctx, review)?
+            handle_input_commitment_req(req.as_ref(), ctx, review)?
         }
         (SignTxReq::Output(req), TxParsingContext::ParsingOutputs(ctx)) => {
-            handle_output_req(req, ctx, review)?
+            handle_output_req(req.as_ref(), ctx, review)?
         }
         (SignTxReq::NextSignature, TxParsingContext::Signing(ctx)) => {
             TxParsingContext::Signing(ctx)

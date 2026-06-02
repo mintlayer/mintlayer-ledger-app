@@ -159,7 +159,7 @@ fn transaction_title(tx_type: &Option<TxType>) -> &'static str {
         Some(TxType::Htlc) => "Sign create HTLC transaction",
         Some(TxType::CreateDelegation) => "Sign create delegation transaction",
         Some(TxType::DelegationStake) => "Sign stake delegation transaction",
-        Some(TxType::DelegationWithdrawl) => "Sign withdrawal delegation transaction",
+        Some(TxType::DelegationWithdrawal) => "Sign withdrawal delegation transaction",
         Some(TxType::CreateStakePool) => "Sign create stake pool transaction",
         Some(TxType::DecommissionStakePool) => "Sign decommission stake pool transaction",
         Some(TxType::CreateNft) => "Sign create NFT transaction",
@@ -478,7 +478,7 @@ fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, 
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
                     ("Del Wdrwl", address_short)
                 } else {
-                    ("Delegation withdrawl", address_short)
+                    ("Delegation withdrawal", address_short)
                 }
             }
         },
