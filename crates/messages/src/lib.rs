@@ -340,7 +340,7 @@ impl<'a> Apdu<'a> {
         param1_byte: u8,
         command_data: &'a [u8],
     ) -> Option<Self> {
-        (command_data.len() <= MAX_ADPU_DATA_LEN).then(|| Self {
+        (command_data.len() <= MAX_ADPU_DATA_LEN).then_some(Self {
             instruction_byte,
             param1_byte,
             command_data,

@@ -1,6 +1,5 @@
 /*****************************************************************************
  *   Mintlayer Ledger App.
- *   (c) 2023 Ledger SAS.
  *   (c) 2025 RBB S.r.l.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,14 +15,18 @@
  *  limitations under the License.
  *****************************************************************************/
 
-#![no_std]
-#![no_main]
+use crate::StatusWord;
 
-use mintlayer_app_core::mintlayer_main;
+use mintlayer_messages::mlcp::H256;
 
-ledger_device_sdk::set_panic!(ledger_device_sdk::exiting_panic);
+use ledger_device_sdk::hash::{blake2::Blake2b_512, HashInit};
 
-#[no_mangle]
-extern "C" fn sample_main() {
-    mintlayer_main();
+pub fn mintlayer_hash(data: &[u8]) -> Result<H256, StatusWord> {
+    let mut hasher = Blake2b_512::new();
+    let mut message_hash: [u8; 64] = [0u8; 64];
+    hasher
+        .hash(data, &mut message_hash)
+        .map_err(|_| StatusWord::TxHashFail)?;
+
+    Ok(H256::from_slice(&message_hash[..32]))
 }

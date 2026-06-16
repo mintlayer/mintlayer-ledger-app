@@ -16,7 +16,7 @@
  *****************************************************************************/
 
 use ledger_device_sdk::ecc::CxError;
-use messages::StatusWord;
+use mintlayer_messages::StatusWord;
 
 pub fn cx_err_to_status(e: CxError) -> StatusWord {
     match e {

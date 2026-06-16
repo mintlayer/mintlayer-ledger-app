@@ -1,6 +1,8 @@
 /*****************************************************************************
+ *
  *   Mintlayer Ledger App.
- *   (c) 2025 RBB S.r.l.
+ *   (c) 2023 Ledger SAS.
+ *   (c) 2026 RBB S.r.l.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,18 +17,31 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use crate::StatusWord;
+use alloc::{borrow::ToOwned as _, format};
 
-use messages::mlcp::H256;
+pub mod prelude {
+    // testmacro::test_item expects `TestType` to be imported.
+    pub use ledger_device_sdk::testing::TestType;
 
-use ledger_device_sdk::hash::{blake2::Blake2b_512, HashInit};
+    pub use testmacro::test_item;
+}
 
-pub fn mintlayer_hash(data: &[u8]) -> Result<H256, StatusWord> {
-    let mut hasher = Blake2b_512::new();
-    let mut message_hash: [u8; 64] = [0u8; 64];
-    hasher
-        .hash(data, &mut message_hash)
-        .map_err(|_| StatusWord::TxHashFail)?;
+#[no_mangle]
+extern "C" fn sample_main() {
+    crate::test_main();
+    ledger_device_sdk::exit_app(0);
+}
 
-    Ok(H256::from_slice(&message_hash[..32]))
+#[panic_handler]
+fn handle_panic(info: &core::panic::PanicInfo) -> ! {
+    ledger_device_sdk::error!(
+        "Panic occurred at {}: {}",
+        info.location().map_or_else(
+            || "???".to_owned(),
+            |loc| format!("{}:{}", loc.file(), loc.line())
+        ),
+        info.message(),
+    );
+
+    ledger_device_sdk::exit_app(1);
 }

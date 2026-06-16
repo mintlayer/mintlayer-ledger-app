@@ -1,0 +1,28 @@
+name: Run extra checks
+
+# This workflow will run `run_extra_checks.sh` from the project root.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - main
+      - develop
+  pull_request:
+
+jobs:
+  run_extra_checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v5
+    
+      # Note: no need to install docker manually, because it's already installed, see
+      # https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md
+
+      - name: Run the checks
+        run: |
+          docker run --rm -v "$(realpath .):/app" -w /app \
+            ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools:latest \
+            bash run_extra_checks.sh

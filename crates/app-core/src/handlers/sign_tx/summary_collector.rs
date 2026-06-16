@@ -18,7 +18,7 @@
 use alloc::collections::BTreeMap;
 
 use crate::StatusWord;
-use messages::{
+use mintlayer_messages::{
     mlcp::{
         AccountCommand, AccountSpending, Amount, OrderAccountCommand, OutputValue, TxOutput, H256,
     },
@@ -353,5 +353,48 @@ fn into_coin_or_token_id_and_amount(
         OutputValue::TokenV1(token_id, amount) => {
             Ok((CoinOrTokenId::TokenId(*token_id.hash()), *amount))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::vec::Vec;
+
+    use crate::testing::prelude::*;
+
+    use mintlayer_messages::mlcp;
+
+    use super::*;
+
+    // TODO: this is a sample test, need to expand it and add more tests
+    #[test_item]
+    fn sample_test() {
+        let mut collector = TxSummaryCollector::new();
+
+        collector
+            .process_input(&TxInputWithAdditionalInfo::Utxo(
+                mlcp::UtxoOutPoint::new(
+                    mlcp::OutPointSourceId::Transaction(mlcp::Id::new(mlcp::H256::zero())),
+                    0,
+                ),
+                AdditionalUtxoInfo::Utxo(mlcp::TxOutput::Transfer(
+                    mlcp::OutputValue::Coin(mlcp::Amount::from_atoms(123)),
+                    mlcp::Destination::AnyoneCanSpend,
+                )),
+            ))
+            .unwrap();
+
+        collector
+            .process_output(&mlcp::TxOutput::Transfer(
+                mlcp::OutputValue::Coin(mlcp::Amount::from_atoms(120)),
+                mlcp::Destination::AnyoneCanSpend,
+            ))
+            .unwrap();
+
+        let fees = collector
+            .fees_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert!(fees == [(&CoinOrTokenId::Coin, 3)]);
     }
 }

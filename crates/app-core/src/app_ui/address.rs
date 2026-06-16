@@ -20,7 +20,7 @@ use crate::{
     app_ui::utils::{compress_public_key, load_glyph, to_address},
     StatusWord,
 };
-use messages::mlcp::{CoinType, Destination, PublicKey};
+use mintlayer_messages::mlcp::{CoinType, Destination, PublicKey};
 
 use ledger_device_sdk::{
     ecc::ECPublicKey,
