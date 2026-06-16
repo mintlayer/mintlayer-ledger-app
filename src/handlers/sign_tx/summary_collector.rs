@@ -38,7 +38,7 @@ pub enum TxType {
     Htlc,
     CreateDelegation,
     DelegationStake,
-    DelegationWithdrawl,
+    DelegationWithdrawal,
     CreateStakePool,
     DecommissionStakePool,
     CreateNft,
@@ -212,11 +212,11 @@ impl TxSummaryCollector {
                 self.input_command = Some(InputCommand::AccountSpending(acc.spending.clone()));
                 match acc.spending {
                     AccountSpending::DelegationBalance(_, amount) => {
-                        self.tx_type = merge_tx_type(self.tx_type, TxType::DelegationWithdrawl);
+                        self.tx_type = merge_tx_type(self.tx_type, TxType::DelegationWithdrawal);
                         self.increase_input_totals(CoinOrTokenId::Coin, amount)?;
                     }
                 }
-            },
+            }
             TxInputWithAdditionalInfo::AccountCommand(_, cmd) => {
                 self.input_command = Some(InputCommand::AccountCommand(cmd.clone()));
                 match cmd {

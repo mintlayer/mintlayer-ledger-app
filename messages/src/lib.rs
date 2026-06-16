@@ -20,7 +20,7 @@
 // Required for using String, Vec, format!...
 extern crate alloc;
 
-use alloc::vec::Vec;
+use alloc::{boxed::Box, vec::Vec};
 use core::iter::ExactSizeIterator;
 
 use derive_more::Display;
@@ -95,9 +95,9 @@ pub struct SignMessageReq {
 
 #[derive(Encode, Decode)]
 pub enum SignTxReq {
-    Input(TxInputReq),
-    InputCommitment(mlcp::SighashInputCommitment),
-    Output(TxOutputReq),
+    Input(Box<TxInputReq>),
+    InputCommitment(Box<mlcp::SighashInputCommitment>),
+    Output(Box<TxOutputReq>),
     NextSignature,
 }
 
@@ -402,16 +402,24 @@ pub enum StatusWord {
     // Standard Ledger APDU Codes
     #[display("Success")]
     Ok = 0x9000,
+    #[display("Nothing received")]
+    NothingReceived = 0x6982,
     #[display("User cancelled")]
     Deny = 0x6985,
     #[display("CLA not supported")]
     ClaNotSupported = 0x6E00,
-    #[display("Wrong P1/P2 parameters")]
-    WrongP1P2 = 0x6B00,
     #[display("Instruction not supported")]
-    InsNotSupported = 0x6D00,
+    InsNotSupported = 0x6E01,
+    #[display("Wrong P1/P2 parameters")]
+    WrongP1P2 = 0x6E02,
     #[display("Wrong APDU length")]
-    WrongApduLength = 0x6700,
+    WrongApduLength = 0x6E03,
+    #[display("Unknown")]
+    Unknown = 0x6D00,
+    #[display("Panic")]
+    Panic = 0xE000,
+    #[display("Device locked")]
+    DeviceLocked = 0x5515,
 
     // App Specific Errors (0xB...)
     #[display("Transaction display failed")]
@@ -454,6 +462,8 @@ pub enum StatusWord {
     MaxBufferLenExceeded = 0xB012,
     #[display("Different input commitment hash")]
     DifferentInputCommitmentHash = 0xB013,
+    #[display("Invalid Timestamp")]
+    InvalidTimestamp = 0xB014,
 
     // Ecc Errors
     #[display("ECC Carry")]

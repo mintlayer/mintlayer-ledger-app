@@ -22,6 +22,11 @@ TX_RESPONSE_SIZE: int = 71
 
 CLA: int = 0xE1
 
+@dataclass
+class ReviewTransaction:
+    transaction: Transaction
+    has_command_input: bool
+    review_custom_screen_text: str
 
 @dataclass
 class SignTxStep:
@@ -65,8 +70,8 @@ class InsType(IntEnum):
 class Errors(IntEnum):
     SW_DENY = 0x6985
     SW_CLA_NOT_SUPPORTED = 0x6E00
-    SW_INS_NOT_SUPPORTED = 0x6D00
-    SW_WRONG_P1P2 = 0x6B00
+    SW_INS_NOT_SUPPORTED = 0x6E01
+    SW_WRONG_P1P2 = 0x6E02
     SW_WRONG_APDU_LENGTH = 0x6E03
 
     SW_WRONG_RESPONSE_LENGTH = 0xB000
@@ -137,11 +142,19 @@ class MintlayerCommandSender:
 
         for chunk in chunks[:-1]:
             self.backend.exchange(
-                cla=CLA, ins=InsType.SIGN_MESSAGE, p1=SignMessageP1.P1_NEXT, p2=P2.P2_MORE, data=chunk
+                cla=CLA,
+                ins=InsType.SIGN_MESSAGE,
+                p1=SignMessageP1.P1_NEXT,
+                p2=P2.P2_MORE,
+                data=chunk
             )
 
         with self.backend.exchange_async(
-            cla=CLA, ins=InsType.SIGN_MESSAGE, p1=SignMessageP1.P1_NEXT, p2=P2.P2_LAST, data=chunks[-1]
+            cla=CLA,
+            ins=InsType.SIGN_MESSAGE,
+            p1=SignMessageP1.P1_NEXT,
+            p2=P2.P2_LAST,
+            data=chunks[-1]
         ) as response:
             yield response
 
@@ -202,7 +215,7 @@ class MintlayerCommandSender:
         ):
             kind = "start"
             yield SignTxStep(kind=kind, index=0)
-        
+
 
         # ---- OUTPUTS ----
         print("streaming outputs")
@@ -301,7 +314,17 @@ def pack_derivation_path(derivation_path: str) -> bytes:
     return path_obj.encode(path).data
 
 
-def sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input, review_custom_screen_text):
+def sign_tx_review(
+    client,
+    device,
+    navigator,
+    scenario_navigator,
+    review_transaction: ReviewTransaction,
+):
+    transaction = review_transaction.transaction
+    has_command_input = review_transaction.has_command_input
+    review_custom_screen_text = review_transaction.review_custom_screen_text
+
     start_idx = 0
     if not device.is_nano:
         instruction = NavInsID.SWIPE_CENTER_TO_LEFT
@@ -370,7 +393,11 @@ def sign_tx_review(client, device, navigator, scenario_navigator, transaction, h
             start_idx += 10
 
         elif step.kind == "final":
-            scenario = NavigationScenarioData(scenario_navigator.device, scenario_navigator.backend, UseCase.TX_REVIEW, True)
+            scenario = NavigationScenarioData(
+                scenario_navigator.device,
+                scenario_navigator.backend,
+                UseCase.TX_REVIEW,
+                True)
             navigator.navigate_until_text_and_compare(
                 navigate_instruction=scenario.navigation,
                 validation_instructions=scenario.validation,

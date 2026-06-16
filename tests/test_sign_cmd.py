@@ -3,7 +3,11 @@ import scalecodec
 from ragger.navigator import NavIns, NavInsID
 
 from application_client import MAINNET
-from application_client.mintlayer_command_sender import MintlayerCommandSender, sign_tx_review
+from application_client.mintlayer_command_sender import (
+    MintlayerCommandSender,
+    sign_tx_review,
+    ReviewTransaction,
+)
 from application_client.mintlayer_response_unpacker import unpack_get_public_key_response
 from application_client.mintlayer_transaction import Transaction
 
@@ -86,7 +90,12 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
         coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
-    sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input=False, review_custom_screen_text=r"Sign\stransfer")
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=False,
+        review_custom_screen_text=r"Sign\stransfer"
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
 def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigator):
@@ -142,7 +151,12 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
         coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
-    sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input=True, review_custom_screen_text=r"Sign\swithdrawal")
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=True,
+        review_custom_screen_text=r"Sign\swithdrawal"
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
 def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigator):
@@ -212,7 +226,12 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
         coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
-    sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input=False, review_custom_screen_text=r"Sign\screate")
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=False,
+        review_custom_screen_text=r"Sign\screate"
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
 def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigator):
@@ -275,7 +294,12 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
         coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
-    sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input=False, review_custom_screen_text=r"Sign\sstake")
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=False,
+        review_custom_screen_text=r"Sign\sstake"
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
 def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigator):
@@ -359,7 +383,12 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
         coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
-    sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input=False, review_custom_screen_text=r"Sign\screate\sstake")
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=False,
+        review_custom_screen_text=r"Sign\screate\sstake"
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
 def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navigator):
@@ -436,7 +465,12 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
         coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
-    sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input=False, review_custom_screen_text=r"Sign\screate\stoken")
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=False,
+        review_custom_screen_text=r"Sign\screate\stoken"
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
 def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
@@ -529,7 +563,12 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
         coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
-    sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input=False, review_custom_screen_text=r"Sign\screate\sNFT")
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=False,
+        review_custom_screen_text=r"Sign\screate\sNFT"
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
 def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
@@ -632,7 +671,12 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
         outputs=[mint_output],
     )
 
-    sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input=True, review_custom_screen_text=r"Sign\smint\stokens")
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=True,
+        review_custom_screen_text=r"Sign\smint\stokens"
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
 def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
@@ -769,7 +813,12 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
         outputs=[change_output],
     )
 
-    sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input=True, review_custom_screen_text=r"Sign\sunmint\stokens")
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=True,
+        review_custom_screen_text=r"Sign\sunmint\stokens"
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
 def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
@@ -868,7 +917,12 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
         outputs=[change_output],
     )
 
-    sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input=True, review_custom_screen_text=r"Sign\sfreeze\stokens")
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=True,
+        review_custom_screen_text=r"Sign\sfreeze\stokens"
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
 def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator):
@@ -967,7 +1021,12 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
         outputs=[change_output],
     )
 
-    sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input=True, review_custom_screen_text=r"Sign\sunfreeze")
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=True,
+        review_custom_screen_text=r"Sign\sunfreeze"
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
 def test_sign_tx_change_token_authority(backend, scenario_navigator, device, navigator):
@@ -1075,7 +1134,12 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
         outputs=[change_output],
     )
 
-    sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input=True, review_custom_screen_text=r"Sign\schange\stoken")
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=True,
+        review_custom_screen_text=r"Sign\schange\stoken"
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
 def test_sign_tx_change_token_metadata_uri(
@@ -1180,7 +1244,12 @@ def test_sign_tx_change_token_metadata_uri(
         outputs=[change_output],
     )
 
-    sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input=True, review_custom_screen_text=r"Sign\schange\stoken")
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=True,
+        review_custom_screen_text=r"Sign\schange\stoken"
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
 def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
@@ -1321,7 +1390,12 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
         outputs=[change_output, fill_output],
     )
 
-    sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input=True, review_custom_screen_text=r"Sign\sfill\sorder")
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=True,
+        review_custom_screen_text=r"Sign\sfill\sorder"
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
 def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
@@ -1457,7 +1531,12 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
         outputs=[change_output, conclude_output],
     )
 
-    sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input=True, review_custom_screen_text=r"Sign\sconclude\sorder")
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=True,
+        review_custom_screen_text=r"Sign\sconclude\sorder"
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
 def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
@@ -1563,4 +1642,9 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
         outputs=[htlc_output, change_output],
     )
 
-    sign_tx_review(client, device, navigator, scenario_navigator, transaction, has_command_input=False, review_custom_screen_text=r"Sign\screate\sHTLC")
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=False,
+        review_custom_screen_text=r"Sign\screate\sHTLC"
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)

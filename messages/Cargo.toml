@@ -10,9 +10,11 @@ edition = "2024"
 #
 # Fix reference: https://github.com/paritytech/parity-scale-codec/pull/751
 # This fix should be included in releases after version 3.7.5.
+# Note: normally we would enable the "chain-error" feature of parity-scale-codec to make decode errors
+# more informative. But in the Ledger app we never examine or even print those errors, so enabling this
+# feature would only increase the size of the binary and make the app use more stack during decoding.
 parity-scale-codec = { git = "https://github.com/paritytech/parity-scale-codec.git", rev = "5021525697edc0661591ebc71392c48d950a10b0", default-features = false, features = [
   "derive",
-  "chain-error",
 ] }
 
 num_enum = { version = "0.7.5", default-features = false }
