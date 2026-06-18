@@ -17,9 +17,7 @@
 
 use crate::app_ui::address::ui_display_pk;
 use crate::StatusWord;
-use mintlayer_messages::{
-    mlcp::CoinType, ChainCode, GetPublicKeyResponse, PublicKey, PublicKeyReq,
-};
+use mintlayer_messages::{mlcp::CoinType, ChainCode, GetPubKeyReq, PublicKey, PublicKeyResponse};
 
 use ledger_device_sdk::ecc::{Secp256k1, SeedDerive};
 
@@ -27,9 +25,9 @@ use ledger_device_sdk::ecc::{Secp256k1, SeedDerive};
 const MIN_PATH_LEN: usize = 3;
 
 pub fn handle_get_public_key(
-    req: PublicKeyReq,
+    req: GetPubKeyReq,
     display: bool,
-) -> Result<GetPublicKeyResponse, StatusWord> {
+) -> Result<PublicKeyResponse, StatusWord> {
     if req.path.as_ref().len() < MIN_PATH_LEN {
         return Err(StatusWord::InvalidPath);
     }
@@ -46,7 +44,7 @@ pub fn handle_get_public_key(
     if display && !ui_display_pk(&pk, req.coin_type.into())? {
         return Err(StatusWord::Deny);
     }
-    let response = GetPublicKeyResponse {
+    let response = PublicKeyResponse {
         public_key: PublicKey(pk.pubkey),
         chain_code: ChainCode(code.value),
     };

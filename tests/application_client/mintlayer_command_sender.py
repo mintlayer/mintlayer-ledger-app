@@ -10,11 +10,11 @@ from ragger.navigator.navigation_scenario import NavigationScenarioData, UseCase
 
 from .mintlayer_transaction import Transaction
 
-tx_metadata_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
-    "TxMetadataReq"
+sign_tx_start_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
+    "SignTxStartReq"
 )
-sign_tx_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
-    "SignTxReq"
+sign_tx_next_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
+    "SignTxNextReq"
 )
 
 MAX_APDU_LEN: int = 255
@@ -160,15 +160,12 @@ class MintlayerCommandSender:
 
     def sign_tx(self, transaction: Transaction) -> Generator[SignTxStep, None, None]:
         # ---- METADATA ----
-        metadata = tx_metadata_obj.encode(
+        start_req = sign_tx_start_req_obj.encode(
             {
                 "coin": transaction.coin,
-                "version": {
-                    "V1": {
-                        "num_inputs": len(transaction.inputs),
-                        "num_outputs": len(transaction.outputs),
-                    },
-                },
+                "version": 0,
+                "num_inputs": len(transaction.inputs),
+                "num_outputs": len(transaction.outputs),
             }
         ).data
 
@@ -177,7 +174,7 @@ class MintlayerCommandSender:
             ins=InsType.SIGN_TX,
             p1=SignTxP1.P1_START,
             p2=P2.P2_LAST,
-            data=bytes(metadata),
+            data=bytes(start_req),
         )
         print("metadata ", res)
 
@@ -273,7 +270,7 @@ class MintlayerCommandSender:
         if self.backend.last_async_response is None:
             raise ValueError("None response")
 
-        next_sig = sign_tx_req_obj.encode({"NextSignature": None}).data
+        next_sig = sign_tx_next_req_obj.encode({"ReturnNextSignature": None}).data
         responses = [self.backend.last_async_response.data]
         for _ in tx.inputs[1:]:
             res = self.backend.exchange(

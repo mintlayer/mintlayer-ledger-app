@@ -41,10 +41,10 @@ The `Response` enum structure and its variant indices are:
 | Variant Index | Variant Name | Inner Payload Type | Description |
 |---|---|---|---|
 | `0` | `ExpectingNextChunk` | None | Returned when more APDU chunks are expected (`P2_MORE` sequence) |
-| `1` | `PublicKey` | `GetPublicKeyResponse` | Public key and chain code response |
+| `1` | `PublicKey` | `PublicKeyResponse` | Public key and chain code response |
 | `2` | `TxSetup` | None | Acknowledges transaction initialization (`SIGN_TX` with `P1 = 0`) |
 | `3` | `TxNext` | None | Acknowledges receipt of a transaction chunk |
-| `4` | `TxSignature` | `TxInputSignatureResponse` | Contains an input signature |
+| `4` | `TxInputSignature` | `TxInputSignatureResponse` | Contains an input signature |
 | `5` | `MessageSetup` | None | Acknowledges message signing initialization (`SIGN_MSG` with `P1 = 0`) |
 | `6` | `MessageSignature` | `MsgSignatureResponse` | Contains the final message signature |
 | `7` | `Pong` | None | Pong response for the `PING` instruction |
@@ -130,13 +130,13 @@ Optionally displays the generated address on the device screen for user verifica
 | `u8` (Enum) | `coin_type` | `0` = Mainnet, `1` = Testnet, `2` = Regtest, `3` = Signet |
 | `Vec<u32>`  | `path`      | The BIP32 derivation path                                 |
 
-**Output data (`Response::PublicKey(GetPublicKeyResponse)` - SCALE encoded)**
+**Output data (`Response::PublicKey(PublicKeyResponse)` - SCALE encoded)**
 
 | Length | Description                                                         |
 | ------ | ------------------------------------------------------------------- |
 | `1`    | Variant index byte (`0x01`)                                         |
-| `65`   | The uncompressed public key (`GetPublicKeyResponse.public_key`)     |
-| `32`   | The chain code (`GetPublicKeyResponse.chain_code`)                  |
+| `65`   | The uncompressed public key (`PublicKeyResponse.public_key`)        |
+| `32`   | The chain code (`PublicKeyResponse.chain_code`)                     |
 
 #### Description
 
@@ -159,7 +159,7 @@ Because transactions can be larger than available APDU buffers and RAM, the pars
 | ----- | ----- | ------------------------- |
 | E1    | 01    | `0` (Start) or `1` (Next) |
 
-**Input Data for `P1 = 0` (Start) (`TxMetadataReq` - SCALE encoded)**
+**Input Data for `P1 = 0` (Start) (`SignTxStartReq` - SCALE encoded)**
 
 | Type  | Name          | Description                                               |
 | ----- | ------------- | --------------------------------------------------------- |
@@ -168,26 +168,26 @@ Because transactions can be larger than available APDU buffers and RAM, the pars
 | `u32` | `num_inputs`  | Total number of inputs in the transaction                 |
 | `u32` | `num_outputs` | Total number of outputs in the transaction                |
 
-**Input Data for `P1 = 1` (Next) (`SignTxReq` Enum - SCALE encoded)**
+**Input Data for `P1 = 1` (Next) (`SignTxNextReq` Enum - SCALE encoded)**
 
-The client sends a sequence of `SignTxReq` variants. The variant index dictates the type of data being sent:
+The client sends a sequence of `SignTxNextReq` variants. The variant index dictates the type of data being sent:
 
-- `Input` (Index 0): Contains `TxInputReq` (Input address paths and UTXO/Account info).
-- `InputCommitment` (Index 1): Contains `SighashInputCommitment`.
-- `Output` (Index 2): Contains `TxOutputReq`.
-- `NextSignature` (Index 3): Requests the device to yield the next available signature.
+- `ProcessInput` (Index 0): Contains `TxInputData` (input address paths and UTXO/Account info).
+- `ProcessInputCommitment` (Index 1): Contains `TxInputCommitmentData`.
+- `ProcessOutput` (Index 2): Contains `TxOutputData`.
+- `ReturnNextSignature` (Index 3): Requests the device to yield the next available signature.
 
-**Output data (`Response::TxSignature(TxInputSignatureResponse)` - SCALE encoded)**
+**Output data (`Response::TxInputSignature(TxInputSignatureResponse)` - SCALE encoded)**
 
-Yielded during `NextSignature` sequences.
+Yielded during `ReturnNextSignature` sequences.
 
-The response payload is prefixed with the `TxSignature` variant index (`0x04`), followed by the `TxInputSignatureResponse` fields:
+The response payload is prefixed with the `TxInputSignature` variant index (`0x04`), followed by the `TxInputSignatureResponse` fields:
 
 | Type          | Name           | Description                                 |
 | ------------- | -------------- | ------------------------------------------- |
 | `[u8; 64]`    | `signature`    | The 64-byte cryptographic signature         |
 | `Option<u32>` | `multisig_idx` | Optional multisig index                     |
-| `u32` | `input_idx` | The index of the input that was just signed |
+| `u32`         | `input_idx`    | The index of the input that was just signed |
 | `bool`        | `has_next`     | True if there are more signatures remaining |
 
 *Note: For `Start` (`P1 = 0`) and intermediate `Next` (`P1 = 1`) data chunks (before signatures), the app returns `Response::TxSetup` (variant index `0x02`) and `Response::TxNext` (variant index `0x03`) respectively, with no extra fields.*
@@ -196,9 +196,9 @@ The response payload is prefixed with the `TxSignature` variant index (`0x04`), 
 
 To sign a transaction, the client must follow a strict order:
 
-1. Call `SIGN_TX` with `P1 = 0` (Start) passing the overall transaction metadata (`TxMetadataReq`).
-2. Sequentially call `SIGN_TX` with `P1 = 1` (Next) to stream inputs `Input`, input commitments `InputCommitment` and then outputs (`Output`).
-3. After all data is verified by the user on the device's secure screen, the client requests signatures by repeatedly calling `SIGN_TX` with `P1 = 1` and the `NextSignature` variant.
+1. Call `SIGN_TX` with `P1 = 0` (Start) passing `SignTxStartReq`.
+2. Sequentially call `SIGN_TX` with `P1 = 1` (Next) to stream inputs (`ProcessInput`), input commitments (`ProcessInputCommitment`) and then outputs (`ProcessOutput`).
+3. After all data is verified by the user on the device's secure screen, the client requests signatures by repeatedly calling `SIGN_TX` with `P1 = 1` and the `ReturnNextSignature` variant.
 4. The device will yield `TxInputSignatureResponse` payloads until `has_next` is false.
 
 ---
@@ -215,7 +215,7 @@ Signs a generic message using a BIP-32 derived key. The process is stateful to a
 | ----- | ----- | ------------------------- |
 | E1    | 02    | `0` (Start) or `1` (Next) |
 
-**Input Data for `P1 = 0` (Start) (`SignMessageReq` - SCALE encoded)**
+**Input Data for `P1 = 0` (Start) (`SignMessageStartReq` - SCALE encoded)**
 
 | Type        | Name        | Description                                   |
 | ----------- | ----------- | --------------------------------------------- |

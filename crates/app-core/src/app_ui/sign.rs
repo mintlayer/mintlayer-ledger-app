@@ -557,7 +557,8 @@ fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, 
                 }
             }
             AccountCommand::ConcludeOrder(_) | AccountCommand::FillOrder(_, _, _) => {
-                return Err(StatusWord::OrdersV0NotSupported)
+                // FIXME: don't use ml core primitives as part of the protocol?
+                return Err(StatusWord::OrdersV0NotSupported);
             }
         },
         InputCommand::OrderCommand(cmd) => match cmd {

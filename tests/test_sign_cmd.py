@@ -11,7 +11,7 @@ from application_client.mintlayer_command_sender import (
 from application_client.mintlayer_response_unpacker import unpack_get_public_key_response
 from application_client.mintlayer_transaction import Transaction
 
-sign_tx_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("SignTxReq")
+sign_tx_next_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("SignTxNextReq")
 
 TX_RESPONSE_SIZE = 71
 
@@ -43,14 +43,15 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
                 ],
             }
         }
-    inp = sign_tx_req_obj.encode(
+    # FIXME formatting
+    inp = sign_tx_next_req_obj.encode(
         {
-            "Input": 
+            "ProcessInput":
                 {
                     "addresses": [
                         {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
                     ],
-                    "inp": {
+                    "input": {
                         "Utxo": [
                             {
                                 "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
@@ -63,16 +64,18 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
             }
         ).data
     
-    inp_commitment = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": additional_info
+            "ProcessInputCommitment": {
+                "commitment": additional_info
+            }
         }
         ).data
 
-    output = sign_tx_req_obj.encode(
+    output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "Transfer": [
                         {"Coin": 10},
                         {
@@ -105,14 +108,14 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
     path: str = "m/44'/19788'/0'/0/0"
 
     h = 1 << 31
-    inp = sign_tx_req_obj.encode(
+    inp = sign_tx_next_req_obj.encode(
         {
-            "Input": 
+            "ProcessInput":
                 {
                     "addresses": [
                         {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
                     ],
-                    "inp": {
+                    "input": {
                         "Account": {
                             "nonce": 1,
                             "account": {"Delegation": [[0] * 32, 11]},
@@ -122,16 +125,18 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
             }
     ).data
 
-    inp_commitment = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": {"None": None}
+            "ProcessInputCommitment": {
+                "commitment": {"None": None}
+            }
         }
     ).data
 
-    output = sign_tx_req_obj.encode(
+    output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "LockThenTransfer": [
                         {"Coin": 10},
                         {
@@ -178,14 +183,14 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
                 ],
             }
         }
-    inp = sign_tx_req_obj.encode(
+    inp = sign_tx_next_req_obj.encode(
         {
-            "Input": 
+            "ProcessInput":
                 {
                     "addresses": [
                         {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
                     ],
-                    "inp": {
+                    "input": {
                         "Utxo": [
                             {
                             "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
@@ -198,16 +203,18 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
             }
     ).data
 
-    inp_commitment = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": additional_info
+            "ProcessInputCommitment": {
+                "commitment": additional_info
+            }
         }
     ).data
 
-    output = sign_tx_req_obj.encode(
+    output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "CreateDelegationId": [
                         {
                             "PublicKey": {
@@ -253,14 +260,14 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
                 ],
             }
         }
-    inp = sign_tx_req_obj.encode(
+    inp = sign_tx_next_req_obj.encode(
         {
-            "Input": 
+            "ProcessInput":
                 {
                     "addresses": [
                         {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
                     ],
-                    "inp": {
+                    "input": {
                         "Utxo": [
                             {
                                 "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
@@ -273,16 +280,18 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
             }
     ).data
 
-    inp_commitment = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": additional_info
+            "ProcessInputCommitment": {
+                "commitment": additional_info
+            }
         }
     ).data
 
-    output = sign_tx_req_obj.encode(
+    output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "DelegateStaking": [5, [0] * 32],
                 }
             }
@@ -321,14 +330,14 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
                 ],
             }
         }
-    inp = sign_tx_req_obj.encode(
+    inp = sign_tx_next_req_obj.encode(
         {
-            "Input": 
+            "ProcessInput":
                 {
                     "addresses": [
                         {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
                     ],
-                    "inp": {
+                    "input": {
                         "Utxo": [
                             {
                                 "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
@@ -341,16 +350,18 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
             }
     ).data
 
-    inp_commitment = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": additional_info
+            "ProcessInputCommitment": {
+                "commitment": additional_info
+            }
         }
     ).data
 
-    output = sign_tx_req_obj.encode(
+    output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "CreateStakePool": [
                         [0] * 32,
                         {
@@ -409,14 +420,14 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
                 ],
             }
         }
-    inp = sign_tx_req_obj.encode(
+    inp = sign_tx_next_req_obj.encode(
         {
-            "Input": 
+            "ProcessInput":
                 {
                     "addresses": [
                         {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
                     ],
-                    "inp": {
+                    "input": {
                         "Utxo": [
                             {
                                 "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
@@ -429,16 +440,18 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
             }
     ).data
 
-    inp_commitment = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": additional_info
+            "ProcessInputCommitment": {
+                "commitment": additional_info
+            }
         }
     ).data
 
-    output = sign_tx_req_obj.encode(
+    output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "IssueFungibleToken": {
                         "V1": {
                             "token_ticker": b"MYTKN",
@@ -491,14 +504,14 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
                 ],
             }
         }
-    inp = sign_tx_req_obj.encode(
+    inp = sign_tx_next_req_obj.encode(
         {
-            "Input": 
+            "ProcessInput":
                 {
                     "addresses": [
                         {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
                     ],
-                    "inp": {
+                    "input": {
                         "Utxo": [
                             {
                                 "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
@@ -511,18 +524,20 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
             }
     ).data
 
-    inp_commitment = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": additional_info
+            "ProcessInputCommitment": {
+                "commitment": additional_info
+            }
         }
     ).data
 
     # This is the new output for issuing an NFT.
     # The structure is (TokenId, NftIssuance, Destination)
-    output = sign_tx_req_obj.encode(
+    output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "IssueNft": [
                         bytes([0] * 32),
                         {
@@ -598,11 +613,11 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
                 ],
             }
         }
-    utxo_input = sign_tx_req_obj.encode(
+    utxo_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "Utxo": [
                         {
                             "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
@@ -615,18 +630,20 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    inp_commitment = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": additional_info
+            "ProcessInputCommitment": {
+                "commitment": additional_info
+            }
         }
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
-    account_input = sign_tx_req_obj.encode(
+    account_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "AccountCommand": [
                         1,  # AccountNonce
                         {
@@ -641,16 +658,18 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    acc_inp_commitment = sign_tx_req_obj.encode(
+    acc_inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": {"None": None}
+            "ProcessInputCommitment": {
+                "commitment": {"None": None}
+            }
         }
     ).data
 
-    mint_output = sign_tx_req_obj.encode(
+    mint_output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "Transfer": [
                         {"TokenV1": [f"0x{bytes([0]*32).hex()}", 1000]},
                         {
@@ -721,11 +740,11 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
                 ],
             }
         }
-    utxo_input = sign_tx_req_obj.encode(
+    utxo_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "Utxo": [
                         {
                             "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
@@ -738,17 +757,19 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    inp_commitment = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": additional_info,
+            "ProcessInputCommitment": {
+                "commitment": additional_info
+            },
         }
     ).data
 
-    utxo_input2 = sign_tx_req_obj.encode(
+    utxo_input2 = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "Utxo": [
                         {
                             "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
@@ -761,17 +782,19 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    inp_commitment2 = sign_tx_req_obj.encode(
+    inp_commitment2 = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": additional_info2,
+            "ProcessInputCommitment": {
+                "commitment": additional_info2
+            }
         }
     ).data
 
-    account_input = sign_tx_req_obj.encode(
+    account_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "AccountCommand": [
                         1,  # AccountNonce
                         {
@@ -783,16 +806,18 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    acc_inp_commitment = sign_tx_req_obj.encode(
+    acc_inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": {"None": None}
+            "ProcessInputCommitment": {
+                "commitment": {"None": None}
+            }
         }
     ).data
 
-    change_output = sign_tx_req_obj.encode(
+    change_output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "Transfer": [
                         {"Coin": 99},
                         {
@@ -849,11 +874,11 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
             }
         }
 
-    utxo_input = sign_tx_req_obj.encode(
+    utxo_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "Utxo": [
                         {
                             "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
@@ -866,18 +891,20 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    inp_commitment = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": additional_info,
+            "ProcessInputCommitment": {
+                "commitment": additional_info
+            },
         }
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
-    account_input = sign_tx_req_obj.encode(
+    account_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "AccountCommand": [
                         1,  # AccountNonce
                         {"FreezeToken": [f"0x{bytes([0]*32).hex()}", {"No": None}]},  # TokenId
@@ -887,16 +914,18 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    acc_inp_commitment = sign_tx_req_obj.encode(
+    acc_inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": {"None": None}
+            "ProcessInputCommitment": {
+                "commitment": {"None": None}
+            }
         }
     ).data
 
-    change_output = sign_tx_req_obj.encode(
+    change_output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "Transfer": [
                         {"Coin": 99},
                         {
@@ -952,11 +981,11 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
                 ],
             }
         }
-    utxo_input = sign_tx_req_obj.encode(
+    utxo_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "Utxo": [
                         {
                             "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
@@ -968,18 +997,20 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
             }
         }).data
 
-    inp_commitment = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": additional_info,
+            "ProcessInputCommitment": {
+                "commitment": additional_info
+            },
         }
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
-    account_input = sign_tx_req_obj.encode(
+    account_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "AccountCommand": [
                         1,  # AccountNonce
                         {
@@ -991,16 +1022,18 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
         }
     ).data
 
-    acc_inp_commitment = sign_tx_req_obj.encode(
+    acc_inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": {"None": None}
+            "ProcessInputCommitment": {
+                "commitment": {"None": None}
+            }
         }
     ).data
 
-    change_output = sign_tx_req_obj.encode(
+    change_output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "Transfer": [
                         {"Coin": 99},
                         {
@@ -1056,11 +1089,11 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
                 ],
             }
         }
-    utxo_input = sign_tx_req_obj.encode(
+    utxo_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "Utxo": [
                         {
                             "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
@@ -1072,18 +1105,20 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
             }
         }).data
 
-    inp_commitment = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": additional_info,
+            "ProcessInputCommitment": {
+                "commitment": additional_info
+            },
         }
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
-    account_input = sign_tx_req_obj.encode(
+    account_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "AccountCommand": [
                         1,  # AccountNonce
                         {
@@ -1104,16 +1139,18 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
         }
     ).data
 
-    acc_inp_commitment = sign_tx_req_obj.encode(
+    acc_inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": {"None": None}
+            "ProcessInputCommitment": {
+                "commitment": {"None": None}
+            }
         }
     ).data
 
-    change_output = sign_tx_req_obj.encode(
+    change_output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "Transfer": [
                         {"Coin": 99},
                         {
@@ -1171,11 +1208,11 @@ def test_sign_tx_change_token_metadata_uri(
                 ],
             }
         }
-    utxo_input = sign_tx_req_obj.encode(
+    utxo_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "Utxo": [
                         {
                             "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
@@ -1188,18 +1225,20 @@ def test_sign_tx_change_token_metadata_uri(
         }
     ).data
 
-    inp_commitment = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": additional_info,
+            "ProcessInputCommitment": {
+                "commitment": additional_info
+            },
         }
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
-    account_input = sign_tx_req_obj.encode(
+    account_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "AccountCommand": [
                         1,  # AccountNonce
                         {
@@ -1214,16 +1253,18 @@ def test_sign_tx_change_token_metadata_uri(
         }
     ).data
 
-    acc_inp_commitment = sign_tx_req_obj.encode(
+    acc_inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": {"None": None}
+            "ProcessInputCommitment": {
+                "commitment": {"None": None}
+            }
         }
     ).data
 
-    change_output = sign_tx_req_obj.encode(
+    change_output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "Transfer": [
                         {"Coin": 99},
                         {
@@ -1280,11 +1321,11 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
                 ],
             }
         }
-    utxo_input = sign_tx_req_obj.encode(
+    utxo_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "Utxo": [
                         {
                             "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
@@ -1297,9 +1338,11 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    inp_commitment = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": additional_info,
+            "ProcessInputCommitment": {
+                "commitment": additional_info
+            },
         }
     ).data
 
@@ -1314,11 +1357,11 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
            "give_balance": 0,
     }
     # This is the OrderAccountCommand to fill 10 units
-    account_input = sign_tx_req_obj.encode(
+    account_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "OrderAccountCommand": [
                         {
                             "FillOrder": [
@@ -1333,21 +1376,23 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    fill_order_inp_commitment = sign_tx_req_obj.encode(
+    fill_order_inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": {
-                "FillOrderAccountCommand": [
-                    additional_order_info["initially_asked"],
-                    additional_order_info["initially_given"],
-                ]
-            },
+            "ProcessInputCommitment": {
+                "commitment": {
+                    "FillOrderAccountCommand": [
+                        additional_order_info["initially_asked"],
+                        additional_order_info["initially_given"],
+                    ]
+                },
+            }
         }
     ).data
 
-    change_output = sign_tx_req_obj.encode(
+    change_output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "Transfer": [
                         {"Coin": 100 - 1 - fill_amount},
                         {
@@ -1361,10 +1406,10 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    fill_output = sign_tx_req_obj.encode(
+    fill_output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "Transfer": [
                         {
                             "TokenV1": [
@@ -1425,11 +1470,11 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
                 ],
             }
         }
-    utxo_input = sign_tx_req_obj.encode(
+    utxo_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "Utxo": [
                         {
                             "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
@@ -1442,9 +1487,11 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    inp_commitment = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": additional_info,
+            "ProcessInputCommitment": {
+                "commitment": additional_info
+            },
         }
     ).data
 
@@ -1461,11 +1508,11 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     }
 
     # This is the OrderAccountCommand to fill 10 units
-    account_input = sign_tx_req_obj.encode(
+    account_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "OrderAccountCommand": [
                         {
                             "ConcludeOrder": f"0x{bytes([0]*32).hex()}",  # OrderId
@@ -1477,23 +1524,25 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    conclude_order_inp_commitment = sign_tx_req_obj.encode(
+    conclude_order_inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": {
-                "ConcludeOrderAccountCommand": [
-                    additional_order_info["initially_asked"],
-                    additional_order_info["initially_given"],
-                    additional_order_info["ask_balance"],
-                    additional_order_info["give_balance"]
-                ]
-            },
+            "ProcessInputCommitment": {
+                "commitment": {
+                    "ConcludeOrderAccountCommand": [
+                        additional_order_info["initially_asked"],
+                        additional_order_info["initially_given"],
+                        additional_order_info["ask_balance"],
+                        additional_order_info["give_balance"]
+                    ]
+                },
+            }
         }
     ).data
 
-    change_output = sign_tx_req_obj.encode(
+    change_output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "Transfer": [
                         {"Coin": 100 - 1 + ask_balance},
                         {
@@ -1507,10 +1556,10 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    conclude_output = sign_tx_req_obj.encode(
+    conclude_output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "Transfer": [
                         {"TokenV1": [f"0x{bytes([0]*32).hex()}", give_balance]},
                         {
@@ -1565,11 +1614,11 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
                 ],
             }
         }
-    utxo_input = sign_tx_req_obj.encode(
+    utxo_input = sign_tx_next_req_obj.encode(
         {
-            "Input": {
+            "ProcessInput":{
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
-                "inp": {
+                "input": {
                     "Utxo": [
                         {
                             "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
@@ -1582,16 +1631,18 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    inp_commitment = sign_tx_req_obj.encode(
+    inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "InputCommitment": additional_info,
+            "ProcessInputCommitment": {
+                "commitment": additional_info
+            },
         }
     ).data
 
-    change_output = sign_tx_req_obj.encode(
+    change_output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "Transfer": [
                         {"Coin": 89},
                         {
@@ -1605,10 +1656,10 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
         }
     ).data
 
-    htlc_output = sign_tx_req_obj.encode(
+    htlc_output = sign_tx_next_req_obj.encode(
         {
-            "Output": {
-                "out": {
+            "ProcessOutput": {
+                "output": {
                     "Htlc": [
                         {"Coin": 10},
                         {

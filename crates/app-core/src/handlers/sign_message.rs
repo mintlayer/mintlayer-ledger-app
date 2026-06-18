@@ -20,7 +20,7 @@ use crate::{
     DataContext, StatusWord,
 };
 use mintlayer_messages::{
-    mlcp::CoinType, AddrType, Bip32Path, MsgSignatureResponse, SignMessageReq, SignatureResponse,
+    mlcp::CoinType, AddrType, Bip32Path, MsgSignatureResponse, SignMessageStartReq, Signature,
 };
 
 use alloc::vec::Vec;
@@ -35,7 +35,7 @@ pub struct SignMessageContext {
 }
 
 impl SignMessageContext {
-    pub fn new(req: SignMessageReq) -> Self {
+    pub fn new(req: SignMessageStartReq) -> Self {
         Self {
             path: req.path,
             coin: req.coin.into(),
@@ -49,7 +49,7 @@ impl SignMessageContext {
     }
 }
 
-pub fn setup_sign_message(req: SignMessageReq) -> DataContext {
+pub fn setup_sign_message(req: SignMessageStartReq) -> DataContext {
     DataContext::SignMessageContext(SignMessageContext::new(req))
 }
 
@@ -94,7 +94,7 @@ fn compute_signature<const N: usize>(
     let sig = schnorr_sign(private_key, message_hash2.as_bytes())?;
 
     let response = MsgSignatureResponse {
-        signature: SignatureResponse(sig),
+        signature: Signature(sig),
     };
 
     Ok(response)

@@ -6,8 +6,8 @@ from application_client import MAINNET
 from application_client.mintlayer_command_sender import (CLA, GetAppAndVersionP1, SignTxP1, P2, Errors,
                                                          InsType)
 
-tx_metadata_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("TxMetadataReq")
-sign_tx_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("SignTxReq")
+sign_tx_start_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("SignTxStartReq")
+sign_tx_next_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("SignTxNextReq")
 
 # Ensure the app returns an error when a bad CLA is used
 def test_bad_cla(backend):
@@ -72,15 +72,12 @@ def test_sign_tx_invalid_coin(backend, scenario_navigator, device, navigator):
     invalid_coin = 255
     num_inputs = 1
     num_outputs = 1
-    metadata = tx_metadata_obj.encode(
+    start_req = sign_tx_start_req_obj.encode(
         {
             "coin": invalid_coin,
-            "version": {
-                "V1": {
-                    "num_inputs": num_inputs,
-                    "num_outputs": num_outputs,
-                },
-            },
+            "version": 0,
+            "num_inputs": num_inputs,
+            "num_outputs": num_outputs,
         }
     ).data
 
@@ -90,7 +87,7 @@ def test_sign_tx_invalid_coin(backend, scenario_navigator, device, navigator):
             ins=InsType.SIGN_TX,
             p1=SignTxP1.P1_START,
             p2=P2.P2_LAST,
-            data=bytes(metadata),
+            data=bytes(start_req),
         )
 
     assert e.value.status == Errors.SW_DESERIALIZE_FAIL
@@ -98,20 +95,18 @@ def test_sign_tx_invalid_coin(backend, scenario_navigator, device, navigator):
 
 def test_sign_tx_invalid_context(backend, scenario_navigator, device, navigator):
     """
-    After metadata try to pass an output instead of the input
+    After the start request try to pass an output instead of the input
     expect an error for wrong context
     """
     num_inputs = 2
     num_outputs = 2
-    metadata = tx_metadata_obj.encode(
+    start_req = sign_tx_start_req_obj.encode(
         {
             "coin": MAINNET,
-            "version": {
-                "V1": {
-                    "num_inputs": num_inputs,
-                    "num_outputs": num_outputs,
-                },
-            },
+            "version": 0,
+            "num_inputs": num_inputs,
+            "num_outputs": num_outputs,
+
         }
     ).data
 
@@ -120,7 +115,7 @@ def test_sign_tx_invalid_context(backend, scenario_navigator, device, navigator)
         ins=InsType.SIGN_TX,
         p1=SignTxP1.P1_START,
         p2=P2.P2_LAST,
-        data=bytes(metadata),
+        data=bytes(start_req),
     )
 
     assert res.status == 0x9000
@@ -131,10 +126,10 @@ def test_sign_tx_invalid_context(backend, scenario_navigator, device, navigator)
             ins=InsType.SIGN_TX,
             p1=SignTxP1.P1_NEXT,
             p2=P2.P2_LAST,
-            data=sign_tx_req_obj.encode(
+            data=sign_tx_next_req_obj.encode(
                 {
-                    "Output": {
-                        "out": {
+                    "ProcessOutput": {
+                        "output": {
                             "Transfer": [
                                 {"Coin": 10},
                                 {
@@ -154,15 +149,12 @@ def test_sign_tx_invalid_context(backend, scenario_navigator, device, navigator)
 def test_sign_tx_invalid_input(backend, scenario_navigator, device, navigator):
     num_inputs = 2
     num_outputs = 2
-    metadata = tx_metadata_obj.encode(
+    start_req = sign_tx_start_req_obj.encode(
         {
             "coin": MAINNET,
-            "version": {
-                "V1": {
-                    "num_inputs": num_inputs,
-                    "num_outputs": num_outputs,
-                },
-            },
+            "version": 0,
+            "num_inputs": num_inputs,
+            "num_outputs": num_outputs,
         }
     ).data
 
@@ -171,7 +163,7 @@ def test_sign_tx_invalid_input(backend, scenario_navigator, device, navigator):
         ins=InsType.SIGN_TX,
         p1=SignTxP1.P1_START,
         p2=P2.P2_LAST,
-        data=bytes(metadata),
+        data=bytes(start_req),
     )
 
     print("res, ", res.status)
@@ -192,15 +184,12 @@ def test_sign_tx_invalid_input(backend, scenario_navigator, device, navigator):
 def test_sign_tx_too_large_data(backend, scenario_navigator, device, navigator):
     num_inputs = 2
     num_outputs = 2
-    metadata = tx_metadata_obj.encode(
+    start_req = sign_tx_start_req_obj.encode(
         {
             "coin": MAINNET,
-            "version": {
-                "V1": {
-                    "num_inputs": num_inputs,
-                    "num_outputs": num_outputs,
-                },
-            },
+            "version": 0,
+            "num_inputs": num_inputs,
+            "num_outputs": num_outputs,
         }
     ).data
 
@@ -209,7 +198,7 @@ def test_sign_tx_too_large_data(backend, scenario_navigator, device, navigator):
         ins=InsType.SIGN_TX,
         p1=SignTxP1.P1_START,
         p2=P2.P2_LAST,
-        data=bytes(metadata),
+        data=bytes(start_req),
     )
 
     assert res.status == 0x9000

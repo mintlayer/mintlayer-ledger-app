@@ -27,9 +27,9 @@ use crate::{
 };
 use mintlayer_messages::{
     encode_as_compact, encode_to,
-    mlcp::{CoinType as PCoinType, SighashInputCommitment, H256},
-    CoinType, Encode, InputAddressPath, Response, SignTxReq, SignatureResponse, TxInputReq,
-    TxInputSignatureResponse, TxMetadataReq, TxMetadataV1Req, TxMetadataVersionReq, TxOutputReq,
+    mlcp::{CoinType as PCoinType, H256},
+    Encode, InputAddressPath, Response, SignTxNextReq, SignTxStartReq, Signature,
+    TransactionVersion, TxInputCommitmentData, TxInputData, TxInputSignatureResponse, TxOutputData,
 };
 
 use ledger_device_sdk::{
@@ -287,7 +287,7 @@ impl TxSigningContext {
         let private_key = Secp256k1::derive_from_path(&addr);
         let sig = schnorr_sign(&private_key, self.tx_hash.as_bytes())?;
 
-        let signature = SignatureResponse(sig);
+        let signature = Signature(sig);
         let input_idx = address.input_idx;
         let multisig_idx = address.multisig_idx;
 
@@ -320,45 +320,50 @@ pub enum TxParsingContext {
 }
 
 impl TxParsingContext {
-    pub fn from_v1(
-        coin: CoinType,
-        TxMetadataV1Req {
+    pub fn new(
+        SignTxStartReq {
+            coin,
+            version,
             num_inputs,
             num_outputs,
-        }: TxMetadataV1Req,
+        }: SignTxStartReq,
     ) -> Result<Self, StatusWord> {
-        const VERSION_1: u8 = 1;
-        let mut tx_hasher = Blake2b_512::new();
-        // mode
-        tx_hasher
-            .update(b"\x01")
-            .map_err(|_| StatusWord::TxHashFail)?;
-        // version
-        tx_hasher
-            .update(&[VERSION_1])
-            .map_err(|_| StatusWord::TxHashFail)?;
-        // flags
-        tx_hasher
-            .update(&[0; 16])
-            .map_err(|_| StatusWord::TxHashFail)?;
+        match version {
+            TransactionVersion::V1 => {
+                const VERSION_1: u8 = 1;
+                let mut tx_hasher = Blake2b_512::new();
+                // mode
+                tx_hasher
+                    .update(b"\x01")
+                    .map_err(|_| StatusWord::TxHashFail)?;
+                // version
+                tx_hasher
+                    .update(&[VERSION_1])
+                    .map_err(|_| StatusWord::TxHashFail)?;
+                // flags
+                tx_hasher
+                    .update(&[0; 16])
+                    .map_err(|_| StatusWord::TxHashFail)?;
 
-        tx_hasher
-            .update(&num_inputs.to_le_bytes())
-            .map_err(|_| StatusWord::TxHashFail)?;
+                tx_hasher
+                    .update(&num_inputs.to_le_bytes())
+                    .map_err(|_| StatusWord::TxHashFail)?;
 
-        Ok(Self::ParsingInputs(Box::new(TxParsingInputsContext {
-            metadata: TxMetadata {
-                coin: coin.into(),
-                num_inputs,
-                num_outputs,
-            },
-            tx_hasher,
-            spinner: NbglSpinner::new(),
-            summary: TxSummaryCollector::new(),
-            num_inputs_parsed: 0,
-            input_commitments_hasher: Blake2b_512::new(),
-            inputs: Vec::new(),
-        })))
+                Ok(Self::ParsingInputs(Box::new(TxParsingInputsContext {
+                    metadata: TxMetadata {
+                        coin: coin.into(),
+                        num_inputs,
+                        num_outputs,
+                    },
+                    tx_hasher,
+                    spinner: NbglSpinner::new(),
+                    summary: TxSummaryCollector::new(),
+                    num_inputs_parsed: 0,
+                    input_commitments_hasher: Blake2b_512::new(),
+                    inputs: Vec::new(),
+                })))
+            }
+        }
     }
 
     /// Shows a spinner while processing the inputs and input commitments if there are more than a few
@@ -375,7 +380,7 @@ impl TxParsingContext {
             Self::ParsingOutputs(_) | Self::Finished => return,
         };
 
-        // We show a spinner while processing the inputs and input commitments if there are more than 5
+        // We show a spinner while processing the inputs and input commitments if there are more than 5;
         // 5 was chosen somewhat arbitrarily
         let transaction_has_many_inputs = metadata.num_inputs > 5;
 
@@ -389,54 +394,52 @@ impl TxParsingContext {
     }
 }
 
-pub fn setup_sign_tx(req: TxMetadataReq) -> Result<DataContext, StatusWord> {
-    let mut tx_ctx = match req.version {
-        TxMetadataVersionReq::V1(v1_req) => TxParsingContext::from_v1(req.coin, v1_req)?,
-    };
+pub fn setup_sign_tx(req: SignTxStartReq) -> Result<DataContext, StatusWord> {
+    let mut tx_ctx = TxParsingContext::new(req)?;
 
     tx_ctx.show_spinner();
 
     Ok(DataContext::TxContext(tx_ctx, ui_new_streaming_review()))
 }
 
-fn handle_input_req(
-    req: Box<TxInputReq>,
+fn handle_input(
+    input_data: Box<TxInputData>,
     mut ctx: Box<TxParsingInputsContext>,
 ) -> Result<TxParsingContext, StatusWord> {
     let num_inputs_parsed = ctx.num_inputs_parsed;
-    let compressed_inputs = req
+    let compressed_inputs = input_data
         .addresses
         .into_iter()
         .map(|a| InputCompressed::new(a, num_inputs_parsed, ctx.metadata.coin))
         .collect::<Result<Vec<_>, StatusWord>>()?;
     ctx.inputs.extend(compressed_inputs);
 
-    ctx.summary.process_input(&req.inp)?;
+    ctx.summary.process_input(&input_data.input)?;
 
-    let (input, commitment) = req.inp.into_input_and_commitment();
+    let (input, commitment) = input_data.input.into_input_and_commitment();
     update_hash(&commitment, &mut ctx.input_commitments_hasher)?;
     update_hash(&input, &mut ctx.tx_hasher)?;
     ctx.advance_next_input_step()
 }
 
-fn handle_input_commitment_req(
-    req: &SighashInputCommitment,
+fn handle_input_commitment(
+    comm_data: &TxInputCommitmentData,
     mut ctx: Box<TxParsingInputCommitmentsContext>,
     review: &NbglStreamingReview,
 ) -> Result<TxParsingContext, StatusWord> {
-    update_hash(req, &mut ctx.input_commitments_hasher)?;
-    update_hash(req, &mut ctx.tx_hasher)?;
+    update_hash(&comm_data.commitment, &mut ctx.input_commitments_hasher)?;
+    update_hash(&comm_data.commitment, &mut ctx.tx_hasher)?;
     ctx.advance_next_input_additional_info_step(review)
 }
 
-fn handle_output_req(
-    req: &TxOutputReq,
+fn handle_output(
+    output_data: &TxOutputData,
     mut ctx: Box<TxParsingOutputsContext>,
     review: &NbglStreamingReview,
 ) -> Result<TxParsingContext, StatusWord> {
-    if ui_streaming_review_show_output(review, &req.out, ctx.metadata.coin)? {
-        ctx.summary.process_output(&req.out)?;
-        update_hash(&req.out, &mut ctx.tx_hasher)?;
+    if ui_streaming_review_show_output(review, &output_data.output, ctx.metadata.coin)? {
+        ctx.summary.process_output(&output_data.output)?;
+        update_hash(&output_data.output, &mut ctx.tx_hasher)?;
         ctx.advance_next_output_state(review)
     } else {
         Err(StatusWord::Deny)
@@ -444,24 +447,25 @@ fn handle_output_req(
 }
 
 pub fn handle_sign_tx(
-    req: SignTxReq,
+    req: SignTxNextReq,
     ctx: TxParsingContext,
     review: &mut NbglStreamingReview,
 ) -> Result<(Response, TxParsingContext), StatusWord> {
     let new_ctx = match (req, ctx) {
-        (SignTxReq::Input(req), TxParsingContext::ParsingInputs(ctx)) => {
-            handle_input_req(req, ctx)?
+        (SignTxNextReq::ProcessInput(req), TxParsingContext::ParsingInputs(ctx)) => {
+            handle_input(req, ctx)?
         }
-        (SignTxReq::InputCommitment(req), TxParsingContext::ParsingInputCommitments(ctx)) => {
-            handle_input_commitment_req(req.as_ref(), ctx, review)?
+        (
+            SignTxNextReq::ProcessInputCommitment(req),
+            TxParsingContext::ParsingInputCommitments(ctx),
+        ) => handle_input_commitment(req.as_ref(), ctx, review)?,
+        (SignTxNextReq::ProcessOutput(req), TxParsingContext::ParsingOutputs(ctx)) => {
+            handle_output(req.as_ref(), ctx, review)?
         }
-        (SignTxReq::Output(req), TxParsingContext::ParsingOutputs(ctx)) => {
-            handle_output_req(req.as_ref(), ctx, review)?
-        }
-        (SignTxReq::NextSignature, TxParsingContext::Signing(ctx)) => {
+        (SignTxNextReq::ReturnNextSignature, TxParsingContext::Signing(ctx)) => {
             TxParsingContext::Signing(ctx)
         }
-        (SignTxReq::NextSignature, TxParsingContext::Finished) => {
+        (SignTxNextReq::ReturnNextSignature, TxParsingContext::Finished) => {
             return Err(StatusWord::TxAlreadyFinished)
         }
         _ => return Err(StatusWord::WrongContext),
@@ -476,7 +480,7 @@ pub fn handle_sign_tx(
             let (response, mut new_ctx) = ctx.compute_signature_and_append()?;
             new_ctx.show_spinner();
 
-            return Ok((Response::TxSignature(response), new_ctx));
+            return Ok((Response::TxInputSignature(response), new_ctx));
         }
     };
 

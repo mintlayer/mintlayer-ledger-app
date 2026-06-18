@@ -392,31 +392,26 @@ def init_mintlayer_types():
                     ["signature", "Signature"],
                 ],
             },
-            "TxMetadataVersionReq": {
-                "type": "enum",
-                "type_mapping": [
-                    ["V1", "TxMetadataV1Req"],
-                ],
-            },
-            "TxMetadataV1Req": {
+            "SignTxStartReq": {
                 "type": "struct",
                 "type_mapping": [
+                    ["coin", "u8"],
+                    ["version", "u8"],
                     ["num_inputs", "u32"],
                     ["num_outputs", "u32"],
                 ],
             },
-            "TxMetadataReq": {
-                "type": "struct",
-                "type_mapping": [
-                    ["coin", "u8"],
-                    ["version", "TxMetadataVersionReq"],
-                ],
-            },
-            "TxInputReq": {
+            "TxInputData": {
                 "type": "struct",
                 "type_mapping": [
                     ["addresses", "Vec<InputAddressPath>"],
-                    ["inp", "TxInputWithAdditionalInfo"],
+                    ["input", "TxInputWithAdditionalInfo"],
+                ],
+            },
+            "TxInputCommitmentData": {
+                "type": "struct",
+                "type_mapping": [
+                    ["commitment", "SighashInputCommitment"],
                 ],
             },
             "AdditionalUtxoInfo": {
@@ -438,60 +433,60 @@ def init_mintlayer_types():
                     ["give_balance", "Amount"],
                 ],
             },
-            "TxOutputReq": {
+            "TxOutputData": {
                 "type": "struct",
                 "type_mapping": [
-                    ["out", "TxOutput"],
+                    ["output", "TxOutput"],
                 ],
             },
-            "SignTxReq": {
+            "SignTxNextReq": {
                 "type": "enum",
                 "type_mapping": [
-                    ["Input", "TxInputReq"],
-                    ["InputCommitment", "SighashInputCommitment"],
-                    ["Output", "TxOutputReq"],
-                    ["NextSignature", "()"],
+                    ["ProcessInput", "TxInputData"],
+                    ["ProcessInputCommitment", "TxInputCommitmentData"],
+                    ["ProcessOutput", "TxOutputData"],
+                    ["ReturnNextSignature", "()"],
                 ],
             },
-            "SignatureResponse": "[u8; 64]",
+            "SignatureInResponse": "[u8; 64]",
             "MsgSignature": {
                 "type": "struct",
                 "type_mapping": [
-                    ["signature", "SignatureResponse"],
+                    ["signature", "SignatureInResponse"],
                 ],
             },
             "TxInputSignatureResponse": {
                 "type": "struct",
                 "type_mapping": [
-                    ["signature", "SignatureResponse"],
+                    ["signature", "SignatureInResponse"],
                     ["input_idx", "u32"],
                     ["multisig_idx", "Option<u32>"],
                     ["has_next", "bool"],
                 ],
             },
-            "PublicKeyResponse": "[u8; 65]",
+            "PublicKeyInResponse": "[u8; 65]",
             "ChainCodeResponse": "[u8; 32]",
-            "GetPublicKeyResponse": {
+            "PublicKeyResponse": {
                 "type": "struct",
                 "type_mapping": [
-                    ["public_key", "PublicKeyResponse"],
+                    ["public_key", "PublicKeyInResponse"],
                     ["chain_code", "ChainCodeResponse"],
                 ],
             },
             "MsgSignatureResponse": {
                 "type": "struct",
                 "type_mapping": [
-                    ["signature", "SignatureResponse"],
+                    ["signature", "SignatureInResponse"],
                 ],
             },
             "Response": {
                 "type": "enum",
                 "type_mapping": [
                     ["ExpectingNextChunk", "()"],
-                    ["PublicKey", "GetPublicKeyResponse"],
+                    ["PublicKey", "PublicKeyResponse"],
                     ["TxSetup", "()"],
                     ["TxNext", "()"],
-                    ["TxSignature", "TxInputSignatureResponse"],
+                    ["TxInputSignature", "TxInputSignatureResponse"],
                     ["MessageSetup", "()"],
                     ["MessageSignature", "MsgSignatureResponse"],
                     ["Pong", "()"],
@@ -505,6 +500,7 @@ def init_mintlayer_types():
                     ["patch", "u16"],
                 ],
             },
+            # FIXME
             "PeerAddressIp4": {
                 "type": "struct",
                 "type_mapping": [

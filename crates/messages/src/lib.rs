@@ -42,24 +42,10 @@ fn wrong_p1p2(_: u8) -> StatusWord {
     StatusWord::WrongP1P2
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
-#[num_enum(error_type(name = StatusWord, constructor = wrong_p1p2))]
-#[repr(u8)]
-pub enum PubKeyP1 {
-    NoDisplayAddress = 0,
-    DisplayAddress = 1,
-}
-
-impl PubKeyP1 {
-    pub fn display(&self) -> bool {
-        *self == Self::DisplayAddress
-    }
-}
-
 pub struct Ins {}
 
 impl Ins {
-    pub const PUB_KEY: u8 = 0x00;
+    pub const GET_PUB_KEY: u8 = 0x00;
     pub const SIGN_TX: u8 = 0x01;
     pub const SIGN_MSG: u8 = 0x02;
     pub const PING: u8 = 0x03;
@@ -68,7 +54,29 @@ impl Ins {
 #[derive(Debug, Clone, Copy, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
 #[num_enum(error_type(name = StatusWord, constructor = wrong_p1p2))]
 #[repr(u8)]
-pub enum SignP1 {
+pub enum GetPubKeyP1 {
+    NoDisplayAddress = 0,
+    DisplayAddress = 1,
+}
+
+impl GetPubKeyP1 {
+    pub fn display(&self) -> bool {
+        *self == Self::DisplayAddress
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
+#[num_enum(error_type(name = StatusWord, constructor = wrong_p1p2))]
+#[repr(u8)]
+pub enum SignTxP1 {
+    Start = 0,
+    Next = 1,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
+#[num_enum(error_type(name = StatusWord, constructor = wrong_p1p2))]
+#[repr(u8)]
+pub enum SignMsgP1 {
     Start = 0,
     Next = 1,
 }
@@ -77,51 +85,67 @@ pub enum SignP1 {
 #[num_enum(error_type(name = StatusWord, constructor = wrong_p1p2))]
 #[repr(u8)]
 pub enum PingP1 {
-    Start = 0,
+    // Ping doesn't have parameters, so its P1 must always be zero.
+    Dummy = 0,
 }
 
 #[derive(Encode, Decode)]
-pub struct PublicKeyReq {
+pub struct GetPubKeyReq {
     pub coin_type: CoinType,
     pub path: Bip32Path,
 }
 
 #[derive(Encode, Decode)]
-pub struct SignMessageReq {
+pub struct SignMessageStartReq {
     pub coin: CoinType,
     pub addr_type: AddrType,
     pub path: Bip32Path,
 }
 
-#[derive(Encode, Decode)]
-pub enum SignTxReq {
-    Input(Box<TxInputReq>),
-    InputCommitment(Box<mlcp::SighashInputCommitment>),
-    Output(Box<TxOutputReq>),
-    NextSignature,
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Encode, Decode)]
+#[repr(u8)]
+pub enum TransactionVersion {
+    #[codec(index = 0)]
+    V1,
 }
 
 #[derive(Encode, Decode)]
-pub struct TxMetadataV1Req {
+pub struct SignTxStartReq {
+    pub coin: CoinType,
+    pub version: TransactionVersion,
     pub num_inputs: u32,
     pub num_outputs: u32,
 }
 
 #[derive(Encode, Decode)]
-pub enum TxMetadataVersionReq {
-    V1(TxMetadataV1Req),
+pub enum SignTxNextReq {
+    #[codec(index = 0)]
+    ProcessInput(Box<TxInputData>),
+
+    #[codec(index = 1)]
+    ProcessInputCommitment(Box<TxInputCommitmentData>),
+
+    #[codec(index = 2)]
+    ProcessOutput(Box<TxOutputData>),
+
+    #[codec(index = 3)]
+    ReturnNextSignature,
 }
 
 #[derive(Encode, Decode)]
-pub struct TxMetadataReq {
-    pub coin: CoinType,
-    pub version: TxMetadataVersionReq,
-}
-
-#[derive(Encode, Decode)]
-pub struct TxInputReq {
+pub struct TxInputData {
     pub addresses: Vec<InputAddressPath>,
-    pub inp: TxInputWithAdditionalInfo,
+    pub input: TxInputWithAdditionalInfo,
+}
+
+#[derive(Encode, Decode)]
+pub struct TxInputCommitmentData {
+    pub commitment: mlcp::SighashInputCommitment,
+}
+
+#[derive(Encode, Decode)]
+pub struct TxOutputData {
+    pub output: mlcp::TxOutput,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
@@ -207,11 +231,6 @@ impl TxInputWithAdditionalInfo {
     }
 }
 
-#[derive(Encode, Decode)]
-pub struct TxOutputReq {
-    pub out: mlcp::TxOutput,
-}
-
 #[derive(Encode, Decode, Clone, Copy, Debug, Eq, PartialEq, IntoPrimitive)]
 #[repr(u8)]
 pub enum CoinType {
@@ -263,17 +282,17 @@ pub struct PublicKey(pub [u8; 65]);
 pub struct ChainCode(pub [u8; 32]);
 
 #[derive(Encode, Decode)]
-pub struct GetPublicKeyResponse {
+pub struct PublicKeyResponse {
     pub public_key: PublicKey,
     pub chain_code: ChainCode,
 }
 
 #[derive(Encode, Decode)]
-pub struct SignatureResponse(pub [u8; 64]);
+pub struct Signature(pub [u8; 64]);
 
 #[derive(Encode, Decode)]
 pub struct TxInputSignatureResponse {
-    pub signature: SignatureResponse,
+    pub signature: Signature,
     pub input_idx: u32,
     pub multisig_idx: Option<u32>,
     pub has_next: bool,
@@ -281,7 +300,7 @@ pub struct TxInputSignatureResponse {
 
 #[derive(Encode, Decode)]
 pub struct MsgSignatureResponse {
-    pub signature: SignatureResponse,
+    pub signature: Signature,
 }
 
 #[derive(Encode, Decode)]
@@ -289,13 +308,13 @@ pub enum Response {
     #[codec(index = 0)]
     ExpectingNextChunk,
     #[codec(index = 1)]
-    PublicKey(GetPublicKeyResponse),
+    PublicKey(PublicKeyResponse),
     #[codec(index = 2)]
     TxSetup,
     #[codec(index = 3)]
     TxNext,
     #[codec(index = 4)]
-    TxSignature(TxInputSignatureResponse),
+    TxInputSignature(TxInputSignatureResponse),
     #[codec(index = 5)]
     MessageSetup,
     #[codec(index = 6)]

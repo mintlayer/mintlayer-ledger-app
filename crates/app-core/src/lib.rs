@@ -67,8 +67,8 @@ use handlers::{
     sign_tx::{handle_sign_tx, setup_sign_tx, TxParsingContext},
 };
 use mintlayer_messages::{
-    decode_all, encode, Ins, PubKeyP1, Response, SignP1, StatusWord, APDU_CLASS, MAX_ADPU_DATA_LEN,
-    P2_DONE, P2_MORE,
+    decode_all, encode, GetPubKeyP1, Ins, PingP1, Response, SignMsgP1, SignTxP1, StatusWord,
+    APDU_CLASS, MAX_ADPU_DATA_LEN, P2_DONE, P2_MORE,
 };
 
 pub const MAX_BUFFER_LEN: usize = 4 * MAX_ADPU_DATA_LEN;
@@ -163,9 +163,9 @@ impl ApduTransport {
 }
 
 pub enum Command {
-    GetPubkey { p1: PubKeyP1, data: Vec<u8> },
-    SignTx { p1: SignP1, data: Vec<u8> },
-    SignMessage { p1: SignP1, data: Vec<u8> },
+    GetPubKey { p1: GetPubKeyP1, data: Vec<u8> },
+    SignTx { p1: SignTxP1, data: Vec<u8> },
+    SignMessage { p1: SignMsgP1, data: Vec<u8> },
     Ping,
 }
 
@@ -174,27 +174,30 @@ impl TryFrom<RawInstruction> for Command {
 
     fn try_from(raw: RawInstruction) -> Result<Self, Self::Error> {
         match raw.ins {
-            Ins::PUB_KEY => {
-                let p1: PubKeyP1 = raw.p1.try_into()?;
-                Ok(Command::GetPubkey { p1, data: raw.data })
+            Ins::GET_PUB_KEY => {
+                let p1: GetPubKeyP1 = raw.p1.try_into()?;
+                Ok(Command::GetPubKey { p1, data: raw.data })
             }
             Ins::SIGN_TX => {
-                let p1: SignP1 = raw.p1.try_into()?;
+                let p1: SignTxP1 = raw.p1.try_into()?;
                 Ok(Command::SignTx { p1, data: raw.data })
             }
             Ins::SIGN_MSG => {
-                let p1: SignP1 = raw.p1.try_into()?;
+                let p1: SignMsgP1 = raw.p1.try_into()?;
                 Ok(Command::SignMessage { p1, data: raw.data })
             }
-            Ins::PING => Ok(Command::Ping),
+            Ins::PING => {
+                let _p1: PingP1 = raw.p1.try_into()?;
+                Ok(Command::Ping)
+            }
             _ => Err(StatusWord::InsNotSupported),
         }
     }
 }
 
-fn show_status_and_home_if_needed(cmd: &Command, ctx: &mut AppContext, status: &StatusWord) {
+fn show_status_and_home_if_needed(cmd: &Command, ctx: &mut AppContext, status: StatusWord) {
     let (show_status, status_type) = match (cmd, status) {
-        (Command::GetPubkey { p1, .. }, StatusWord::Deny | StatusWord::Ok) if p1.display() => {
+        (Command::GetPubKey { p1, .. }, StatusWord::Deny | StatusWord::Ok) if p1.display() => {
             (true, StatusType::Address)
         }
         (Command::SignTx { .. }, StatusWord::Deny | StatusWord::Ok) if ctx.finished() => {
@@ -211,7 +214,7 @@ fn show_status_and_home_if_needed(cmd: &Command, ctx: &mut AppContext, status: &
     };
 
     if show_status {
-        let success = *status == StatusWord::Ok;
+        let success = status == StatusWord::Ok;
         NbglReviewStatus::new()
             .status_type(status_type)
             .show(success);
@@ -294,23 +297,23 @@ pub fn mintlayer_main() {
             }
         };
 
-        show_status_and_home_if_needed(&command, &mut tx_ctx, &status);
+        show_status_and_home_if_needed(&command, &mut tx_ctx, status);
     }
 }
 
 fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, StatusWord> {
     match cmd {
-        Command::GetPubkey { p1, data } => {
+        Command::GetPubKey { p1, data } => {
             let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
             handle_get_public_key(req, p1.display()).map(Response::PublicKey)
         }
         Command::SignTx { p1, data } => match p1 {
-            SignP1::Start => {
+            SignTxP1::Start => {
                 let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
                 ctx.data_context = Some(setup_sign_tx(req)?);
                 Ok(Response::TxSetup)
             }
-            SignP1::Next => {
+            SignTxP1::Next => {
                 let (mut tx_ctx, mut review) = match ctx.data_context.take() {
                     Some(DataContext::TxContext(c, r)) => (c, r),
                     _ => return Err(StatusWord::WrongContext),
@@ -333,12 +336,12 @@ fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, Statu
             }
         },
         Command::SignMessage { p1, data } => match p1 {
-            SignP1::Start => {
+            SignMsgP1::Start => {
                 let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
                 ctx.data_context = Some(setup_sign_message(req));
                 Ok(Response::MessageSetup)
             }
-            SignP1::Next => {
+            SignMsgP1::Next => {
                 let msg_ctx = match ctx.data_context.as_mut() {
                     Some(DataContext::SignMessageContext(ctx)) => ctx,
                     _ => return Err(StatusWord::WrongContext),
