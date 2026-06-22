@@ -276,12 +276,9 @@ class MintlayerCommandSender:
         return self.backend.last_async_response
 
     def get_all_signatures(self, tx: Transaction) -> List[bytes | Any]:
-        if self.backend.last_async_response is None:
-            raise ValueError("None response")
-
         next_sig = sign_tx_next_req_obj.encode({"ReturnNextSignature": None}).data
-        responses = [self.backend.last_async_response.data]
-        for _ in tx.inputs[1:]:
+        responses = []
+        for _ in tx.inputs:
             res = self.backend.exchange(
                 cla=CLA,
                 ins=InsType.SIGN_TX,

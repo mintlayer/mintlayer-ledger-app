@@ -151,19 +151,24 @@ impl TxParsingInputCommitmentsContext {
             self.tx_hasher
                 .update(&encode_as_compact(self.metadata.num_outputs))
                 .map_err(|_| StatusWord::TxHashFail)?;
-            let new_context = TxParsingContext::ParsingOutputs(Box::new(TxParsingOutputsContext {
-                metadata: self.metadata,
+            if self.metadata.num_outputs > 0 {
+                let new_context =
+                    TxParsingContext::ParsingOutputs(Box::new(TxParsingOutputsContext {
+                        metadata: self.metadata,
 
-                tx_hasher: self.tx_hasher,
+                        tx_hasher: self.tx_hasher,
 
-                summary: self.summary,
-                inputs: self.inputs,
+                        summary: self.summary,
+                        inputs: self.inputs,
 
-                spinner: self.spinner,
+                        spinner: self.spinner,
 
-                num_outputs_parsed: 0,
-            }));
-            Ok(new_context)
+                        num_outputs_parsed: 0,
+                    }));
+                Ok(new_context)
+            } else {
+                switch_to_signing(self.tx_hasher, self.metadata, self.inputs, self.spinner)
+            }
         } else {
             self.num_inputs_parsed += 1;
             Ok(TxParsingContext::ParsingInputCommitments(self))
@@ -239,27 +244,36 @@ impl TxParsingOutputsContext {
             self.num_outputs_parsed += 1;
             Ok(TxParsingContext::ParsingOutputs(self))
         } else {
-            // Finalize the tx hash for signing
-            let mut message_hash: [u8; 64] = [0u8; 64];
-            self.tx_hasher
-                .finalize(&mut message_hash)
-                .map_err(|_| StatusWord::TxHashFail)?;
-
-            let tx_hash = mintlayer_hash(&message_hash[0..32])?;
-
             if ui_approve_streaming_review(review, &self)? {
-                Ok(TxParsingContext::Signing(Box::new(TxSigningContext {
-                    metadata: self.metadata,
-                    inputs: self.inputs,
-                    spinner: self.spinner,
-                    num_inputs_signed: 0,
-                    tx_hash,
-                })))
+                switch_to_signing(self.tx_hasher, self.metadata, self.inputs, self.spinner)
             } else {
                 Err(StatusWord::Deny)
             }
         }
     }
+}
+
+fn switch_to_signing(
+    mut tx_hasher: Blake2b_512,
+    metadata: TxMetadata,
+    inputs: Vec<InputCompressed>,
+    spinner: NbglSpinner,
+) -> Result<TxParsingContext, StatusWord> {
+    // Finalize the tx hash for signing
+    let mut message_hash: [u8; 64] = [0u8; 64];
+    tx_hasher
+        .finalize(&mut message_hash)
+        .map_err(|_| StatusWord::TxHashFail)?;
+
+    let tx_hash = mintlayer_hash(&message_hash[0..32])?;
+
+    Ok(TxParsingContext::Signing(Box::new(TxSigningContext {
+        metadata,
+        inputs,
+        spinner,
+        num_inputs_signed: 0,
+        tx_hash,
+    })))
 }
 
 pub struct TxSigningContext {
@@ -461,40 +475,33 @@ pub fn handle_sign_tx(
     ctx: TxParsingContext,
     review: &mut NbglStreamingReview,
 ) -> Result<(Response, TxParsingContext), StatusWord> {
-    let new_ctx = match (req, ctx) {
+    match (req, ctx) {
         (SignTxNextReq::ProcessInput(req), TxParsingContext::ParsingInputs(ctx)) => {
-            handle_input(req, ctx)?
+            let new_ctx = handle_input(req, ctx)?;
+            Ok((Response::TxNext, new_ctx))
         }
         (
             SignTxNextReq::ProcessInputCommitment(req),
             TxParsingContext::ParsingInputCommitments(ctx),
-        ) => handle_input_commitment(req.as_ref(), ctx, review)?,
+        ) => {
+            let new_ctx = handle_input_commitment(req.as_ref(), ctx, review)?;
+            Ok((Response::TxNext, new_ctx))
+        }
         (SignTxNextReq::ProcessOutput(req), TxParsingContext::ParsingOutputs(ctx)) => {
-            handle_output(req.as_ref(), ctx, review)?
+            let new_ctx = handle_output(req.as_ref(), ctx, review)?;
+            Ok((Response::TxNext, new_ctx))
         }
         (SignTxNextReq::ReturnNextSignature, TxParsingContext::Signing(ctx)) => {
-            TxParsingContext::Signing(ctx)
+            let (response, mut new_ctx) = ctx.compute_signature_and_append()?;
+            new_ctx.show_spinner();
+
+            Ok((Response::TxInputSignature(response), new_ctx))
         }
         (SignTxNextReq::ReturnNextSignature, TxParsingContext::Finished) => {
             return Err(StatusWord::TxAlreadyFinished)
         }
-        _ => return Err(StatusWord::WrongContext),
-    };
-
-    let new_ctx = match new_ctx {
-        ctx @ (TxParsingContext::ParsingInputs(_)
-        | TxParsingContext::Finished
-        | TxParsingContext::ParsingInputCommitments(_)
-        | TxParsingContext::ParsingOutputs(_)) => ctx,
-        TxParsingContext::Signing(ctx) => {
-            let (response, mut new_ctx) = ctx.compute_signature_and_append()?;
-            new_ctx.show_spinner();
-
-            return Ok((Response::TxInputSignature(response), new_ctx));
-        }
-    };
-
-    Ok((Response::TxNext, new_ctx))
+        _ => Err(StatusWord::WrongContext),
+    }
 }
 
 fn update_hash<T: Encode>(data: &T, hasher: &mut Blake2b_512) -> Result<(), StatusWord> {
