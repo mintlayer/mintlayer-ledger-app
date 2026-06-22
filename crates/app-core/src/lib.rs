@@ -253,7 +253,7 @@ impl AppContext {
 pub fn mintlayer_main() {
     let mut comm = Comm::new().set_expected_cla(APDU_CLASS);
 
-    let mut tx_ctx = AppContext::new();
+    let mut tx_ctx = AppContext::new(); // FIXME: it's not "tx_ctx".
 
     // Initialize reference to Comm instance for NBGL API calls.
     init_comm(&mut comm);
@@ -301,9 +301,21 @@ pub fn mintlayer_main() {
     }
 }
 
+// FIXME:
+// 1) On all errors, the context should probably be reset.
+// 2) The simple `ctx.data_context = None` doesn't seem to reset the UI and `show_status_and_home_if_needed`
+//    doesn't reset the UI on any error.
 fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, StatusWord> {
     match cmd {
         Command::GetPubKey { p1, data } => {
+            // FIXME: the context should be reset here, especially if `display` is true.
+            // Note that `show_status_and_home_if_needed` calls `ctx.home.show_and_return()`
+            // on Pings, so:
+            // a) the context should be reset on Command::Ping below as well,
+            // b) since a Ping resets the context, then GetPubKey should do it even if `display`
+            //    is false;
+            // In any case, it's better to put UI update (at least on success) in the same place where
+            // the context is changed.
             let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
             handle_get_public_key(req, p1.display()).map(Response::PublicKey)
         }

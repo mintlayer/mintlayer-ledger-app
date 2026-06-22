@@ -49,6 +49,7 @@ const DERIVATION_PATH_LEN: usize = 5;
 // DERIVATION_PATH_LEN without the BIP44 and COIN as they are the same for all
 const COMPRESSED_DERIVATION_PATH_LEN: usize = 3;
 
+// FIXME: usize is already 32-bit.
 // we try to save a few bytes instead of using usize for indexes,
 // u32 is enough to cover max possible number of inputs and outputs
 type Index = u32;
@@ -331,10 +332,12 @@ impl TxParsingContext {
         match version {
             TransactionVersion::V1 => {
                 const VERSION_1: u8 = 1;
+                const SIG_HASH_TYPE_ALL: u8 = 1;
+
                 let mut tx_hasher = Blake2b_512::new();
                 // mode
                 tx_hasher
-                    .update(b"\x01")
+                    .update(&[SIG_HASH_TYPE_ALL])
                     .map_err(|_| StatusWord::TxHashFail)?;
                 // version
                 tx_hasher
@@ -366,7 +369,7 @@ impl TxParsingContext {
         }
     }
 
-    /// Shows a spinner while processing the inputs and input commitments if there are more than a few
+    /// Shows a spinner while processing the inputs and input commitments if there are more than a few,
     /// as well as while signing and returning the signatures.
     pub fn show_spinner(&mut self) {
         let (metadata, spinner) = match self {
@@ -376,7 +379,11 @@ impl TxParsingContext {
                 ctx.spinner.show("Signing...");
                 return;
             }
-            // While parsing outputs we are showing the review and not the spinner
+            // While parsing outputs we are showing the review and not the spinner.
+            // FIXME: inputs may need to be reviewed one by one, just like outputs, see the FIXME near
+            // TxSummaryCollector::input_command.
+            // FIXME: change outputs should be detected and not presented for review; once this is
+            // implemented, the spinner logic may need to be revised.
             Self::ParsingOutputs(_) | Self::Finished => return,
         };
 
@@ -412,6 +419,9 @@ fn handle_input(
         .into_iter()
         .map(|a| InputCompressed::new(a, num_inputs_parsed, ctx.metadata.coin))
         .collect::<Result<Vec<_>, StatusWord>>()?;
+    // FIXME: `ctx.inputs` is not really a collection of inputs, as it can contain multiple entries
+    // for one input in the case of multisig. Possible alternative name: "signature targets"
+    // (need to rename InputCompressed as well).
     ctx.inputs.extend(compressed_inputs);
 
     ctx.summary.process_input(&input_data.input)?;

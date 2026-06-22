@@ -17,6 +17,9 @@
 
 #![no_std]
 
+// FIXME: need tests that ensure encoding stability - encode a certain message or a message part and
+// expect concrete bytes, decode it back, expect the same object.
+
 // Required for using String, Vec, format!...
 extern crate alloc;
 
@@ -132,6 +135,23 @@ pub enum SignTxNextReq {
     ReturnNextSignature,
 }
 
+// Note:
+// 1) `addresses` can contain multiple entries in the case of multisig or no entries at all in
+//    the case of a non-signable pseudo-input (at this moment FillOrder is the only possible
+//    pseudo-input).
+// 2) Derivation paths in `addresses` are not checked against the actual destinations that the
+//    consensus requires the input to be signed against (note that in the non-utxo cases it's
+//    not really possible to verify their consistency, because we don't commit to the actual
+//    destination in those cases).
+//    This is not a problem in general, but note that since we always use SigHashType::ALL in this
+//    app, each input signature is a signature over the entire tx. So e.g. if inputs 0 and 1 require
+//    keys A and B respectively, a malfunctioning host may request input 0 to be signed with key B
+//    and input 1 with key A; in such a case the signature 0 will be valid for input 1 and vice versa.
+//    This does not allow the host to change the reviewed transaction, but it means that the app must
+//    not promise the user that a particular input was signed by the key specified in `addresses`.
+// FIXME: mention this in the docs?
+// FIXME: explicitly check that signatures are not requested for fill order inputs? (probably
+// redundant, given the second note above).
 #[derive(Encode, Decode)]
 pub struct TxInputData {
     pub addresses: Vec<InputAddressPath>,
@@ -143,6 +163,21 @@ pub struct TxInputCommitmentData {
     pub commitment: mlcp::SighashInputCommitment,
 }
 
+// FIXME:
+// 1) In order to be able to detect change outputs, there should be a way of specifying the destination
+//    via a derivation path.
+//    Note: the contents of Destination::PublicKeyHash and Destination::PublicKey should probably be
+//    enums of the form `enum PublicKeyHash { Own(derivation path), Foreign(actual hash) }`.
+// 2) Possible ways of handling change outputs (simplified version of what the cardano app seems to do):
+//  * a) require that all derivation paths (in inputs and in outputs) belong to the same account,
+//       fail if they don't;
+//    b) if an output is a simple Transfer to a change address in the account, omit it from review;
+//       if it's something more complicated, don't omit it from review, but mark is as change output.
+//  * Same as above, but only track (without failing) whether all inputs are signed with keys from the
+//    same account; if so and an output is a simple Transfer to a change address in that same account,
+//    omit the output from review. If the output references a change address but multiple accounts
+//    are referenced by inputs, or if the output is not a simple Transfer, then don't omit it,
+//    but mark it as change.
 #[derive(Encode, Decode)]
 pub struct TxOutputData {
     pub output: mlcp::TxOutput,

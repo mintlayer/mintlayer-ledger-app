@@ -81,6 +81,13 @@ impl TxSummaryCollector {
         }
     }
 
+    // FIXME:
+    // 1) currently consensus only forbids multiple account commands (AccountCommand or OrderAccountCommand) per tx,
+    //    but the number of account spendings is unlimited and they can co-exist with an account command;
+    // 2) probably the app shouldn't try being smart and assume any number of account commands is possible, asking
+    //    the user to approve them as they arrive, same as it's done for outputs;
+    // 3) if the app does try to be smart, then it should fail when multiple commands are encountered, instead of
+    //    silently overwriting `input_command`.
     pub fn input_command(&self) -> Option<&InputCommand> {
         self.input_command.as_ref()
     }

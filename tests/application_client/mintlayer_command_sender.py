@@ -415,7 +415,7 @@ def sign_tx_review(
                 snap_start_idx=start_idx,
             )
 
-    # The device as yielded the result, parse it and ensure that the signature is correct
+    # The device has yielded the result, parse it and ensure that the signature is correct
     responses = client.get_all_signatures(transaction)
 
     assert len(responses) == len(transaction.inputs)
