@@ -3,11 +3,22 @@ import scalecodec  # type: ignore
 from ragger.error import ExceptionRAPDU
 
 from application_client import MAINNET
-from application_client.mintlayer_command_sender import (CLA, GetAppAndVersionP1, SignTxP1, P2, Errors,
-                                                         InsType)
+from application_client.mintlayer_command_sender import (
+    CLA,
+    GetAppAndVersionP1,
+    SignTxP1,
+    P2,
+    Errors,
+    InsType,
+)
 
-sign_tx_start_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("SignTxStartReq")
-sign_tx_next_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("SignTxNextReq")
+sign_tx_start_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
+    "SignTxStartReq"
+)
+sign_tx_next_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
+    "SignTxNextReq"
+)
+
 
 # Ensure the app returns an error when a bad CLA is used
 def test_bad_cla(backend):
@@ -33,13 +44,19 @@ def test_wrong_p1p2(backend):
     assert e.value.status == Errors.SW_WRONG_P1P2
 
     backend.exchange(
-            cla=CLA, ins=InsType.GET_PUBLIC_KEY, p1=GetAppAndVersionP1.P1_START, p2=P2.P2_MORE
-        )
-    
+        cla=CLA,
+        ins=InsType.GET_PUBLIC_KEY,
+        p1=GetAppAndVersionP1.P1_START,
+        p2=P2.P2_MORE,
+    )
+
     # Wrong P1 after sending MORE
     with pytest.raises(ExceptionRAPDU) as e:
         backend.exchange(
-            cla=CLA, ins=InsType.GET_PUBLIC_KEY, p1=GetAppAndVersionP1.P1_START + 1, p2=P2.P2_MORE
+            cla=CLA,
+            ins=InsType.GET_PUBLIC_KEY,
+            p1=GetAppAndVersionP1.P1_START + 1,
+            p2=P2.P2_MORE,
         )
     assert e.value.status == Errors.SW_WRONG_P1P2
 
@@ -106,7 +123,6 @@ def test_sign_tx_invalid_context(backend, scenario_navigator, device, navigator)
             "version": 0,
             "num_inputs": num_inputs,
             "num_outputs": num_outputs,
-
         }
     ).data
 
@@ -134,7 +150,11 @@ def test_sign_tx_invalid_context(backend, scenario_navigator, device, navigator)
                                 {"Coin": 10},
                                 {
                                     "PublicKey": {
-                                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
+                                        "key": {
+                                            "Secp256k1Schnorr": {
+                                                "pubkey_data": bytes([0] * 33)
+                                            }
+                                        }
                                     }
                                 },
                             ],

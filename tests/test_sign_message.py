@@ -2,8 +2,7 @@ import pytest
 from ragger.error import ExceptionRAPDU
 
 from application_client import MAINNET
-from application_client.mintlayer_command_sender import (
-    Errors, MintlayerCommandSender)
+from application_client.mintlayer_command_sender import Errors, MintlayerCommandSender
 from application_client.mintlayer_response_unpacker import (
     unpack_sign_message_response,
 )
@@ -19,6 +18,7 @@ def test_sign_message(backend, scenario_navigator):
 
     sig = unpack_sign_message_response(client.get_async_response().data)
     assert len(sig) == 64
+
 
 def test_sign_message_pkh(backend, scenario_navigator):
     path = "m/44'/19788'/0'/0/0"

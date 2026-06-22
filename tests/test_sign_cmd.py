@@ -8,10 +8,14 @@ from application_client.mintlayer_command_sender import (
     sign_tx_review,
     ReviewTransaction,
 )
-from application_client.mintlayer_response_unpacker import unpack_get_public_key_response
+from application_client.mintlayer_response_unpacker import (
+    unpack_get_public_key_response,
+)
 from application_client.mintlayer_transaction import Transaction
 
-sign_tx_next_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("SignTxNextReq")
+sign_tx_next_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
+    "SignTxNextReq"
+)
 
 TX_RESPONSE_SIZE = 71
 
@@ -30,47 +34,39 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
 
     h = 1 << 31
     additional_info = {
-            "Utxo": {
-                "Transfer": [
-                    {"Coin": 10},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                            }
-                        }
-                    },
-                ],
-            }
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 10},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
+                    }
+                },
+            ],
         }
-    # FIXME formatting
+    }
     inp = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":
-                {
-                    "addresses": [
-                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-                    ],
-                    "input": {
-                        "Utxo": [
-                            {
-                                "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
-                                "index": 1,
-                            },
-                            additional_info,
-                        ]
-                    }
-                }
-            }
-        ).data
-    
-    inp_commitment = sign_tx_next_req_obj.encode(
-        {
-            "ProcessInputCommitment": {
-                "commitment": additional_info
+            "ProcessInput": {
+                "addresses": [
+                    {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
+                ],
+                "input": {
+                    "Utxo": [
+                        {
+                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                            "index": 1,
+                        },
+                        additional_info,
+                    ]
+                },
             }
         }
-        ).data
+    ).data
+
+    inp_commitment = sign_tx_next_req_obj.encode(
+        {"ProcessInputCommitment": {"commitment": additional_info}}
+    ).data
 
     output = sign_tx_next_req_obj.encode(
         {
@@ -80,7 +76,9 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
                         {"Coin": 10},
                         {
                             "PublicKey": {
-                                "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
+                                "key": {
+                                    "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
+                                }
                             }
                         },
                     ],
@@ -96,7 +94,7 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=False,
-        review_custom_screen_text=r"Sign\stransfer"
+        review_custom_screen_text=r"Sign\stransfer",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
@@ -110,27 +108,22 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
     h = 1 << 31
     inp = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":
-                {
-                    "addresses": [
-                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-                    ],
-                    "input": {
-                        "Account": {
-                            "nonce": 1,
-                            "account": {"Delegation": [[0] * 32, 11]},
-                        }
-                    },
-                }
+            "ProcessInput": {
+                "addresses": [
+                    {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
+                ],
+                "input": {
+                    "Account": {
+                        "nonce": 1,
+                        "account": {"Delegation": [[0] * 32, 11]},
+                    }
+                },
             }
+        }
     ).data
 
     inp_commitment = sign_tx_next_req_obj.encode(
-        {
-            "ProcessInputCommitment": {
-                "commitment": {"None": None}
-            }
-        }
+        {"ProcessInputCommitment": {"commitment": {"None": None}}}
     ).data
 
     output = sign_tx_next_req_obj.encode(
@@ -141,7 +134,9 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
                         {"Coin": 10},
                         {
                             "PublicKey": {
-                                "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
+                                "key": {
+                                    "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
+                                }
                             }
                         },
                         {"UntilHeight": 10},
@@ -159,7 +154,7 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=True,
-        review_custom_screen_text=r"Sign\swithdrawal"
+        review_custom_screen_text=r"Sign\swithdrawal",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
@@ -170,45 +165,38 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
     h = 1 << 31
 
     additional_info = {
-            "Utxo": {
-                "Transfer": [
-                    {"Coin": 10},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                            }
-                        }
-                    },
-                ],
-            }
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 10},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
+                    }
+                },
+            ],
         }
+    }
     inp = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":
-                {
-                    "addresses": [
-                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-                    ],
-                    "input": {
-                        "Utxo": [
-                            {
+            "ProcessInput": {
+                "addresses": [
+                    {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
+                ],
+                "input": {
+                    "Utxo": [
+                        {
                             "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
                             "index": 1,
-                            },
-                            additional_info,
-                        ]
-                    },
-                }
+                        },
+                        additional_info,
+                    ]
+                },
             }
+        }
     ).data
 
     inp_commitment = sign_tx_next_req_obj.encode(
-        {
-            "ProcessInputCommitment": {
-                "commitment": additional_info
-            }
-        }
+        {"ProcessInputCommitment": {"commitment": additional_info}}
     ).data
 
     output = sign_tx_next_req_obj.encode(
@@ -218,7 +206,9 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
                     "CreateDelegationId": [
                         {
                             "PublicKey": {
-                                "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
+                                "key": {
+                                    "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
+                                }
                             }
                         },
                         [0] * 32,
@@ -236,7 +226,7 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=False,
-        review_custom_screen_text=r"Sign\screate"
+        review_custom_screen_text=r"Sign\screate",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
@@ -247,45 +237,38 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
     h = 1 << 31
 
     additional_info = {
-            "Utxo": {
-                "Transfer": [
-                    {"Coin": 10},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                            }
-                        }
-                    },
-                ],
-            }
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 10},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
+                    }
+                },
+            ],
         }
+    }
     inp = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":
-                {
-                    "addresses": [
-                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-                    ],
-                    "input": {
-                        "Utxo": [
-                            {
-                                "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
-                                "index": 1,
-                            },
-                            additional_info,
-                        ]
-                    },
-                }
+            "ProcessInput": {
+                "addresses": [
+                    {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
+                ],
+                "input": {
+                    "Utxo": [
+                        {
+                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                            "index": 1,
+                        },
+                        additional_info,
+                    ]
+                },
             }
+        }
     ).data
 
     inp_commitment = sign_tx_next_req_obj.encode(
-        {
-            "ProcessInputCommitment": {
-                "commitment": additional_info
-            }
-        }
+        {"ProcessInputCommitment": {"commitment": additional_info}}
     ).data
 
     output = sign_tx_next_req_obj.encode(
@@ -306,7 +289,7 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=False,
-        review_custom_screen_text=r"Sign\sstake"
+        review_custom_screen_text=r"Sign\sstake",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
@@ -315,47 +298,40 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
     h = 1 << 31
-    
+
     additional_info = {
-            "Utxo": {
-                "Transfer": [
-                    {"Coin": 40001},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                            }
-                        }
-                    },
-                ],
-            }
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 40001},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
+                    }
+                },
+            ],
         }
+    }
     inp = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":
-                {
-                    "addresses": [
-                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-                    ],
-                    "input": {
-                        "Utxo": [
-                            {
-                                "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
-                                "index": 1,
-                            },
-                            additional_info,
-                        ]
-                    },
-                }
+            "ProcessInput": {
+                "addresses": [
+                    {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
+                ],
+                "input": {
+                    "Utxo": [
+                        {
+                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                            "index": 1,
+                        },
+                        additional_info,
+                    ]
+                },
             }
+        }
     ).data
 
     inp_commitment = sign_tx_next_req_obj.encode(
-        {
-            "ProcessInputCommitment": {
-                "commitment": additional_info
-            }
-        }
+        {"ProcessInputCommitment": {"commitment": additional_info}}
     ).data
 
     output = sign_tx_next_req_obj.encode(
@@ -369,15 +345,21 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
                             "staker": {
                                 "PublicKey": {
                                     "key": {
-                                        "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
+                                        "Secp256k1Schnorr": {
+                                            "pubkey_data": bytes([0] * 33)
+                                        }
                                     }
                                 }
                             },
-                            "vrf_public_key": {"key": {"Schnorrkel": {"key": bytes([0] * 32)}}},
+                            "vrf_public_key": {
+                                "key": {"Schnorrkel": {"key": bytes([0] * 32)}}
+                            },
                             "decommission_key": {
                                 "PublicKey": {
                                     "key": {
-                                        "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
+                                        "Secp256k1Schnorr": {
+                                            "pubkey_data": bytes([0] * 33)
+                                        }
                                     }
                                 }
                             },
@@ -397,7 +379,7 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=False,
-        review_custom_screen_text=r"Sign\screate\sstake"
+        review_custom_screen_text=r"Sign\screate\sstake",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
@@ -407,45 +389,38 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
     client = MintlayerCommandSender(backend)
     h = 1 << 31
     additional_info = {
-            "Utxo": {
-                "Transfer": [
-                    {"Coin": 10},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                            }
-                        }
-                    },
-                ],
-            }
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 10},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
+                    }
+                },
+            ],
         }
+    }
     inp = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":
-                {
-                    "addresses": [
-                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-                    ],
-                    "input": {
-                        "Utxo": [
-                            {
-                                "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
-                                "index": 1,
-                            },
-                            additional_info,
-                        ]
-                    },
-                }
+            "ProcessInput": {
+                "addresses": [
+                    {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
+                ],
+                "input": {
+                    "Utxo": [
+                        {
+                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                            "index": 1,
+                        },
+                        additional_info,
+                    ]
+                },
             }
+        }
     ).data
 
     inp_commitment = sign_tx_next_req_obj.encode(
-        {
-            "ProcessInputCommitment": {
-                "commitment": additional_info
-            }
-        }
+        {"ProcessInputCommitment": {"commitment": additional_info}}
     ).data
 
     output = sign_tx_next_req_obj.encode(
@@ -461,7 +436,9 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
                             "authority": {
                                 "PublicKey": {
                                     "key": {
-                                        "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
+                                        "Secp256k1Schnorr": {
+                                            "pubkey_data": bytes([0] * 33)
+                                        }
                                     }
                                 }
                             },
@@ -481,7 +458,7 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=False,
-        review_custom_screen_text=r"Sign\screate\stoken"
+        review_custom_screen_text=r"Sign\screate\stoken",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
@@ -491,45 +468,38 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
     client = MintlayerCommandSender(backend)
     h = 1 << 31
     additional_info = {
-            "Utxo": {
-                "Transfer": [
-                    {"Coin": 2000},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                            }
-                        }
-                    },
-                ],
-            }
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 2000},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
+                    }
+                },
+            ],
         }
+    }
     inp = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":
-                {
-                    "addresses": [
-                        {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-                    ],
-                    "input": {
-                        "Utxo": [
-                            {
-                                "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
-                                "index": 1,
-                            },
-                            additional_info,
-                        ]
-                    },
-                }
+            "ProcessInput": {
+                "addresses": [
+                    {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
+                ],
+                "input": {
+                    "Utxo": [
+                        {
+                            "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                            "index": 1,
+                        },
+                        additional_info,
+                    ]
+                },
             }
+        }
     ).data
 
     inp_commitment = sign_tx_next_req_obj.encode(
-        {
-            "ProcessInputCommitment": {
-                "commitment": additional_info
-            }
-        }
+        {"ProcessInputCommitment": {"commitment": additional_info}}
     ).data
 
     # This is the new output for issuing an NFT.
@@ -564,7 +534,9 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
                         },
                         {
                             "PublicKey": {
-                                "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
+                                "key": {
+                                    "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
+                                }
                             }
                         },
                     ],
@@ -581,7 +553,7 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=False,
-        review_custom_screen_text=r"Sign\screate\sNFT"
+        review_custom_screen_text=r"Sign\screate\sNFT",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
@@ -600,22 +572,20 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
     # The utxo (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
     additional_info = {
-            "Utxo": {
-                "Transfer": [
-                    {"Coin": 100},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
-                        }
-                    },
-                ],
-            }
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 100},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                    }
+                },
+            ],
         }
+    }
     utxo_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "Utxo": [
@@ -631,17 +601,13 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
     ).data
 
     inp_commitment = sign_tx_next_req_obj.encode(
-        {
-            "ProcessInputCommitment": {
-                "commitment": additional_info
-            }
-        }
+        {"ProcessInputCommitment": {"commitment": additional_info}}
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
     account_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "AccountCommand": [
@@ -659,11 +625,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
     ).data
 
     acc_inp_commitment = sign_tx_next_req_obj.encode(
-        {
-            "ProcessInputCommitment": {
-                "commitment": {"None": None}
-            }
-        }
+        {"ProcessInputCommitment": {"commitment": {"None": None}}}
     ).data
 
     mint_output = sign_tx_next_req_obj.encode(
@@ -674,7 +636,9 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
                         {"TokenV1": [f"0x{bytes([0]*32).hex()}", 1000]},
                         {
                             "PublicKey": {
-                                "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                                "key": {
+                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
+                                }
                             }
                         },
                     ],
@@ -693,7 +657,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=True,
-        review_custom_screen_text=r"Sign\smint\stokens"
+        review_custom_screen_text=r"Sign\smint\stokens",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
@@ -713,36 +677,32 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     # The additional data (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
     additional_info = {
-            "Utxo": {
-                "Transfer": [
-                    {"Coin": 100},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
-                        }
-                    },
-                ],
-            }
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 100},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                    }
+                },
+            ],
         }
+    }
     additional_info2 = {
-            "Utxo": {
-                "Transfer": [
-                    {"TokenV1": [f"0x{bytes([0]*32).hex()}", 1000]},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
-                        }
-                    },
-                ],
-            }
+        "Utxo": {
+            "Transfer": [
+                {"TokenV1": [f"0x{bytes([0]*32).hex()}", 1000]},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                    }
+                },
+            ],
         }
+    }
     utxo_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "Utxo": [
@@ -759,15 +719,13 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
 
     inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "ProcessInputCommitment": {
-                "commitment": additional_info
-            },
+            "ProcessInputCommitment": {"commitment": additional_info},
         }
     ).data
 
     utxo_input2 = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "Utxo": [
@@ -783,16 +741,12 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     ).data
 
     inp_commitment2 = sign_tx_next_req_obj.encode(
-        {
-            "ProcessInputCommitment": {
-                "commitment": additional_info2
-            }
-        }
+        {"ProcessInputCommitment": {"commitment": additional_info2}}
     ).data
 
     account_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "AccountCommand": [
@@ -807,11 +761,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     ).data
 
     acc_inp_commitment = sign_tx_next_req_obj.encode(
-        {
-            "ProcessInputCommitment": {
-                "commitment": {"None": None}
-            }
-        }
+        {"ProcessInputCommitment": {"commitment": {"None": None}}}
     ).data
 
     change_output = sign_tx_next_req_obj.encode(
@@ -822,7 +772,9 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
                         {"Coin": 99},
                         {
                             "PublicKey": {
-                                "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                                "key": {
+                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
+                                }
                             }
                         },
                     ],
@@ -841,7 +793,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=True,
-        review_custom_screen_text=r"Sign\sunmint\stokens"
+        review_custom_screen_text=r"Sign\sunmint\stokens",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
@@ -860,23 +812,21 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
     # The additional info (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
     additional_info = {
-            "Utxo": {
-                "Transfer": [
-                    {"Coin": 100},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
-                        }
-                    },
-                ],
-            }
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 100},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                    }
+                },
+            ],
         }
+    }
 
     utxo_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "Utxo": [
@@ -893,21 +843,21 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
 
     inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "ProcessInputCommitment": {
-                "commitment": additional_info
-            },
+            "ProcessInputCommitment": {"commitment": additional_info},
         }
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
     account_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "AccountCommand": [
                         1,  # AccountNonce
-                        {"FreezeToken": [f"0x{bytes([0]*32).hex()}", {"No": None}]},  # TokenId
+                        {
+                            "FreezeToken": [f"0x{bytes([0]*32).hex()}", {"No": None}]
+                        },  # TokenId
                     ]
                 },
             }
@@ -915,11 +865,7 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
     ).data
 
     acc_inp_commitment = sign_tx_next_req_obj.encode(
-        {
-            "ProcessInputCommitment": {
-                "commitment": {"None": None}
-            }
-        }
+        {"ProcessInputCommitment": {"commitment": {"None": None}}}
     ).data
 
     change_output = sign_tx_next_req_obj.encode(
@@ -930,7 +876,9 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
                         {"Coin": 99},
                         {
                             "PublicKey": {
-                                "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                                "key": {
+                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
+                                }
                             }
                         },
                     ],
@@ -949,7 +897,7 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=True,
-        review_custom_screen_text=r"Sign\sfreeze\stokens"
+        review_custom_screen_text=r"Sign\sfreeze\stokens",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
@@ -968,22 +916,20 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
     # The additional data (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
     additional_info = {
-            "Utxo": {
-                "Transfer": [
-                    {"Coin": 100},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
-                        }
-                    },  
-                ],
-            }
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 100},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                    }
+                },
+            ],
         }
+    }
     utxo_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "Utxo": [
@@ -995,20 +941,19 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
                     ]
                 },
             }
-        }).data
+        }
+    ).data
 
     inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "ProcessInputCommitment": {
-                "commitment": additional_info
-            },
+            "ProcessInputCommitment": {"commitment": additional_info},
         }
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
     account_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "AccountCommand": [
@@ -1023,11 +968,7 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
     ).data
 
     acc_inp_commitment = sign_tx_next_req_obj.encode(
-        {
-            "ProcessInputCommitment": {
-                "commitment": {"None": None}
-            }
-        }
+        {"ProcessInputCommitment": {"commitment": {"None": None}}}
     ).data
 
     change_output = sign_tx_next_req_obj.encode(
@@ -1038,7 +979,9 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
                         {"Coin": 99},
                         {
                             "PublicKey": {
-                                "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                                "key": {
+                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
+                                }
                             }
                         },
                     ],
@@ -1057,7 +1000,7 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=True,
-        review_custom_screen_text=r"Sign\sunfreeze"
+        review_custom_screen_text=r"Sign\sunfreeze",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
@@ -1076,22 +1019,20 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
     # The additional data (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
     additional_info = {
-            "Utxo": {
-                "Transfer": [
-                    {"Coin": 100},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
-                        }
-                    },
-                ],
-            }
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 100},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                    }
+                },
+            ],
         }
+    }
     utxo_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "Utxo": [
@@ -1103,20 +1044,19 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
                     ]
                 },
             }
-        }).data
+        }
+    ).data
 
     inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "ProcessInputCommitment": {
-                "commitment": additional_info
-            },
+            "ProcessInputCommitment": {"commitment": additional_info},
         }
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
     account_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "AccountCommand": [
@@ -1127,7 +1067,9 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
                                 {
                                     "PublicKey": {
                                         "key": {
-                                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
+                                            "Secp256k1Schnorr": {
+                                                "pubkey_data": bytes([2] * 33)
+                                            }
                                         }
                                     }
                                 },
@@ -1140,11 +1082,7 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
     ).data
 
     acc_inp_commitment = sign_tx_next_req_obj.encode(
-        {
-            "ProcessInputCommitment": {
-                "commitment": {"None": None}
-            }
-        }
+        {"ProcessInputCommitment": {"commitment": {"None": None}}}
     ).data
 
     change_output = sign_tx_next_req_obj.encode(
@@ -1155,7 +1093,9 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
                         {"Coin": 99},
                         {
                             "PublicKey": {
-                                "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                                "key": {
+                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
+                                }
                             }
                         },
                     ],
@@ -1174,7 +1114,7 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=True,
-        review_custom_screen_text=r"Sign\schange\stoken"
+        review_custom_screen_text=r"Sign\schange\stoken",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
@@ -1195,22 +1135,20 @@ def test_sign_tx_change_token_metadata_uri(
     # The additional info (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
     additional_info = {
-            "Utxo": {
-                "Transfer": [
-                    {"Coin": 100},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
-                        }
-                    },
-                ],
-            }
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 100},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                    }
+                },
+            ],
         }
+    }
     utxo_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "Utxo": [
@@ -1227,16 +1165,14 @@ def test_sign_tx_change_token_metadata_uri(
 
     inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "ProcessInputCommitment": {
-                "commitment": additional_info
-            },
+            "ProcessInputCommitment": {"commitment": additional_info},
         }
     ).data
 
     # This is the AccountCommand to mint 1000 units of a new token
     account_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "AccountCommand": [
@@ -1254,11 +1190,7 @@ def test_sign_tx_change_token_metadata_uri(
     ).data
 
     acc_inp_commitment = sign_tx_next_req_obj.encode(
-        {
-            "ProcessInputCommitment": {
-                "commitment": {"None": None}
-            }
-        }
+        {"ProcessInputCommitment": {"commitment": {"None": None}}}
     ).data
 
     change_output = sign_tx_next_req_obj.encode(
@@ -1269,7 +1201,9 @@ def test_sign_tx_change_token_metadata_uri(
                         {"Coin": 99},
                         {
                             "PublicKey": {
-                                "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                                "key": {
+                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
+                                }
                             }
                         },
                     ],
@@ -1288,7 +1222,7 @@ def test_sign_tx_change_token_metadata_uri(
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=True,
-        review_custom_screen_text=r"Sign\schange\stoken"
+        review_custom_screen_text=r"Sign\schange\stoken",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
@@ -1308,22 +1242,20 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     # The additionl info (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
     additional_info = {
-            "Utxo": {
-                "Transfer": [
-                    {"Coin": 100},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
-                        }
-                    },
-                ],
-            }
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 100},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                    }
+                },
+            ],
         }
+    }
     utxo_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "Utxo": [
@@ -1340,9 +1272,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
 
     inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "ProcessInputCommitment": {
-                "commitment": additional_info
-            },
+            "ProcessInputCommitment": {"commitment": additional_info},
         }
     ).data
 
@@ -1351,15 +1281,15 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     fill_give = 1000
 
     additional_order_info = {
-           "initially_asked": {"Coin": fill_ask},
-           "initially_given": {"TokenV1": [f"0x{bytes([0]*32).hex()}", fill_give]},
-           "ask_balance": 0,
-           "give_balance": 0,
+        "initially_asked": {"Coin": fill_ask},
+        "initially_given": {"TokenV1": [f"0x{bytes([0]*32).hex()}", fill_give]},
+        "ask_balance": 0,
+        "give_balance": 0,
     }
     # This is the OrderAccountCommand to fill 10 units
     account_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "OrderAccountCommand": [
@@ -1397,7 +1327,9 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
                         {"Coin": 100 - 1 - fill_amount},
                         {
                             "PublicKey": {
-                                "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                                "key": {
+                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
+                                }
                             }
                         },
                     ],
@@ -1419,7 +1351,9 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
                         },
                         {
                             "PublicKey": {
-                                "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                                "key": {
+                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
+                                }
                             }
                         },
                     ],
@@ -1438,7 +1372,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=True,
-        review_custom_screen_text=r"Sign\sfill\sorder"
+        review_custom_screen_text=r"Sign\sfill\sorder",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
@@ -1457,22 +1391,20 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     # The additional_data (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
     additional_info = {
-            "Utxo": {
-                "Transfer": [
-                    {"Coin": 100},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
-                        }
-                    },
-                ],
-            }
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 100},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                    }
+                },
+            ],
         }
+    }
     utxo_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "Utxo": [
@@ -1489,9 +1421,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
 
     inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "ProcessInputCommitment": {
-                "commitment": additional_info
-            },
+            "ProcessInputCommitment": {"commitment": additional_info},
         }
     ).data
 
@@ -1501,16 +1431,16 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     give_balance = 900
 
     additional_order_info = {
-           "initially_asked": {"Coin": initial_ask},
-           "initially_given": {"TokenV1": [f"0x{bytes([0]*32).hex()}", initial_give]},
-           "ask_balance": ask_balance,
-           "give_balance": give_balance,
+        "initially_asked": {"Coin": initial_ask},
+        "initially_given": {"TokenV1": [f"0x{bytes([0]*32).hex()}", initial_give]},
+        "ask_balance": ask_balance,
+        "give_balance": give_balance,
     }
 
     # This is the OrderAccountCommand to fill 10 units
     account_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "OrderAccountCommand": [
@@ -1532,7 +1462,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
                         additional_order_info["initially_asked"],
                         additional_order_info["initially_given"],
                         additional_order_info["ask_balance"],
-                        additional_order_info["give_balance"]
+                        additional_order_info["give_balance"],
                     ]
                 },
             }
@@ -1547,7 +1477,9 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
                         {"Coin": 100 - 1 + ask_balance},
                         {
                             "PublicKey": {
-                                "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                                "key": {
+                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
+                                }
                             }
                         },
                     ],
@@ -1564,7 +1496,9 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
                         {"TokenV1": [f"0x{bytes([0]*32).hex()}", give_balance]},
                         {
                             "PublicKey": {
-                                "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                                "key": {
+                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
+                                }
                             }
                         },
                     ],
@@ -1583,7 +1517,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=True,
-        review_custom_screen_text=r"Sign\sconclude\sorder"
+        review_custom_screen_text=r"Sign\sconclude\sorder",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
@@ -1601,22 +1535,20 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
     # The additional info (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
     additional_info = {
-            "Utxo": {
-                "Transfer": [
-                    {"Coin": 100},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
-                        }
-                    },
-                ],
-            }
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 100},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                    }
+                },
+            ],
         }
+    }
     utxo_input = sign_tx_next_req_obj.encode(
         {
-            "ProcessInput":{
+            "ProcessInput": {
                 "addresses": [{"path": bip44_path, "multisig_idx": None}],
                 "input": {
                     "Utxo": [
@@ -1633,9 +1565,7 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
 
     inp_commitment = sign_tx_next_req_obj.encode(
         {
-            "ProcessInputCommitment": {
-                "commitment": additional_info
-            },
+            "ProcessInputCommitment": {"commitment": additional_info},
         }
     ).data
 
@@ -1647,7 +1577,9 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
                         {"Coin": 89},
                         {
                             "PublicKey": {
-                                "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                                "key": {
+                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
+                                }
                             }
                         },
                     ],
@@ -1667,7 +1599,9 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
                             "spend_key": {
                                 "PublicKey": {
                                     "key": {
-                                        "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
+                                        "Secp256k1Schnorr": {
+                                            "pubkey_data": bytes([2] * 33)
+                                        }
                                     }
                                 }
                             },
@@ -1675,7 +1609,9 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
                             "refund_key": {
                                 "PublicKey": {
                                     "key": {
-                                        "Secp256k1Schnorr": {"pubkey_data": bytes([3] * 33)}
+                                        "Secp256k1Schnorr": {
+                                            "pubkey_data": bytes([3] * 33)
+                                        }
                                     }
                                 }
                             },
@@ -1696,6 +1632,6 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=False,
-        review_custom_screen_text=r"Sign\screate\sHTLC"
+        review_custom_screen_text=r"Sign\screate\sHTLC",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)

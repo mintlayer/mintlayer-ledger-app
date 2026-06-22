@@ -3,10 +3,10 @@ from ragger.bip import CurveChoice, calculate_public_key_and_chaincode
 from ragger.error import ExceptionRAPDU
 
 from application_client import MAINNET, TESTNET
-from application_client.mintlayer_command_sender import (
-    Errors, MintlayerCommandSender)
-from application_client.mintlayer_response_unpacker import \
-    unpack_get_public_key_response
+from application_client.mintlayer_command_sender import Errors, MintlayerCommandSender
+from application_client.mintlayer_response_unpacker import (
+    unpack_get_public_key_response,
+)
 
 MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 

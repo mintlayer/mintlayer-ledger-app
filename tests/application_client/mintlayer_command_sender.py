@@ -22,31 +22,37 @@ TX_RESPONSE_SIZE: int = 71
 
 CLA: int = 0xE1
 
+
 @dataclass
 class ReviewTransaction:
     transaction: Transaction
     has_command_input: bool
     review_custom_screen_text: str
 
+
 @dataclass
 class SignTxStep:
     kind: str
     index: int | None = None
+
 
 class GetAppAndVersionP1(IntEnum):
     # Parameter 1 for first APDU number.
     P1_START = 0x00
     P1_NEXT = 0x01
 
+
 class SignTxP1(IntEnum):
     # Parameter 1 for first APDU number.
     P1_START = 0x00
     P1_NEXT = 0x01
 
+
 class SignMessageP1(IntEnum):
     # Parameter 1 for first APDU number.
     P1_START = 0x00
     P1_NEXT = 0x01
+
 
 class GetPublicKeyP1(IntEnum):
     P1_START = 0x00
@@ -136,7 +142,11 @@ class MintlayerCommandSender:
         )
 
         self.backend.exchange(
-            cla=CLA, ins=InsType.SIGN_MESSAGE, p1=SignMessageP1.P1_START, p2=P2.P2_LAST, data=data
+            cla=CLA,
+            ins=InsType.SIGN_MESSAGE,
+            p1=SignMessageP1.P1_START,
+            p2=P2.P2_LAST,
+            data=data,
         )
         chunks = split_message(message, MAX_APDU_LEN)
 
@@ -146,7 +156,7 @@ class MintlayerCommandSender:
                 ins=InsType.SIGN_MESSAGE,
                 p1=SignMessageP1.P1_NEXT,
                 p2=P2.P2_MORE,
-                data=chunk
+                data=chunk,
             )
 
         with self.backend.exchange_async(
@@ -154,7 +164,7 @@ class MintlayerCommandSender:
             ins=InsType.SIGN_MESSAGE,
             p1=SignMessageP1.P1_NEXT,
             p2=P2.P2_LAST,
-            data=chunks[-1]
+            data=chunks[-1],
         ) as response:
             yield response
 
@@ -212,7 +222,6 @@ class MintlayerCommandSender:
         ):
             kind = "start"
             yield SignTxStep(kind=kind, index=0)
-
 
         # ---- OUTPUTS ----
         print("streaming outputs")
@@ -328,7 +337,7 @@ def sign_tx_review(
     else:
         instruction = NavInsID.RIGHT_CLICK
 
-    last_page_pattern=r".*\((\d+)/\1\)$"
+    last_page_pattern = r".*\((\d+)/\1\)$"
 
     for step in client.sign_tx(transaction):
         print("step kind: ", step.kind)
@@ -394,7 +403,8 @@ def sign_tx_review(
                 scenario_navigator.device,
                 scenario_navigator.backend,
                 UseCase.TX_REVIEW,
-                True)
+                True,
+            )
             navigator.navigate_until_text_and_compare(
                 navigate_instruction=scenario.navigation,
                 validation_instructions=scenario.validation,
@@ -403,7 +413,7 @@ def sign_tx_review(
                 test_case_name=scenario_navigator.test_name,
                 screen_change_after_last_instruction=False,
                 snap_start_idx=start_idx,
-                )
+            )
 
     # The device as yielded the result, parse it and ensure that the signature is correct
     responses = client.get_all_signatures(transaction)
