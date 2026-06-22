@@ -68,7 +68,7 @@ use handlers::{
 };
 use mintlayer_messages::{
     decode_all, encode, GetPubKeyP1, Ins, PingP1, Response, SignMsgP1, SignTxP1, StatusWord,
-    APDU_CLASS, MAX_ADPU_DATA_LEN, P2_DONE, P2_MORE,
+    APDU_CLASS, MAX_ADPU_DATA_LEN,
 };
 
 pub const MAX_BUFFER_LEN: usize = 4 * MAX_ADPU_DATA_LEN;
@@ -137,8 +137,8 @@ impl ApduTransport {
         self.buffer.extend_from_slice(data);
 
         match header.p2 {
-            P2_MORE => Ok(ReceiveInstructionResult::ExpectingNextChunk),
-            P2_DONE => {
+            mintlayer_messages::P2_MORE => Ok(ReceiveInstructionResult::ExpectingNextChunk),
+            mintlayer_messages::P2_DONE => {
                 // Construct the full instruction
                 let raw = RawInstruction {
                     ins: header.ins,
