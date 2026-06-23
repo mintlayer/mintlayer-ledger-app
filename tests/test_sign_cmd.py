@@ -545,7 +545,6 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
 
     inp_commitment = {"ProcessInputCommitment": {"commitment": additional_info}}
 
-    # This is the AccountCommand to mint 1000 units of a new token
     account_input = {
         "ProcessInput": {
             "addresses": [{"path": bip44_path, "multisig_idx": None}],
@@ -764,7 +763,6 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
         "ProcessInputCommitment": {"commitment": additional_info},
     }
 
-    # This is the AccountCommand to mint 1000 units of a new token
     account_input = {
         "ProcessInput": {
             "addresses": [{"path": bip44_path, "multisig_idx": None}],
@@ -772,8 +770,11 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
                 "AccountCommand": [
                     1,  # AccountNonce
                     {
-                        "FreezeToken": [f"0x{bytes([0]*32).hex()}", {"No": None}]
-                    },  # TokenId
+                        "FreezeToken": [
+                            f"0x{bytes([0]*32).hex()}", # TokenId
+                            {"No": None}
+                        ]
+                    },
                 ]
             },
         }
@@ -857,7 +858,6 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
         "ProcessInputCommitment": {"commitment": additional_info},
     }
 
-    # This is the AccountCommand to mint 1000 units of a new token
     account_input = {
         "ProcessInput": {
             "addresses": [{"path": bip44_path, "multisig_idx": None}],
@@ -950,7 +950,6 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
         "ProcessInputCommitment": {"commitment": additional_info},
     }
 
-    # This is the AccountCommand to mint 1000 units of a new token
     account_input = {
         "ProcessInput": {
             "addresses": [{"path": bip44_path, "multisig_idx": None}],
@@ -1056,7 +1055,6 @@ def test_sign_tx_change_token_metadata_uri(
         "ProcessInputCommitment": {"commitment": additional_info},
     }
 
-    # This is the AccountCommand to mint 1000 units of a new token
     account_input = {
         "ProcessInput": {
             "addresses": [{"path": bip44_path, "multisig_idx": None}],
@@ -1163,7 +1161,6 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
         "ask_balance": 0,
         "give_balance": 0,
     }
-    # This is the OrderAccountCommand to fill 10 units
     account_input = {
         "ProcessInput": {
             "addresses": [{"path": bip44_path, "multisig_idx": None}],
@@ -1302,7 +1299,6 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
         "give_balance": give_balance,
     }
 
-    # This is the OrderAccountCommand to fill 10 units
     account_input = {
         "ProcessInput": {
             "addresses": [{"path": bip44_path, "multisig_idx": None}],
@@ -1478,5 +1474,84 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
         transaction=transaction,
         has_command_input=False,
         review_custom_screen_text=r"Sign\screate\sHTLC",
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
+
+
+def test_sign_tx_without_outputs(backend, scenario_navigator, device, navigator):
+    """
+    Test signing a transaction with two inputs:
+    1. A standard UTXO input to pay for tx fees.
+    2. An AccountCommand input to freeze the tokens.
+    And no outputs.
+    """
+    client = MintlayerCommandSender(backend)
+    h = 1 << 31
+    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+
+    # The additional info (the previous TxOutput that this UTXO input spends)
+    # This represents an output of 100 coins owned by our key
+    additional_info = {
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 100},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
+                    }
+                },
+            ],
+        }
+    }
+
+    utxo_input = {
+        "ProcessInput": {
+            "addresses": [{"path": bip44_path, "multisig_idx": None}],
+            "input": {
+                "Utxo": [
+                    {
+                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "index": 0,
+                    },
+                    additional_info,
+                ]
+            },
+        }
+    }
+
+    inp_commitment = {
+        "ProcessInputCommitment": {"commitment": additional_info},
+    }
+
+    account_input = {
+        "ProcessInput": {
+            "addresses": [{"path": bip44_path, "multisig_idx": None}],
+            "input": {
+                "AccountCommand": [
+                    1,  # AccountNonce
+                    {
+                        "FreezeToken": [
+                            f"0x{bytes([0]*32).hex()}", # TokenId
+                            {"No": None}
+                        ]
+                    },
+                ]
+            },
+        }
+    }
+
+    acc_inp_commitment = {"ProcessInputCommitment": {"commitment": {"None": None}}}
+
+    transaction = Transaction(
+        coin=MAINNET,
+        inputs=[utxo_input, account_input],
+        input_commitments=[inp_commitment, acc_inp_commitment],
+        outputs=[],
+    )
+
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=True,
+        review_custom_screen_text=r"Sign\sfreeze\stokens",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
