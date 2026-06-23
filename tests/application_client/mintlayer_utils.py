@@ -1,59 +1,109 @@
-from io import BytesIO
-from typing import Optional, Literal
+import scalecodec  # type: ignore
+from dataclasses import dataclass
+from typing import List, Optional
 
-UINT64_MAX: int = 2**64 - 1
-UINT32_MAX: int = 2**32 - 1
-UINT16_MAX: int = 2**16 - 1
-
-
-def write_varint(n: int) -> bytes:
-    if n < 0xFC:
-        return n.to_bytes(1, byteorder="little")
-
-    if n <= UINT16_MAX:
-        return b"\xfd" + n.to_bytes(2, byteorder="little")
-
-    if n <= UINT32_MAX:
-        return b"\xfe" + n.to_bytes(4, byteorder="little")
-
-    if n <= UINT64_MAX:
-        return b"\xff" + n.to_bytes(8, byteorder="little")
-
-    raise ValueError(f"Can't write to varint: '{n}'!")
+sign_tx_start_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
+    "SignTxStartReq"
+)
+sign_tx_next_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
+    "SignTxNextReq"
+)
 
 
-def read_varint(buf: BytesIO, prefix: Optional[bytes] = None) -> int:
-    b: bytes = prefix if prefix else buf.read(1)
-
-    if not b:
-        raise ValueError(f"Can't read prefix: '{b.hex()}'!")
-
-    n: int = {b"\xfd": 2, b"\xfe": 4, b"\xff": 8}.get(b, 1)  # default to 1
-
-    b = buf.read(n) if n > 1 else b
-
-    if len(b) != n:
-        raise ValueError("Can't read varint!")
-
-    return int.from_bytes(b, byteorder="little")
+class TransactionError(Exception):
+    pass
 
 
-def read(buf: BytesIO, size: int) -> bytes:
-    b: bytes = buf.read(size)
+@dataclass
+class TxInputSignatureResponse:
+    signature: bytes
+    input_idx: int
+    multisig_idx: Optional[int]
+    has_next: bool
 
-    if len(b) < size:
-        raise ValueError(f"Can't read {size} bytes in buffer!")
+    @staticmethod
+    def from_data(response: bytes):
+        response = decode_response_variant(response, "TxInputSignature")
 
-    return b
+        signature = bytes.fromhex(response["signature"][2:])
+        assert len(signature) == 64
+
+        return TxInputSignatureResponse(
+            signature=signature,
+            input_idx=response["input_idx"],
+            multisig_idx=response["multisig_idx"],
+            has_next=response["has_next"],
+        )
 
 
-def read_uint(
-    buf: BytesIO, bit_len: int, byteorder: Literal["big", "little"] = "little"
-) -> int:
-    size: int = bit_len // 8
-    b: bytes = buf.read(size)
+@dataclass(frozen=True)
+class TxInputSignatureIndices:
+    input_idx: int
+    multisig_idx: Optional[int]
 
-    if len(b) < size:
-        raise ValueError(f"Can't read u{bit_len} in buffer!")
 
-    return int.from_bytes(b, byteorder)
+@dataclass
+class TxInputSignature:
+    signature: bytes
+    input_idx: int
+    multisig_idx: Optional[int]
+
+    @staticmethod
+    def from_response(response: TxInputSignatureResponse):
+        return TxInputSignature(
+            signature=response.signature,
+            input_idx=response.input_idx,
+            multisig_idx=response.multisig_idx,
+        )
+
+    def indices(self) -> TxInputSignatureIndices:
+        return TxInputSignatureIndices(
+            input_idx=self.input_idx,
+            multisig_idx=self.multisig_idx,
+        )
+
+
+@dataclass
+class Transaction:
+    coin: int
+    inputs: List[dict]
+    input_commitments: List[dict]
+    outputs: List[dict]
+
+    def expected_sig_indices(self) -> set[TxInputSignatureIndices]:
+        result = set()
+        for input_idx, input in enumerate(self.inputs):
+            input_data = input.get("ProcessInput")
+            assert (
+                input_data is not None
+            ), f"Transaction input is not a ProcessInput request: {input!r}"
+
+            for addr in input_data["addresses"]:
+                multisig_idx = addr["multisig_idx"]
+                result.add(
+                    TxInputSignatureIndices(
+                        input_idx=input_idx, multisig_idx=multisig_idx
+                    )
+                )
+
+        return result
+
+
+def decode_response(response: bytes):
+    response_bytes = scalecodec.base.ScaleBytes(response)
+    response_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
+        "Response", data=response_bytes
+    )
+    return response_obj.decode()
+
+
+def decode_response_variant(response: bytes, expected_variant: str):
+    response = decode_response(response)
+
+    assert (
+        isinstance(response, dict)
+        and len(response) == 1
+        and response[expected_variant] is not None
+    ), f"Expecting a dict with a single key '{expected_variant}', but got: {response!r}"
+
+    return response[expected_variant]

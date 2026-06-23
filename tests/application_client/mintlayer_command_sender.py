@@ -8,17 +8,15 @@ from ragger.backend.interface import RAPDU, BackendInterface
 from ragger.navigator import NavInsID
 from ragger.navigator.navigation_scenario import NavigationScenarioData, UseCase
 
-from .mintlayer_transaction import Transaction
-
-sign_tx_start_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
-    "SignTxStartReq"
-)
-sign_tx_next_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
-    "SignTxNextReq"
+from .mintlayer_utils import (
+    Transaction,
+    TxInputSignatureResponse,
+    TxInputSignature,
+    sign_tx_start_req_obj,
+    sign_tx_next_req_obj,
 )
 
 MAX_APDU_LEN: int = 255
-TX_RESPONSE_SIZE: int = 71
 
 CLA: int = 0xE1
 
@@ -192,15 +190,20 @@ class MintlayerCommandSender:
         print("sending inputs", len(transaction.inputs))
 
         for inp in transaction.inputs:
-            self._send_chunked_sync(inp)
+            encoded_inp = sign_tx_next_req_obj.encode(inp).data
+            self._send_chunked_sync(encoded_inp)
 
         # ---- INPUT COMMITMENTS ----
         print("sending input commitments")
 
-        for inp in transaction.input_commitments[:-1]:
-            self._send_chunked_sync(inp)
+        for comm in transaction.input_commitments[:-1]:
+            encoded_comm = sign_tx_next_req_obj.encode(comm).data
+            self._send_chunked_sync(encoded_comm)
 
-        chunks = split_message(transaction.input_commitments[-1], MAX_APDU_LEN)
+        encoded_comm = sign_tx_next_req_obj.encode(
+            transaction.input_commitments[-1]
+        ).data
+        chunks = split_message(encoded_comm, MAX_APDU_LEN)
 
         # all but last chunk sync
         for chunk in chunks[:-1]:
@@ -229,7 +232,8 @@ class MintlayerCommandSender:
         for idx, out in enumerate(transaction.outputs):
             print(f"sending output {idx}")
 
-            chunks = split_message(out, MAX_APDU_LEN)
+            encoded_out = sign_tx_next_req_obj.encode(out).data
+            chunks = split_message(encoded_out, MAX_APDU_LEN)
 
             # all but last chunk sync
             for chunk in chunks[:-1]:
@@ -275,10 +279,10 @@ class MintlayerCommandSender:
     def get_async_response(self) -> Optional[RAPDU]:
         return self.backend.last_async_response
 
-    def get_all_signatures(self, tx: Transaction) -> List[bytes | Any]:
+    def get_all_signatures(self) -> List[TxInputSignature]:
         next_sig = sign_tx_next_req_obj.encode({"ReturnNextSignature": None}).data
-        responses = []
-        for _ in tx.inputs:
+        sigs = []
+        while True:
             res = self.backend.exchange(
                 cla=CLA,
                 ins=InsType.SIGN_TX,
@@ -286,11 +290,13 @@ class MintlayerCommandSender:
                 p2=P2.P2_LAST,
                 data=next_sig,
             )
-            if res is not None:
-                responses.append(res.data)
-            else:
-                raise ValueError("None response")
-        return responses
+            res = TxInputSignatureResponse.from_data(res.data)
+
+            sigs.append(TxInputSignature.from_response(res))
+
+            if not res.has_next:
+                break
+        return sigs
 
 
 def hardened_index(index: int) -> int:
@@ -412,9 +418,11 @@ def sign_tx_review(
                 snap_start_idx=start_idx,
             )
 
-    # The device has yielded the result, parse it and ensure that the signature is correct
-    responses = client.get_all_signatures(transaction)
+    # After review approval, explicitly request every signature.
+    signatures = client.get_all_signatures()
 
-    assert len(responses) == len(transaction.inputs)
-    for response in responses:
-        assert len(response) == TX_RESPONSE_SIZE
+    sig_indices = {sig.indices() for sig in signatures}
+    expected_sig_indices = transaction.expected_sig_indices()
+    assert (
+        sig_indices == expected_sig_indices
+    ), f"Sig indices don't match, expected: {expected_sig_indices}, actual: {sig_indices}"

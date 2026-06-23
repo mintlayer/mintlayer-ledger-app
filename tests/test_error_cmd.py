@@ -11,12 +11,9 @@ from application_client.mintlayer_command_sender import (
     Errors,
     InsType,
 )
-
-sign_tx_start_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
-    "SignTxStartReq"
-)
-sign_tx_next_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
-    "SignTxNextReq"
+from application_client.mintlayer_utils import (
+    sign_tx_start_req_obj,
+    sign_tx_next_req_obj,
 )
 
 
