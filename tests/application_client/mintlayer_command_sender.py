@@ -88,7 +88,7 @@ class Errors(IntEnum):
 
 
 def split_message(message: bytes, max_size: int) -> List[bytes]:
-    return [message[x : x + max_size] for x in range(0, len(message), max_size)]
+    return [message[x: x + max_size] for x in range(0, len(message), max_size)]
 
 
 class MintlayerCommandSender:
@@ -422,18 +422,40 @@ def sign_tx_review(
                 UseCase.TX_REVIEW,
                 True,
             )
+
+            if device.is_nano:
+                validation_instructions = scenario.validation
+            else:
+                # On touch devices `UseCase.TX_REVIEW` sets `scenario.validation` to
+                # `[USE_CASE_REVIEW_CONFIRM, USE_CASE_STATUS_DISMISS]`. But the status screen
+                # appears only after the last `ReturnNextSignature`.
+                validation_instructions = [NavInsID.USE_CASE_REVIEW_CONFIRM]
+
             navigator.navigate_until_text_and_compare(
                 navigate_instruction=scenario.navigation,
-                validation_instructions=scenario.validation,
+                validation_instructions=validation_instructions,
                 text=review_custom_screen_text,
                 path=scenario_navigator.screenshot_path,
                 test_case_name=scenario_navigator.test_name,
                 screen_change_after_last_instruction=False,
                 snap_start_idx=start_idx,
             )
+            start_idx += 10
 
     # After review approval, explicitly request every signature.
     signatures = client.get_all_signatures()
+
+    if not device.is_nano:
+        # The last ReturnNextSignature is what makes the tx Finished, so on touch devices
+        # the "Transaction signed" status screen is expected here.
+        navigator.navigate_and_compare(
+            path=scenario_navigator.screenshot_path,
+            test_case_name=scenario_navigator.test_name,
+            instructions=[NavInsID.USE_CASE_STATUS_DISMISS],
+            screen_change_before_first_instruction=True,
+            screen_change_after_last_instruction=False,
+            snap_start_idx=start_idx,
+        )
 
     sig_indices = {sig.indices() for sig in signatures}
     expected_sig_indices = transaction.expected_sig_indices()
