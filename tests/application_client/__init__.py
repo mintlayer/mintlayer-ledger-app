@@ -32,7 +32,9 @@ def init_mintlayer_types():
                 "type": "enum",
                 "type_mapping": [
                     ["Coin", "Amount"],
-                    ["TokenV0", ""],  # deprecated
+                    # Note: need to have this variant to make sure TokenV1's index is 2.
+                    # FIXME: the protocol should not use types from mintlayer core primitives.
+                    ["DeprecatedTokenV0", ""],
                     ["TokenV1", "(TokenId, Amount)"],
                 ],
             },

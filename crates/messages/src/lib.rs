@@ -19,6 +19,8 @@
 
 // FIXME: need tests that ensure encoding stability - encode a certain message or a message part and
 // expect concrete bytes, decode it back, expect the same object.
+// FIXME: types from mintlayer core primitives should not be part of the protocol (though need to
+// check the resulting binary size after switching to separate types in the protocol).
 
 // Required for using String, Vec, format!...
 extern crate alloc;

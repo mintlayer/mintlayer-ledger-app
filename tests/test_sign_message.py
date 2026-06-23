@@ -20,6 +20,18 @@ def test_sign_message(backend, scenario_navigator):
     assert len(sig) == 64
 
 
+# Same as test_sign_message, but the message is large enough to require chunking
+def test_sign_large_message(backend, scenario_navigator):
+    path = "m/44'/19788'/0'/0/0"
+    message = b"Hello" * 100
+    client = MintlayerCommandSender(backend)
+    with client.sign_message(coin=MAINNET, addr_type=0, path=path, message=message):
+        scenario_navigator.review_approve()
+
+    sig = unpack_sign_message_response(client.get_async_response().data)
+    assert len(sig) == 64
+
+
 def test_sign_message_pkh(backend, scenario_navigator):
     path = "m/44'/19788'/0'/0/0"
     message = b"Hello"

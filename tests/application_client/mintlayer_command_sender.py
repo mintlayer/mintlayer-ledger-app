@@ -12,6 +12,7 @@ from .mintlayer_utils import (
     Transaction,
     TxInputSignatureResponse,
     TxInputSignature,
+    decode_response_variant,
     sign_tx_start_req_obj,
     sign_tx_next_req_obj,
 )
@@ -139,23 +140,26 @@ class MintlayerCommandSender:
             + pack_derivation_path(path)
         )
 
-        self.backend.exchange(
+        response = self.backend.exchange(
             cla=CLA,
             ins=InsType.SIGN_MESSAGE,
             p1=SignMessageP1.P1_START,
             p2=P2.P2_LAST,
             data=data,
         )
+        decode_response_variant(response.data, "MessageSetup")
+
         chunks = split_message(message, MAX_APDU_LEN)
 
         for chunk in chunks[:-1]:
-            self.backend.exchange(
+            response = self.backend.exchange(
                 cla=CLA,
                 ins=InsType.SIGN_MESSAGE,
                 p1=SignMessageP1.P1_NEXT,
                 p2=P2.P2_MORE,
                 data=chunk,
             )
+            decode_response_variant(response.data, "ExpectingNextChunk")
 
         with self.backend.exchange_async(
             cla=CLA,
@@ -167,7 +171,7 @@ class MintlayerCommandSender:
             yield response
 
     def sign_tx(self, transaction: Transaction) -> Generator[SignTxStep, None, None]:
-        # ---- METADATA ----
+        # ---- Start req ----
         start_req = sign_tx_start_req_obj.encode(
             {
                 "coin": transaction.coin,
@@ -177,28 +181,28 @@ class MintlayerCommandSender:
             }
         ).data
 
-        res = self.backend.exchange(
+        response = self.backend.exchange(
             cla=CLA,
             ins=InsType.SIGN_TX,
             p1=SignTxP1.P1_START,
             p2=P2.P2_LAST,
             data=bytes(start_req),
         )
-        print("metadata ", res)
+        decode_response_variant(response.data, "TxSetup")
 
         # ---- INPUTS ----
         print("sending inputs", len(transaction.inputs))
 
         for inp in transaction.inputs:
             encoded_inp = sign_tx_next_req_obj.encode(inp).data
-            self._send_chunked_sync(encoded_inp)
+            self._send_chunked_sync(encoded_inp, "TxNext")
 
         # ---- INPUT COMMITMENTS ----
         print("sending input commitments")
 
         for comm in transaction.input_commitments[:-1]:
             encoded_comm = sign_tx_next_req_obj.encode(comm).data
-            self._send_chunked_sync(encoded_comm)
+            self._send_chunked_sync(encoded_comm, "TxNext")
 
         encoded_comm = sign_tx_next_req_obj.encode(
             transaction.input_commitments[-1]
@@ -207,13 +211,14 @@ class MintlayerCommandSender:
 
         # all but last chunk sync
         for chunk in chunks[:-1]:
-            self.backend.exchange(
+            response = self.backend.exchange(
                 cla=CLA,
                 ins=InsType.SIGN_TX,
                 p1=SignTxP1.P1_NEXT,
                 p2=P2.P2_MORE,
                 data=chunk,
             )
+            decode_response_variant(response.data, "ExpectingNextChunk")
 
         # last chunk async -> UI review
         with self.backend.exchange_async(
@@ -226,6 +231,9 @@ class MintlayerCommandSender:
             kind = "start"
             yield SignTxStep(kind=kind, index=0)
 
+        response = self.get_async_response()
+        decode_response_variant(response.data, "TxNext")
+
         # ---- OUTPUTS ----
         print("streaming outputs")
 
@@ -237,13 +245,14 @@ class MintlayerCommandSender:
 
             # all but last chunk sync
             for chunk in chunks[:-1]:
-                self.backend.exchange(
+                response = self.backend.exchange(
                     cla=CLA,
                     ins=InsType.SIGN_TX,
                     p1=SignTxP1.P1_NEXT,
                     p2=P2.P2_MORE,
                     data=chunk,
                 )
+                decode_response_variant(response.data, "ExpectingNextChunk")
 
             # last chunk async -> UI review
             with self.backend.exchange_async(
@@ -256,25 +265,30 @@ class MintlayerCommandSender:
                 kind = "final" if idx == len(transaction.outputs) - 1 else "output"
                 yield SignTxStep(kind=kind, index=idx)
 
-    def _send_chunked_sync(self, data: bytes):
+            response = self.get_async_response()
+            decode_response_variant(response.data, "TxNext")
+
+    def _send_chunked_sync(self, data: bytes, expected_last_response_variant: str):
         chunks = split_message(data, MAX_APDU_LEN)
 
         for chunk in chunks[:-1]:
-            self.backend.exchange(
+            response = self.backend.exchange(
                 cla=CLA,
                 ins=InsType.SIGN_TX,
                 p1=SignTxP1.P1_NEXT,
                 p2=P2.P2_MORE,
                 data=chunk,
             )
+            decode_response_variant(response.data, "ExpectingNextChunk")
 
-        self.backend.exchange(
+        response = self.backend.exchange(
             cla=CLA,
             ins=InsType.SIGN_TX,
             p1=SignTxP1.P1_NEXT,
             p2=P2.P2_LAST,
             data=chunks[-1],
         )
+        return decode_response_variant(response.data, expected_last_response_variant)
 
     def get_async_response(self) -> Optional[RAPDU]:
         return self.backend.last_async_response

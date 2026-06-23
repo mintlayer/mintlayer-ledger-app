@@ -3,7 +3,7 @@ from typing import Tuple
 
 import scalecodec  # type: ignore
 
-from .mintlayer_utils import decode_response
+from .mintlayer_utils import decode_response_variant
 
 
 # remainder, data_len, data
@@ -54,12 +54,12 @@ def unpack_get_app_and_version_response(response: bytes) -> Tuple[str, str]:
 
 # Unpack from response:
 def unpack_get_public_key_response(response: bytes) -> Tuple[int, bytes, int, bytes]:
-    msg = decode_response(response)
+    msg = decode_response_variant(response, "PublicKey")
     print(msg)
 
-    pub_key = bytes.fromhex(msg["PublicKey"]["public_key"][2:])
+    pub_key = bytes.fromhex(msg["public_key"][2:])
     pub_key_len = len(pub_key)
-    chain_code = bytes.fromhex(msg["PublicKey"]["chain_code"][2:])
+    chain_code = bytes.fromhex(msg["chain_code"][2:])
     chain_code_len = len(chain_code)
 
     print(pub_key_len, pub_key)
@@ -72,8 +72,7 @@ def unpack_get_public_key_response(response: bytes) -> Tuple[int, bytes, int, by
 
 # Unpack from response:
 def unpack_sign_message_response(response: bytes) -> bytes:
-    resp = decode_response(response)
-    assert resp["MessageSignature"] is not None
-    signature = bytes.fromhex(resp["MessageSignature"]["signature"][2:])
+    resp = decode_response_variant(response, "MessageSignature")
+    signature = bytes.fromhex(resp["signature"][2:])
     assert len(signature) == 64
     return signature

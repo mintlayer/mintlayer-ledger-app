@@ -10,7 +10,7 @@ from application_client.mintlayer_command_sender import (
 from application_client.mintlayer_response_unpacker import (
     unpack_get_public_key_response,
 )
-from application_client.mintlayer_utils import Transaction
+from application_client.mintlayer_utils import Transaction, sign_tx_next_req_obj
 
 
 def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
@@ -46,7 +46,7 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                        "id": {"Transaction": bytes([0] * 32)},
                         "index": 1,
                     },
                     additional_info,
@@ -165,7 +165,7 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                        "id": {"Transaction": bytes([0] * 32)},
                         "index": 1,
                     },
                     additional_info,
@@ -231,7 +231,7 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                        "id": {"Transaction": bytes([0] * 32)},
                         "index": 1,
                     },
                     additional_info,
@@ -288,7 +288,7 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                        "id": {"Transaction": bytes([0] * 32)},
                         "index": 1,
                     },
                     additional_info,
@@ -367,7 +367,7 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                        "id": {"Transaction": bytes([0] * 32)},
                         "index": 1,
                     },
                     additional_info,
@@ -438,7 +438,7 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": "0x{}".format(bytes([0] * 32).hex())},
+                        "id": {"Transaction": bytes([0] * 32)},
                         "index": 1,
                     },
                     additional_info,
@@ -534,7 +534,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "id": {"Transaction": bytes([1] * 32)},
                         "index": 0,
                     },
                     additional_info,
@@ -545,15 +545,17 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
 
     inp_commitment = {"ProcessInputCommitment": {"commitment": additional_info}}
 
+    account_nonce = 1
+    token_id = bytes([0] * 32)
     account_input = {
         "ProcessInput": {
             "addresses": [{"path": bip44_path, "multisig_idx": None}],
             "input": {
                 "AccountCommand": [
-                    1,  # AccountNonce
+                    account_nonce,
                     {
                         "MintTokens": [
-                            f"0x{bytes([0]*32).hex()}",  # TokenId
+                            token_id,
                             1000,  # Amount to mint
                         ]
                     },
@@ -568,7 +570,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
         "ProcessOutput": {
             "output": {
                 "Transfer": [
-                    {"TokenV1": [f"0x{bytes([0]*32).hex()}", 1000]},
+                    {"TokenV1": [token_id, 1000]},
                     {
                         "PublicKey": {
                             "key": {
@@ -625,7 +627,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     additional_info2 = {
         "Utxo": {
             "Transfer": [
-                {"TokenV1": [f"0x{bytes([0]*32).hex()}", 1000]},
+                {"TokenV1": [bytes([0] * 32), 1000]},
                 {
                     "PublicKey": {
                         "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
@@ -640,7 +642,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "id": {"Transaction": bytes([1] * 32)},
                         "index": 0,
                     },
                     additional_info,
@@ -659,7 +661,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "id": {"Transaction": bytes([1] * 32)},
                         "index": 2,
                     },
                     additional_info2,
@@ -670,14 +672,16 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
 
     inp_commitment2 = {"ProcessInputCommitment": {"commitment": additional_info2}}
 
+    account_nonce = 1
+    token_id = bytes([0] * 32)
     account_input = {
         "ProcessInput": {
             "addresses": [{"path": bip44_path, "multisig_idx": None}],
             "input": {
                 "AccountCommand": [
-                    1,  # AccountNonce
+                    account_nonce,
                     {
-                        "UnmintTokens": f"0x{bytes([0]*32).hex()}",  # TokenId
+                        "UnmintTokens": token_id,
                     },
                 ]
             },
@@ -750,7 +754,7 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "id": {"Transaction": bytes([1] * 32)},
                         "index": 0,
                     },
                     additional_info,
@@ -763,18 +767,15 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
         "ProcessInputCommitment": {"commitment": additional_info},
     }
 
+    account_nonce = 1
+    token_id = bytes([0] * 32)
     account_input = {
         "ProcessInput": {
             "addresses": [{"path": bip44_path, "multisig_idx": None}],
             "input": {
                 "AccountCommand": [
-                    1,  # AccountNonce
-                    {
-                        "FreezeToken": [
-                            f"0x{bytes([0]*32).hex()}", # TokenId
-                            {"No": None}
-                        ]
-                    },
+                    account_nonce,
+                    {"FreezeToken": [token_id, {"No": None}]},
                 ]
             },
         }
@@ -845,7 +846,7 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "id": {"Transaction": bytes([1] * 32)},
                         "index": 0,
                     },
                     additional_info,
@@ -858,14 +859,16 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
         "ProcessInputCommitment": {"commitment": additional_info},
     }
 
+    account_nonce = 1
+    token_id = bytes([0] * 32)
     account_input = {
         "ProcessInput": {
             "addresses": [{"path": bip44_path, "multisig_idx": None}],
             "input": {
                 "AccountCommand": [
-                    1,  # AccountNonce
+                    account_nonce,
                     {
-                        "UnfreezeToken": f"0x{bytes([0]*32).hex()}",  # TokenId
+                        "UnfreezeToken": token_id,
                     },
                 ]
             },
@@ -937,7 +940,7 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "id": {"Transaction": bytes([1] * 32)},
                         "index": 0,
                     },
                     additional_info,
@@ -950,15 +953,17 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
         "ProcessInputCommitment": {"commitment": additional_info},
     }
 
+    account_nonce = 1
+    token_id = bytes([0] * 32)
     account_input = {
         "ProcessInput": {
             "addresses": [{"path": bip44_path, "multisig_idx": None}],
             "input": {
                 "AccountCommand": [
-                    1,  # AccountNonce
+                    account_nonce,
                     {
                         "ChangeTokenAuthority": [
-                            f"0x{bytes([0]*32).hex()}",  # TokenId
+                            token_id,
                             {
                                 "PublicKey": {
                                     "key": {
@@ -1042,7 +1047,7 @@ def test_sign_tx_change_token_metadata_uri(
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "id": {"Transaction": bytes([1] * 32)},
                         "index": 0,
                     },
                     additional_info,
@@ -1055,15 +1060,17 @@ def test_sign_tx_change_token_metadata_uri(
         "ProcessInputCommitment": {"commitment": additional_info},
     }
 
+    account_nonce = 1
+    token_id = bytes([0] * 32)
     account_input = {
         "ProcessInput": {
             "addresses": [{"path": bip44_path, "multisig_idx": None}],
             "input": {
                 "AccountCommand": [
-                    1,  # AccountNonce
+                    account_nonce,
                     {
                         "ChangeTokenMetadataUri": [
-                            f"0x{bytes([0]*32).hex()}",  # TokenId
+                            token_id,
                             "uri.com".encode(),
                         ]
                     },
@@ -1138,7 +1145,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "id": {"Transaction": bytes([1] * 32)},
                         "index": 0,
                     },
                     additional_info,
@@ -1157,10 +1164,11 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
 
     additional_order_info = {
         "initially_asked": {"Coin": fill_ask},
-        "initially_given": {"TokenV1": [f"0x{bytes([0]*32).hex()}", fill_give]},
+        "initially_given": {"TokenV1": [bytes([0] * 32), fill_give]},
         "ask_balance": 0,
         "give_balance": 0,
     }
+    order_id = bytes([0] * 32)
     account_input = {
         "ProcessInput": {
             "addresses": [{"path": bip44_path, "multisig_idx": None}],
@@ -1168,7 +1176,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
                 "OrderAccountCommand": [
                     {
                         "FillOrder": [
-                            f"0x{bytes([0]*32).hex()}",  # OrderId
+                            order_id,
                             fill_amount,
                         ]
                     },
@@ -1212,7 +1220,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
                 "Transfer": [
                     {
                         "TokenV1": [
-                            f"0x{bytes([0]*32).hex()}",
+                            bytes([0] * 32),
                             fill_amount * fill_give // fill_ask,
                         ]
                     },
@@ -1274,7 +1282,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "id": {"Transaction": bytes([1] * 32)},
                         "index": 0,
                     },
                     additional_info,
@@ -1292,20 +1300,21 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     ask_balance = 10
     give_balance = 900
 
+    token_id = bytes([1] * 32)
     additional_order_info = {
         "initially_asked": {"Coin": initial_ask},
-        "initially_given": {"TokenV1": [f"0x{bytes([0]*32).hex()}", initial_give]},
+        "initially_given": {"TokenV1": [token_id, initial_give]},
         "ask_balance": ask_balance,
         "give_balance": give_balance,
     }
-
+    order_id = bytes([1] * 32)
     account_input = {
         "ProcessInput": {
             "addresses": [{"path": bip44_path, "multisig_idx": None}],
             "input": {
                 "OrderAccountCommand": [
                     {
-                        "ConcludeOrder": f"0x{bytes([0]*32).hex()}",  # OrderId
+                        "ConcludeOrder": order_id,
                     },
                     additional_order_info,
                 ]
@@ -1347,7 +1356,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
         "ProcessOutput": {
             "output": {
                 "Transfer": [
-                    {"TokenV1": [f"0x{bytes([0]*32).hex()}", give_balance]},
+                    {"TokenV1": [token_id, give_balance]},
                     {
                         "PublicKey": {
                             "key": {
@@ -1405,7 +1414,7 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "id": {"Transaction": bytes([1] * 32)},
                         "index": 0,
                     },
                     additional_info,
@@ -1510,7 +1519,7 @@ def test_sign_tx_without_outputs(backend, scenario_navigator, device, navigator)
             "input": {
                 "Utxo": [
                     {
-                        "id": {"Transaction": f"0x{bytes([1]*32).hex()}"},
+                        "id": {"Transaction": bytes([1] * 32)},
                         "index": 0,
                     },
                     additional_info,
@@ -1523,18 +1532,15 @@ def test_sign_tx_without_outputs(backend, scenario_navigator, device, navigator)
         "ProcessInputCommitment": {"commitment": additional_info},
     }
 
+    account_nonce = 1
+    token_id = bytes([0] * 32)
     account_input = {
         "ProcessInput": {
             "addresses": [{"path": bip44_path, "multisig_idx": None}],
             "input": {
                 "AccountCommand": [
-                    1,  # AccountNonce
-                    {
-                        "FreezeToken": [
-                            f"0x{bytes([0]*32).hex()}", # TokenId
-                            {"No": None}
-                        ]
-                    },
+                    account_nonce,
+                    {"FreezeToken": [token_id, {"No": None}]},
                 ]
             },
         }
@@ -1553,5 +1559,202 @@ def test_sign_tx_without_outputs(backend, scenario_navigator, device, navigator)
         transaction=transaction,
         has_command_input=True,
         review_custom_screen_text=r"Sign\sfreeze\stokens",
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
+
+
+# Sign a tx with an output large enough to require chunking
+def test_sign_tx_with_large_output(backend, scenario_navigator, device, navigator):
+    # Use the app interface instead of raw interface
+    client = MintlayerCommandSender(backend)
+    h = 1 << 31
+    additional_info = {
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 2000},
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
+                    }
+                },
+            ],
+        }
+    }
+    inp = {
+        "ProcessInput": {
+            "addresses": [
+                {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
+            ],
+            "input": {
+                "Utxo": [
+                    {
+                        "id": {"Transaction": bytes([0] * 32)},
+                        "index": 1,
+                    },
+                    additional_info,
+                ]
+            },
+        }
+    }
+
+    inp_commitment = {"ProcessInputCommitment": {"commitment": additional_info}}
+
+    # Make the output big
+    metadata_uri = b"abcef" * 100
+
+    # This is an output for issuing an NFT.
+    # The structure is (TokenId, NftIssuance, Destination)
+    output = {
+        "ProcessOutput": {
+            "output": {
+                "IssueNft": [
+                    bytes([0] * 32),
+                    {
+                        "V0": {
+                            "metadata": {
+                                "creator": {
+                                    "public_key": {
+                                        "key": {
+                                            "Secp256k1Schnorr": {
+                                                "pubkey_data": bytes([0] * 33)
+                                            }
+                                        }
+                                    }
+                                },
+                                "name": b"MyAwesomeNFT",
+                                "description": b"FirstNFT",
+                                "ticker": b"MNFT1",
+                                "icon_uri": b"https://my.nft/icon.png",
+                                "additional_metadata_uri": metadata_uri,
+                                "media_uri": b"https://my.nft/media.jpg",
+                                "media_hash": bytes([0] * 32),
+                            }
+                        }
+                    },
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
+                            }
+                        }
+                    },
+                ],
+            }
+        }
+    }
+
+    # Sanity check
+    assert len(sign_tx_next_req_obj.encode(output).data) > 500
+
+    # Create the transaction that will be sent to the device for signing
+    transaction = Transaction(
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+    )
+
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=False,
+        review_custom_screen_text=r"Sign\screate\sNFT",
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
+
+
+# Sign a tx with an input and input commitment large enough to require chunking
+def test_sign_tx_with_large_input_and_commitment(
+    backend, scenario_navigator, device, navigator
+):
+    # Use the app interface instead of raw interface
+    client = MintlayerCommandSender(backend)
+    h = 1 << 31
+
+    # Make the additional info big
+    metadata_uri = b"abcef" * 100
+
+    # The utxo is for issuing an NFT.
+    # The structure is (TokenId, NftIssuance, Destination)
+    token_id = bytes([11] * 32)
+    additional_info = {
+        "Utxo": {
+            "IssueNft": [
+                token_id,
+                {
+                    "V0": {
+                        "metadata": {
+                            "creator": {
+                                "public_key": {
+                                    "key": {
+                                        "Secp256k1Schnorr": {
+                                            "pubkey_data": bytes([0] * 33)
+                                        }
+                                    }
+                                }
+                            },
+                            "name": b"MyAwesomeNFT",
+                            "description": b"FirstNFT",
+                            "ticker": b"MNFT1",
+                            "icon_uri": b"https://my.nft/icon.png",
+                            "additional_metadata_uri": metadata_uri,
+                            "media_uri": b"https://my.nft/media.jpg",
+                            "media_hash": bytes([0] * 32),
+                        }
+                    }
+                },
+                {
+                    "PublicKey": {
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
+                    }
+                },
+            ],
+        }
+    }
+    inp = {
+        "ProcessInput": {
+            "addresses": [
+                {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
+            ],
+            "input": {
+                "Utxo": [
+                    {
+                        "id": {"Transaction": bytes([0] * 32)},
+                        "index": 1,
+                    },
+                    additional_info,
+                ]
+            },
+        }
+    }
+
+    inp_commitment = {"ProcessInputCommitment": {"commitment": additional_info}}
+
+    output = {
+        "ProcessOutput": {
+            "output": {
+                "Transfer": [
+                    {"TokenV1": [token_id, 1]},
+                    {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
+                            }
+                        }
+                    },
+                ],
+            }
+        }
+    }
+
+    # Sanity checks
+    assert len(sign_tx_next_req_obj.encode(inp).data) > 500
+    assert len(sign_tx_next_req_obj.encode(inp_commitment).data) > 500
+
+    # Create the transaction that will be sent to the device for signing
+    transaction = Transaction(
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+    )
+
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=False,
+        review_custom_screen_text=r"Sign\stransfer",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)

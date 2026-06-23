@@ -103,7 +103,7 @@ def decode_response_variant(response: bytes, expected_variant: str):
     assert (
         isinstance(response, dict)
         and len(response) == 1
-        and response[expected_variant] is not None
+        and expected_variant in response
     ), f"Expecting a dict with a single key '{expected_variant}', but got: {response!r}"
 
     return response[expected_variant]
