@@ -158,8 +158,8 @@ fn transaction_title(tx_type: &Option<TxType>) -> &'static str {
         Some(TxType::Burn) => "Sign burn transaction",
         Some(TxType::Htlc) => "Sign create HTLC transaction",
         Some(TxType::CreateDelegation) => "Sign create delegation transaction",
-        Some(TxType::DelegationStake) => "Sign stake delegation transaction",
-        Some(TxType::DelegationWithdrawal) => "Sign withdrawal delegation transaction",
+        Some(TxType::DelegateStaking) => "Sign delegate staking transaction",
+        Some(TxType::DelegationWithdrawal) => "Sign delegation withdrawal transaction",
         Some(TxType::CreateStakePool) => "Sign create stake pool transaction",
         Some(TxType::DecommissionStakePool) => "Sign decommission stake pool transaction",
         Some(TxType::CreateNft) => "Sign create NFT transaction",
@@ -336,7 +336,13 @@ fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormatedOutput, St
                 "Pool ID: {}\nStaker key: {}\nDecommission key: {}\nVRF public key: {}\nMargin ratio per thousand: {}\nCost per block: {}\nPledge{}\n",
                 id_to_address(pool_id.hash(), coin.pool_id_address_prefix())?, to_address(&data.staker, coin)?, to_address(&data.decommission_key, coin)?, vrf_to_address(&data.vrf_public_key, coin)?, data.margin_ratio_per_thousand.0, format_amount(data.cost_per_block, coin),
                 format_amount(data.pledge, coin));
-            ("Create staking pool", address_short)
+
+            let name = if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
+                "Create pool"
+            } else {
+                "Create staking pool"
+            };
+            (name, address_short)
         }
 
         TxOutput::ProduceBlockFromStake(destination, _pool_id) => {
@@ -427,13 +433,8 @@ fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormatedOutput, St
                 String::from_utf8_lossy(data.additional_metadata_uri.as_ref()),
                 String::from_utf8_lossy(data.media_uri.as_ref())
             );
-            let name = if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                "Issue NFT"
-            } else {
-                "Issue NFT token"
-            };
 
-            (name, address_short)
+            ("Issue NFT", address_short)
         }
 
         TxOutput::DataDeposit(data) => ("Data deposit", hex::encode(data)),
@@ -504,7 +505,7 @@ fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, 
                     id_to_address(token_id.hash(), coin.token_id_address_prefix())?
                 );
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                    ("Lock token", address_short)
+                    ("Lock supply", address_short)
                 } else {
                     ("Lock token supply", address_short)
                 }
@@ -582,6 +583,9 @@ fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, 
                     "Order ID: {}",
                     id_to_address(order_id.hash(), coin.order_id_address_prefix())?
                 );
+                // FIXME: here and in other places above - the contracted forms should be consistent,
+                // e.g. if we use "ord" in one place then use it in all other places. And also use "tkn"
+                // for tokens. Etc.
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
                     ("Conclude ord", address_short)
                 } else {

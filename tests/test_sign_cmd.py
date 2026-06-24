@@ -135,7 +135,7 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=True,
-        review_custom_screen_text=r"Sign\swithdrawal",
+        review_custom_screen_text=r"Sign\sdelegation",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
@@ -206,6 +206,7 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
+# FIXME: rename to test_sign_tx_delegate_staking
 def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
@@ -258,7 +259,7 @@ def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigat
     review_tx = ReviewTransaction(
         transaction=transaction,
         has_command_input=False,
-        review_custom_screen_text=r"Sign\sstake",
+        review_custom_screen_text=r"Sign\sdelegate",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 

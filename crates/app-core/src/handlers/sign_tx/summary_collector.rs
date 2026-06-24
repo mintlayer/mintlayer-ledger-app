@@ -37,7 +37,7 @@ pub enum TxType {
     Burn,
     Htlc,
     CreateDelegation,
-    DelegationStake,
+    DelegateStaking,
     DelegationWithdrawal,
     CreateStakePool,
     DecommissionStakePool,
@@ -153,7 +153,7 @@ impl TxSummaryCollector {
             }
             TxOutput::ProduceBlockFromStake(_, _) => {}
             TxOutput::DelegateStaking(amount, _) => {
-                self.tx_type = merge_tx_type(self.tx_type, TxType::DelegationStake);
+                self.tx_type = merge_tx_type(self.tx_type, TxType::DelegateStaking);
                 self.increase_output_totals(CoinOrTokenId::Coin, *amount)?;
             }
             TxOutput::CreateDelegationId(_, _) => {
@@ -525,7 +525,7 @@ mod tests {
         let out =
             mlcp::TxOutput::DelegateStaking(delegate_amount, mlcp::Id::new(mlcp::H256::zero()));
         collector.process_output(&out).unwrap();
-        assert_eq!(collector.tx_type(), Some(TxType::DelegationStake));
+        assert_eq!(collector.tx_type(), Some(TxType::DelegateStaking));
         assert_eq!(
             collector.total_outputs().get(&CoinOrTokenId::Coin),
             Some(&delegate_amount)
