@@ -231,9 +231,13 @@ pub fn ui_display_message<const T: char>(
     // Create the NBGL review flow with titles appropriate for message signing.
     let review: NbglReview = NbglReview::new()
         .titles(
-            "Review message",   // Initial title
-            "Cannot be undone", // Warning on the second screen
-            "Sign message",     // Final confirmation prompt
+            // Title
+            "Review message",
+            // Subtitle; if non-empty, this will be shown on the second screen on nano devices
+            // and below the title on the first screen on touch devices.
+            "",
+            // Final confirmation prompt
+            "Sign message",
         )
         .tx_type(TransactionType::Message)
         .glyph(&MINTLAYER);
