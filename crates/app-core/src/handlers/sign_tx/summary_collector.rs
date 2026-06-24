@@ -25,13 +25,13 @@ use mintlayer_messages::{
     AdditionalOrderInfo, AdditionalUtxoInfo, TxInputWithAdditionalInfo,
 };
 
-#[derive(Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum CoinOrTokenId {
     Coin,
     TokenId(H256),
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TxType {
     Transfer,
     Burn,
@@ -358,43 +358,698 @@ fn into_coin_or_token_id_and_amount(
 
 #[cfg(test)]
 mod tests {
-    use alloc::vec::Vec;
-
     use crate::testing::prelude::*;
+    use crate::StatusWord;
 
-    use mintlayer_messages::mlcp;
+    use mintlayer_messages::{
+        mlcp, AdditionalOrderInfo, AdditionalUtxoInfo, TxInputWithAdditionalInfo,
+    };
 
     use super::*;
 
-    // TODO: this is a sample test, need to expand it and add more tests
+    fn make_utxo_outpoint() -> mlcp::UtxoOutPoint {
+        mlcp::UtxoOutPoint::new(
+            mlcp::OutPointSourceId::Transaction(mlcp::Id::new(mlcp::H256::zero())),
+            0,
+        )
+    }
+
     #[test_item]
-    fn sample_test() {
+    fn test_new_and_getters() {
+        let collector = TxSummaryCollector::new();
+        assert!(collector.tx_type().is_none());
+        assert!(collector.input_command().is_none());
+        assert!(collector.total_inputs().is_empty());
+        assert!(collector.total_outputs().is_empty());
+    }
+
+    #[test_item]
+    fn test_process_output_transfer() {
         let mut collector = TxSummaryCollector::new();
 
-        collector
-            .process_input(&TxInputWithAdditionalInfo::Utxo(
-                mlcp::UtxoOutPoint::new(
-                    mlcp::OutPointSourceId::Transaction(mlcp::Id::new(mlcp::H256::zero())),
-                    0,
-                ),
-                AdditionalUtxoInfo::Utxo(mlcp::TxOutput::Transfer(
-                    mlcp::OutputValue::Coin(mlcp::Amount::from_atoms(123)),
-                    mlcp::Destination::AnyoneCanSpend,
-                )),
-            ))
-            .unwrap();
+        // Transfer Coin
+        let coin_amount = mlcp::Amount::from_atoms(100);
+        let out_coin = mlcp::TxOutput::Transfer(
+            mlcp::OutputValue::Coin(coin_amount),
+            mlcp::Destination::AnyoneCanSpend,
+        );
+        collector.process_output(&out_coin).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::Transfer));
+        assert_eq!(
+            collector.total_outputs().get(&CoinOrTokenId::Coin),
+            Some(&coin_amount)
+        );
 
-        collector
-            .process_output(&mlcp::TxOutput::Transfer(
-                mlcp::OutputValue::Coin(mlcp::Amount::from_atoms(120)),
+        // Transfer Token
+        let token_id = mlcp::Id::new(mlcp::H256::zero());
+        let token_amount = mlcp::Amount::from_atoms(200);
+        let out_token = mlcp::TxOutput::Transfer(
+            mlcp::OutputValue::TokenV1(token_id.clone(), token_amount),
+            mlcp::Destination::AnyoneCanSpend,
+        );
+        collector.process_output(&out_token).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::Transfer));
+        assert_eq!(
+            collector
+                .total_outputs()
+                .get(&CoinOrTokenId::TokenId(*token_id.hash())),
+            Some(&token_amount)
+        );
+    }
+
+    #[test_item]
+    fn test_process_output_lock_then_transfer() {
+        let mut collector = TxSummaryCollector::new();
+        let amount = mlcp::Amount::from_atoms(150);
+        let out = mlcp::TxOutput::LockThenTransfer(
+            mlcp::OutputValue::Coin(amount),
+            mlcp::Destination::AnyoneCanSpend,
+            mlcp::OutputTimeLock::ForBlockCount(mlcp::BlocksCount(10)),
+        );
+        collector.process_output(&out).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::Transfer));
+        assert_eq!(
+            collector.total_outputs().get(&CoinOrTokenId::Coin),
+            Some(&amount)
+        );
+    }
+
+    #[test_item]
+    fn test_process_output_burn() {
+        let mut collector = TxSummaryCollector::new();
+        let burn_amount = mlcp::Amount::from_atoms(50);
+        let out = mlcp::TxOutput::Burn(mlcp::OutputValue::Coin(burn_amount));
+        collector.process_output(&out).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::Burn));
+        assert_eq!(
+            collector.total_outputs().get(&CoinOrTokenId::Coin),
+            Some(&burn_amount)
+        );
+    }
+
+    #[test_item]
+    fn test_process_output_htlc() {
+        let mut collector = TxSummaryCollector::new();
+        let htlc = mlcp::HashedTimelockContract {
+            secret_hash: [0; 20].into(),
+            spend_key: mlcp::Destination::AnyoneCanSpend,
+            refund_timelock: mlcp::OutputTimeLock::ForBlockCount(mlcp::BlocksCount(10)),
+            refund_key: mlcp::Destination::AnyoneCanSpend,
+        };
+        let htlc_amount = mlcp::Amount::from_atoms(300);
+        let out = mlcp::TxOutput::Htlc(mlcp::OutputValue::Coin(htlc_amount), htlc);
+        collector.process_output(&out).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::Htlc));
+        assert_eq!(
+            collector.total_outputs().get(&CoinOrTokenId::Coin),
+            Some(&htlc_amount)
+        );
+    }
+
+    #[test_item]
+    fn test_process_output_create_stake_pool() {
+        let mut collector = TxSummaryCollector::new();
+        let pledge_amount = mlcp::Amount::from_atoms(40000);
+        let data = mlcp::StakePoolData {
+            pledge: pledge_amount,
+            staker: mlcp::Destination::AnyoneCanSpend,
+            vrf_public_key: mlcp::VrfPublicKey::Schnorrkel(mlcp::SchnorrkelPublicKey([0; 32])),
+            decommission_key: mlcp::Destination::AnyoneCanSpend,
+            margin_ratio_per_thousand: mlcp::PerThousand(10),
+            cost_per_block: mlcp::Amount::from_atoms(0),
+        };
+        let out = mlcp::TxOutput::CreateStakePool(mlcp::Id::new(mlcp::H256::zero()), data);
+        collector.process_output(&out).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::CreateStakePool));
+        assert_eq!(
+            collector.total_outputs().get(&CoinOrTokenId::Coin),
+            Some(&pledge_amount)
+        );
+    }
+
+    #[test_item]
+    fn test_process_output_produce_block_from_stake() {
+        let mut collector = TxSummaryCollector::new();
+        let out = mlcp::TxOutput::ProduceBlockFromStake(
+            mlcp::Destination::AnyoneCanSpend,
+            mlcp::Id::new(mlcp::H256::zero()),
+        );
+        collector.process_output(&out).unwrap();
+        // ProduceBlockFromStake is a no-op, tx_type should remain None
+        assert!(collector.tx_type().is_none());
+        assert!(collector.total_outputs().is_empty());
+    }
+
+    #[test_item]
+    fn test_process_output_delegate_staking() {
+        let mut collector = TxSummaryCollector::new();
+        let delegate_amount = mlcp::Amount::from_atoms(500);
+        let out =
+            mlcp::TxOutput::DelegateStaking(delegate_amount, mlcp::Id::new(mlcp::H256::zero()));
+        collector.process_output(&out).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::DelegationStake));
+        assert_eq!(
+            collector.total_outputs().get(&CoinOrTokenId::Coin),
+            Some(&delegate_amount)
+        );
+    }
+
+    #[test_item]
+    fn test_process_output_create_delegation_id() {
+        let mut collector = TxSummaryCollector::new();
+        let out = mlcp::TxOutput::CreateDelegationId(
+            mlcp::Destination::AnyoneCanSpend,
+            mlcp::Id::new(mlcp::H256::zero()),
+        );
+        collector.process_output(&out).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::CreateDelegation));
+    }
+
+    #[test_item]
+    fn test_process_output_issue_fungible_token() {
+        let mut collector = TxSummaryCollector::new();
+        let token_issuance = mlcp::TokenIssuance::V1(mlcp::TokenIssuanceV1 {
+            token_ticker: alloc::vec::Vec::new(),
+            number_of_decimals: 8,
+            metadata_uri: alloc::vec::Vec::new(),
+            total_supply: mlcp::TokenTotalSupply::Unlimited,
+            authority: mlcp::Destination::AnyoneCanSpend,
+            is_freezable: mlcp::IsTokenFreezable::No,
+        });
+        let out = mlcp::TxOutput::IssueFungibleToken(token_issuance);
+        collector.process_output(&out).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::CreateToken));
+    }
+
+    #[test_item]
+    fn test_process_output_data_deposit() {
+        let mut collector = TxSummaryCollector::new();
+        let out = mlcp::TxOutput::DataDeposit(alloc::vec::Vec::new());
+        collector.process_output(&out).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::DataDeposit));
+    }
+
+    #[test_item]
+    fn test_process_output_issue_nft() {
+        let mut collector = TxSummaryCollector::new();
+        let nft_issuance = mlcp::NftIssuance::V0(mlcp::NftIssuanceV0 {
+            creator: None,
+            name: alloc::vec::Vec::new(),
+            description: alloc::vec::Vec::new(),
+            ticker: alloc::vec::Vec::new(),
+            icon_uri: alloc::vec::Vec::new(),
+            additional_metadata_uri: alloc::vec::Vec::new(),
+            media_uri: alloc::vec::Vec::new(),
+            media_hash: alloc::vec::Vec::new(),
+        });
+        let out = mlcp::TxOutput::IssueNft(
+            mlcp::Id::new(mlcp::H256::zero()),
+            nft_issuance,
+            mlcp::Destination::AnyoneCanSpend,
+        );
+        collector.process_output(&out).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::CreateNft));
+    }
+
+    #[test_item]
+    fn test_process_output_create_order() {
+        let mut collector = TxSummaryCollector::new();
+        let ask_amount = mlcp::Amount::from_atoms(100);
+        let give_amount = mlcp::Amount::from_atoms(50);
+        let order_data = mlcp::OrderData {
+            conclude_key: mlcp::Destination::AnyoneCanSpend,
+            ask: mlcp::OutputValue::Coin(ask_amount),
+            give: mlcp::OutputValue::Coin(give_amount),
+        };
+        let out = mlcp::TxOutput::CreateOrder(order_data);
+        collector.process_output(&out).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::CreateOrder));
+        assert_eq!(
+            collector.total_outputs().get(&CoinOrTokenId::Coin),
+            Some(&give_amount)
+        );
+    }
+
+    #[test_item]
+    fn test_process_input_utxo_transfer() {
+        let mut collector = TxSummaryCollector::new();
+
+        let transfer_amount = mlcp::Amount::from_atoms(250);
+        let inp = TxInputWithAdditionalInfo::Utxo(
+            make_utxo_outpoint(),
+            AdditionalUtxoInfo::Utxo(mlcp::TxOutput::Transfer(
+                mlcp::OutputValue::Coin(transfer_amount),
                 mlcp::Destination::AnyoneCanSpend,
-            ))
-            .unwrap();
+            )),
+        );
+        collector.process_input(&inp).unwrap();
+        assert_eq!(
+            collector.total_inputs().get(&CoinOrTokenId::Coin),
+            Some(&transfer_amount)
+        );
+    }
 
-        let fees = collector
-            .fees_iter()
-            .collect::<Result<Vec<_>, _>>()
+    #[test_item]
+    fn test_process_input_utxo_lock_then_transfer() {
+        let mut collector = TxSummaryCollector::new();
+
+        let lock_amount = mlcp::Amount::from_atoms(120);
+        let inp = TxInputWithAdditionalInfo::Utxo(
+            make_utxo_outpoint(),
+            AdditionalUtxoInfo::Utxo(mlcp::TxOutput::LockThenTransfer(
+                mlcp::OutputValue::Coin(lock_amount),
+                mlcp::Destination::AnyoneCanSpend,
+                mlcp::OutputTimeLock::ForBlockCount(mlcp::BlocksCount(10)),
+            )),
+        );
+        collector.process_input(&inp).unwrap();
+        assert_eq!(
+            collector.total_inputs().get(&CoinOrTokenId::Coin),
+            Some(&lock_amount)
+        );
+    }
+
+    #[test_item]
+    fn test_process_input_utxo_htlc() {
+        let mut collector = TxSummaryCollector::new();
+        let htlc = mlcp::HashedTimelockContract {
+            secret_hash: [0; 20].into(),
+            spend_key: mlcp::Destination::AnyoneCanSpend,
+            refund_timelock: mlcp::OutputTimeLock::ForBlockCount(mlcp::BlocksCount(10)),
+            refund_key: mlcp::Destination::AnyoneCanSpend,
+        };
+
+        let htlc_amount = mlcp::Amount::from_atoms(80);
+        let inp = TxInputWithAdditionalInfo::Utxo(
+            make_utxo_outpoint(),
+            AdditionalUtxoInfo::Utxo(mlcp::TxOutput::Htlc(
+                mlcp::OutputValue::Coin(htlc_amount),
+                htlc,
+            )),
+        );
+        collector.process_input(&inp).unwrap();
+        assert_eq!(
+            collector.total_inputs().get(&CoinOrTokenId::Coin),
+            Some(&htlc_amount)
+        );
+    }
+
+    #[test_item]
+    fn test_process_input_utxo_create_stake_pool() {
+        let mut collector = TxSummaryCollector::new();
+        let pledge_amount = mlcp::Amount::from_atoms(40000);
+        let data = mlcp::StakePoolData {
+            pledge: pledge_amount,
+            staker: mlcp::Destination::AnyoneCanSpend,
+            vrf_public_key: mlcp::VrfPublicKey::Schnorrkel(mlcp::SchnorrkelPublicKey([0; 32])),
+            decommission_key: mlcp::Destination::AnyoneCanSpend,
+            margin_ratio_per_thousand: mlcp::PerThousand(10),
+            cost_per_block: mlcp::Amount::from_atoms(0),
+        };
+
+        let inp = TxInputWithAdditionalInfo::Utxo(
+            make_utxo_outpoint(),
+            AdditionalUtxoInfo::Utxo(mlcp::TxOutput::CreateStakePool(
+                mlcp::Id::new(mlcp::H256::zero()),
+                data,
+            )),
+        );
+        collector.process_input(&inp).unwrap();
+        assert_eq!(
+            collector.total_inputs().get(&CoinOrTokenId::Coin),
+            Some(&pledge_amount)
+        );
+    }
+
+    #[test_item]
+    fn test_process_input_utxo_issue_nft() {
+        let mut collector = TxSummaryCollector::new();
+        let nft_issuance = mlcp::NftIssuance::V0(mlcp::NftIssuanceV0 {
+            creator: None,
+            name: alloc::vec::Vec::new(),
+            description: alloc::vec::Vec::new(),
+            ticker: alloc::vec::Vec::new(),
+            icon_uri: alloc::vec::Vec::new(),
+            additional_metadata_uri: alloc::vec::Vec::new(),
+            media_uri: alloc::vec::Vec::new(),
+            media_hash: alloc::vec::Vec::new(),
+        });
+        let nft_id = mlcp::Id::new(mlcp::H256::zero());
+
+        let inp = TxInputWithAdditionalInfo::Utxo(
+            make_utxo_outpoint(),
+            AdditionalUtxoInfo::Utxo(mlcp::TxOutput::IssueNft(
+                nft_id.clone(),
+                nft_issuance,
+                mlcp::Destination::AnyoneCanSpend,
+            )),
+        );
+        collector.process_input(&inp).unwrap();
+        assert_eq!(
+            collector
+                .total_inputs()
+                .get(&CoinOrTokenId::TokenId(*nft_id.hash())),
+            Some(&mlcp::Amount::from_atoms(1))
+        );
+    }
+
+    #[test_item]
+    fn test_process_input_utxo_with_pool_data() {
+        let mut collector = TxSummaryCollector::new();
+        let staker_balance_amount = mlcp::Amount::from_atoms(50000);
+        let inp = TxInputWithAdditionalInfo::Utxo(
+            make_utxo_outpoint(),
+            AdditionalUtxoInfo::UtxoWithPoolData {
+                utxo: mlcp::TxOutput::ProduceBlockFromStake(
+                    mlcp::Destination::AnyoneCanSpend,
+                    mlcp::Id::new(mlcp::H256::zero()),
+                ),
+                staker_balance: staker_balance_amount,
+            },
+        );
+        collector.process_input(&inp).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::DecommissionStakePool));
+        assert_eq!(
+            collector.total_inputs().get(&CoinOrTokenId::Coin),
+            Some(&staker_balance_amount)
+        );
+    }
+
+    #[test_item]
+    fn test_process_input_account() {
+        let mut collector = TxSummaryCollector::new();
+        let delegation_balance = mlcp::Amount::from_atoms(700);
+        let acc = mlcp::AccountOutPoint {
+            nonce: mlcp::AccountNonce(0),
+            spending: mlcp::AccountSpending::DelegationBalance(
+                mlcp::Id::new(mlcp::H256::zero()),
+                delegation_balance,
+            ),
+        };
+        let inp = TxInputWithAdditionalInfo::Account(acc);
+        collector.process_input(&inp).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::DelegationWithdrawal));
+        assert_eq!(
+            collector.total_inputs().get(&CoinOrTokenId::Coin),
+            Some(&delegation_balance)
+        );
+        assert!(matches!(
+            collector.input_command(),
+            Some(InputCommand::AccountSpending(
+                mlcp::AccountSpending::DelegationBalance(_, _)
+            ))
+        ));
+    }
+
+    #[test_item]
+    fn test_process_input_account_command_mint() {
+        let mut collector = TxSummaryCollector::new();
+        let token_id = mlcp::Id::new(mlcp::H256::zero());
+        let mint_amount = mlcp::Amount::from_atoms(1000);
+        let inp = TxInputWithAdditionalInfo::AccountCommand(
+            mlcp::AccountNonce(1),
+            mlcp::AccountCommand::MintTokens(token_id.clone(), mint_amount),
+        );
+        collector.process_input(&inp).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::MintTokens));
+        assert_eq!(
+            collector
+                .total_inputs()
+                .get(&CoinOrTokenId::TokenId(*token_id.hash())),
+            Some(&mint_amount)
+        );
+        assert!(matches!(
+            collector.input_command(),
+            Some(InputCommand::AccountCommand(
+                mlcp::AccountCommand::MintTokens(_, _)
+            ))
+        ));
+    }
+
+    #[test_item]
+    fn test_process_input_account_command_unmint() {
+        let mut collector = TxSummaryCollector::new();
+        let token_id = mlcp::Id::new(mlcp::H256::zero());
+        let inp = TxInputWithAdditionalInfo::AccountCommand(
+            mlcp::AccountNonce(2),
+            mlcp::AccountCommand::UnmintTokens(token_id),
+        );
+        collector.process_input(&inp).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::UnmintTokens));
+    }
+
+    #[test_item]
+    fn test_process_input_account_command_lock_token_supply() {
+        let mut collector = TxSummaryCollector::new();
+        let token_id = mlcp::Id::new(mlcp::H256::zero());
+        let inp = TxInputWithAdditionalInfo::AccountCommand(
+            mlcp::AccountNonce(3),
+            mlcp::AccountCommand::LockTokenSupply(token_id),
+        );
+        collector.process_input(&inp).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::LockTokenSupply));
+    }
+
+    #[test_item]
+    fn test_process_input_account_command_freeze_token() {
+        let mut collector = TxSummaryCollector::new();
+        let token_id = mlcp::Id::new(mlcp::H256::zero());
+        let inp = TxInputWithAdditionalInfo::AccountCommand(
+            mlcp::AccountNonce(4),
+            mlcp::AccountCommand::FreezeToken(token_id, mlcp::IsTokenUnfreezable::Yes),
+        );
+        collector.process_input(&inp).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::FreezeToken));
+    }
+
+    #[test_item]
+    fn test_process_input_account_command_unfreeze_token() {
+        let mut collector = TxSummaryCollector::new();
+        let token_id = mlcp::Id::new(mlcp::H256::zero());
+        let inp = TxInputWithAdditionalInfo::AccountCommand(
+            mlcp::AccountNonce(5),
+            mlcp::AccountCommand::UnfreezeToken(token_id),
+        );
+        collector.process_input(&inp).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::UnfreezeToken));
+    }
+
+    #[test_item]
+    fn test_process_input_account_command_change_authority() {
+        let mut collector = TxSummaryCollector::new();
+        let token_id = mlcp::Id::new(mlcp::H256::zero());
+        let inp = TxInputWithAdditionalInfo::AccountCommand(
+            mlcp::AccountNonce(6),
+            mlcp::AccountCommand::ChangeTokenAuthority(token_id, mlcp::Destination::AnyoneCanSpend),
+        );
+        collector.process_input(&inp).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::ChangeTokenAuthority));
+    }
+
+    #[test_item]
+    fn test_process_input_account_command_change_metadata_uri() {
+        let mut collector = TxSummaryCollector::new();
+        let token_id = mlcp::Id::new(mlcp::H256::zero());
+        let inp = TxInputWithAdditionalInfo::AccountCommand(
+            mlcp::AccountNonce(7),
+            mlcp::AccountCommand::ChangeTokenMetadataUri(token_id, alloc::vec::Vec::new()),
+        );
+        collector.process_input(&inp).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::ChangeTokenMetadataUri));
+    }
+
+    #[test_item]
+    fn test_process_input_order_command_fill() {
+        let mut collector = TxSummaryCollector::new();
+        let order_id = mlcp::Id::new(mlcp::H256::zero());
+        let fill_amount = mlcp::Amount::from_atoms(10);
+        let initially_asked = mlcp::Amount::from_atoms(100);
+        let initially_given = mlcp::Amount::from_atoms(200);
+
+        let additional_info = AdditionalOrderInfo {
+            initially_asked: mlcp::OutputValue::Coin(initially_asked),
+            initially_given: mlcp::OutputValue::Coin(initially_given),
+            ask_balance: mlcp::Amount::from_atoms(0),
+            give_balance: mlcp::Amount::from_atoms(0),
+        };
+        let inp = TxInputWithAdditionalInfo::OrderAccountCommand(
+            mlcp::OrderAccountCommand::FillOrder(order_id, fill_amount),
+            additional_info,
+        );
+        collector.process_input(&inp).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::FillOrder));
+        // Fill order output totals increases by fill_amount (10 coins)
+        assert_eq!(
+            collector.total_outputs().get(&CoinOrTokenId::Coin),
+            Some(&fill_amount)
+        );
+        // Fill order input totals increases by (given_amount * fill_amount / asked_amount)
+        // 200 * 10 / 100 = 20
+        let expected_input_amount = Amount::from_atoms(
+            (initially_given.into_atoms() * fill_amount.into_atoms())
+                / initially_asked.into_atoms(),
+        );
+        assert_eq!(
+            collector.total_inputs().get(&CoinOrTokenId::Coin),
+            Some(&expected_input_amount)
+        );
+        assert!(matches!(
+            collector.input_command(),
+            Some(InputCommand::OrderCommand(
+                mlcp::OrderAccountCommand::FillOrder(_, _)
+            ))
+        ));
+    }
+
+    #[test_item]
+    fn test_process_input_order_command_conclude() {
+        let mut collector = TxSummaryCollector::new();
+        let order_id = mlcp::Id::new(mlcp::H256::zero());
+        let ask_balance = mlcp::Amount::from_atoms(30);
+        let give_balance = mlcp::Amount::from_atoms(60);
+        let token_id = mlcp::Id::new(mlcp::H256::zero());
+        let additional_info = AdditionalOrderInfo {
+            initially_asked: mlcp::OutputValue::Coin(mlcp::Amount::from_atoms(100)),
+            initially_given: mlcp::OutputValue::TokenV1(
+                token_id.clone(),
+                mlcp::Amount::from_atoms(200),
+            ),
+            ask_balance,
+            give_balance,
+        };
+        let inp = TxInputWithAdditionalInfo::OrderAccountCommand(
+            mlcp::OrderAccountCommand::ConcludeOrder(order_id),
+            additional_info,
+        );
+        collector.process_input(&inp).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::ConcludeOrder));
+        // Conclude order increases inputs by ask_balance and give_balance
+        assert_eq!(
+            collector.total_inputs().get(&CoinOrTokenId::Coin),
+            Some(&ask_balance)
+        );
+        assert_eq!(
+            collector
+                .total_inputs()
+                .get(&CoinOrTokenId::TokenId(*token_id.hash())),
+            Some(&give_balance)
+        );
+    }
+
+    #[test_item]
+    fn test_process_input_order_command_freeze() {
+        let mut collector = TxSummaryCollector::new();
+        let order_id = mlcp::Id::new(mlcp::H256::zero());
+        let additional_info = AdditionalOrderInfo {
+            initially_asked: mlcp::OutputValue::Coin(mlcp::Amount::from_atoms(100)),
+            initially_given: mlcp::OutputValue::Coin(mlcp::Amount::from_atoms(200)),
+            ask_balance: mlcp::Amount::from_atoms(0),
+            give_balance: mlcp::Amount::from_atoms(0),
+        };
+        let inp = TxInputWithAdditionalInfo::OrderAccountCommand(
+            mlcp::OrderAccountCommand::FreezeOrder(order_id),
+            additional_info,
+        );
+        collector.process_input(&inp).unwrap();
+        assert_eq!(collector.tx_type(), Some(TxType::FreezeOrder));
+    }
+
+    #[test_item]
+    fn test_process_input_errors() {
+        let mut collector = TxSummaryCollector::new();
+
+        // 1. Burn output as input UTXO is invalid
+        let inp_burn = TxInputWithAdditionalInfo::Utxo(
+            make_utxo_outpoint(),
+            AdditionalUtxoInfo::Utxo(mlcp::TxOutput::Burn(mlcp::OutputValue::Coin(
+                mlcp::Amount::from_atoms(100),
+            ))),
+        );
+        assert_eq!(
+            collector.process_input(&inp_burn).unwrap_err(),
+            StatusWord::TxInvalidInputUtxo
+        );
+
+        // 2. OrdersV0NotSupported in AccountCommand
+        let inp_conclude_v0 = TxInputWithAdditionalInfo::AccountCommand(
+            mlcp::AccountNonce(8),
+            mlcp::AccountCommand::ConcludeOrder(mlcp::Id::new(mlcp::H256::zero())),
+        );
+        assert_eq!(
+            collector.process_input(&inp_conclude_v0).unwrap_err(),
+            StatusWord::OrdersV0NotSupported
+        );
+
+        let inp_fill_v0 = TxInputWithAdditionalInfo::AccountCommand(
+            mlcp::AccountNonce(9),
+            mlcp::AccountCommand::FillOrder(
+                mlcp::Id::new(mlcp::H256::zero()),
+                mlcp::Amount::from_atoms(100),
+                mlcp::Destination::AnyoneCanSpend,
+            ),
+        );
+        assert_eq!(
+            collector.process_input(&inp_fill_v0).unwrap_err(),
+            StatusWord::OrdersV0NotSupported
+        );
+    }
+
+    #[test_item]
+    fn test_tx_type_merging() {
+        assert_eq!(
+            merge_tx_type(None, TxType::Transfer),
+            Some(TxType::Transfer)
+        );
+        assert_eq!(
+            merge_tx_type(Some(TxType::Transfer), TxType::Transfer),
+            Some(TxType::Transfer)
+        );
+        assert_eq!(
+            merge_tx_type(Some(TxType::Burn), TxType::Transfer),
+            Some(TxType::Burn)
+        );
+        assert_eq!(
+            merge_tx_type(Some(TxType::Burn), TxType::Htlc),
+            Some(TxType::ComplexTransaction)
+        );
+    }
+
+    #[test_item]
+    fn test_fees_calculation_overflow_and_underflow() {
+        let mut collector = TxSummaryCollector::new();
+
+        // Underflow: out (120) > inp (100)
+        collector
+            .total_inputs
+            .insert(CoinOrTokenId::Coin, mlcp::Amount::from_atoms(100));
+        collector
+            .total_outputs
+            .insert(CoinOrTokenId::Coin, mlcp::Amount::from_atoms(120));
+        let fees_res = collector.fees_iter().next().unwrap();
+        assert_eq!(fees_res.unwrap_err(), StatusWord::TxFeeUnderflow);
+
+        // Numeric overflow in increase_input_totals
+        let mut collector = TxSummaryCollector::new();
+        collector
+            .increase_input_totals(CoinOrTokenId::Coin, mlcp::Amount::from_atoms(u128::MAX))
             .unwrap();
-        assert!(fees == [(&CoinOrTokenId::Coin, 3)]);
+        assert_eq!(
+            collector
+                .increase_input_totals(CoinOrTokenId::Coin, mlcp::Amount::from_atoms(1))
+                .unwrap_err(),
+            StatusWord::TxNumericOperationFail
+        );
+
+        // Numeric overflow in increase_output_totals
+        let mut collector = TxSummaryCollector::new();
+        collector
+            .increase_output_totals(CoinOrTokenId::Coin, mlcp::Amount::from_atoms(u128::MAX))
+            .unwrap();
+        assert_eq!(
+            collector
+                .increase_output_totals(CoinOrTokenId::Coin, mlcp::Amount::from_atoms(1))
+                .unwrap_err(),
+            StatusWord::TxNumericOperationFail
+        );
     }
 }
