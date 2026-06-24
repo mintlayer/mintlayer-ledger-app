@@ -422,7 +422,7 @@ mod tests {
         let token_id = mlcp::Id::new(mlcp::H256::zero());
         let token_amount = mlcp::Amount::from_atoms(200);
         let out_token = mlcp::TxOutput::Transfer(
-            mlcp::OutputValue::TokenV1(token_id.clone(), token_amount),
+            mlcp::OutputValue::TokenV1(token_id, token_amount),
             mlcp::Destination::AnyoneCanSpend,
         );
         collector.process_output(&out_token).unwrap();
@@ -717,7 +717,7 @@ mod tests {
         let inp = TxInputWithAdditionalInfo::Utxo(
             make_utxo_outpoint(),
             AdditionalUtxoInfo::Utxo(mlcp::TxOutput::IssueNft(
-                nft_id.clone(),
+                nft_id,
                 nft_issuance,
                 mlcp::Destination::AnyoneCanSpend,
             )),
@@ -786,7 +786,7 @@ mod tests {
         let mint_amount = mlcp::Amount::from_atoms(1000);
         let inp = TxInputWithAdditionalInfo::AccountCommand(
             mlcp::AccountNonce(1),
-            mlcp::AccountCommand::MintTokens(token_id.clone(), mint_amount),
+            mlcp::AccountCommand::MintTokens(token_id, mint_amount),
         );
         collector.process_input(&inp).unwrap();
         assert_eq!(collector.tx_type(), Some(TxType::MintTokens));
@@ -928,10 +928,7 @@ mod tests {
         let token_id = mlcp::Id::new(mlcp::H256::zero());
         let additional_info = AdditionalOrderInfo {
             initially_asked: mlcp::OutputValue::Coin(mlcp::Amount::from_atoms(100)),
-            initially_given: mlcp::OutputValue::TokenV1(
-                token_id.clone(),
-                mlcp::Amount::from_atoms(200),
-            ),
+            initially_given: mlcp::OutputValue::TokenV1(token_id, mlcp::Amount::from_atoms(200)),
             ask_balance,
             give_balance,
         };

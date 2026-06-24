@@ -494,7 +494,7 @@ pub fn handle_sign_tx(
             Ok((Response::TxInputSignature(response), new_ctx))
         }
         (SignTxNextReq::ReturnNextSignature, TxParsingContext::Finished) => {
-            return Err(StatusWord::TxAlreadyFinished)
+            Err(StatusWord::TxAlreadyFinished)
         }
         _ => Err(StatusWord::WrongContext),
     }
