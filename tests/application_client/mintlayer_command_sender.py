@@ -32,7 +32,6 @@ class ReviewTransaction:
 @dataclass
 class SignTxStep:
     kind: str
-    index: int | None = None
 
 
 class GetAppAndVersionP1(IntEnum):
@@ -228,8 +227,10 @@ class MintlayerCommandSender:
             p2=P2.P2_LAST,
             data=chunks[-1],
         ):
-            kind = "start"
-            yield SignTxStep(kind=kind, index=0)
+            yield SignTxStep(kind="start")
+
+            if len(transaction.outputs) == 0:
+                yield SignTxStep(kind="final")
 
         response = self.get_async_response()
         decode_response_variant(response.data, "TxNext")
@@ -263,7 +264,7 @@ class MintlayerCommandSender:
                 data=chunks[-1],
             ):
                 kind = "final" if idx == len(transaction.outputs) - 1 else "output"
-                yield SignTxStep(kind=kind, index=idx)
+                yield SignTxStep(kind=kind)
 
             response = self.get_async_response()
             decode_response_variant(response.data, "TxNext")

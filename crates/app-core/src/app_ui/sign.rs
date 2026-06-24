@@ -23,7 +23,7 @@ use crate::{
     app_ui::utils::{
         bech32m_encode, compress_public_key, load_glyph, to_address, to_public_key_hash,
     },
-    handlers::sign_tx::{CoinOrTokenId, InputCommand, TxParsingOutputsContext, TxType},
+    handlers::sign_tx::{CoinOrTokenId, InputCommand, TxSummaryCollector, TxType},
     StatusWord,
 };
 use mintlayer_messages::{
@@ -104,10 +104,10 @@ pub fn ui_streaming_review_show_output(
 
 pub fn ui_approve_streaming_review(
     review: &NbglStreamingReview,
-    ctx: &TxParsingOutputsContext,
+    tx_summary: &TxSummaryCollector,
+    coin: CoinType,
 ) -> Result<bool, StatusWord> {
-    let coin = ctx.coin();
-    let fees = ctx.summary().fees_iter().try_fold(
+    let fees = tx_summary.fees_iter().try_fold(
         String::new(),
         |mut acc, res| -> Result<_, StatusWord> {
             let (coin_or_token, fee) = res?;
@@ -147,7 +147,7 @@ pub fn ui_approve_streaming_review(
         NbglStreamingReviewStatus::Next | NbglStreamingReviewStatus::Skipped => {}
     };
 
-    let title = transaction_title(&ctx.summary().tx_type());
+    let title = transaction_title(&tx_summary.tx_type());
     Ok(review.finish(title))
 }
 

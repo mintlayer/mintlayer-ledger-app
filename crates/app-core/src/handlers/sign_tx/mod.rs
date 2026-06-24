@@ -40,8 +40,8 @@ use ledger_device_sdk::{
 };
 
 mod summary_collector;
-use summary_collector::TxSummaryCollector;
-pub use summary_collector::{CoinOrTokenId, InputCommand, TxType};
+
+pub use summary_collector::{CoinOrTokenId, InputCommand, TxSummaryCollector, TxType};
 
 // FIXME: usize is already 32-bit.
 // we try to save a few bytes instead of using usize for indexes,
@@ -141,19 +141,22 @@ impl TxParsingInputCommitmentsContext {
                 let new_context =
                     TxParsingContext::ParsingOutputs(Box::new(TxParsingOutputsContext {
                         metadata: self.metadata,
-
                         tx_hasher: self.tx_hasher,
-
                         summary: self.summary,
                         inputs: self.inputs,
-
                         spinner: self.spinner,
-
                         num_outputs_parsed: 0,
                     }));
                 Ok(new_context)
             } else {
-                switch_to_signing(self.tx_hasher, self.metadata, self.inputs, self.spinner)
+                switch_to_signing(
+                    review,
+                    self.tx_hasher,
+                    self.summary,
+                    self.metadata,
+                    self.inputs,
+                    self.spinner,
+                )
             }
         } else {
             self.num_inputs_parsed += 1;
@@ -230,36 +233,45 @@ impl TxParsingOutputsContext {
             self.num_outputs_parsed += 1;
             Ok(TxParsingContext::ParsingOutputs(self))
         } else {
-            if ui_approve_streaming_review(review, &self)? {
-                switch_to_signing(self.tx_hasher, self.metadata, self.inputs, self.spinner)
-            } else {
-                Err(StatusWord::Deny)
-            }
+            switch_to_signing(
+                review,
+                self.tx_hasher,
+                self.summary,
+                self.metadata,
+                self.inputs,
+                self.spinner,
+            )
         }
     }
 }
 
 fn switch_to_signing(
+    review: &NbglStreamingReview,
     mut tx_hasher: Blake2b_512,
+    summary: TxSummaryCollector,
     metadata: TxMetadata,
     inputs: Vec<InputCompressed>,
     spinner: NbglSpinner,
 ) -> Result<TxParsingContext, StatusWord> {
-    // Finalize the tx hash for signing
-    let mut message_hash: [u8; 64] = [0u8; 64];
-    tx_hasher
-        .finalize(&mut message_hash)
-        .map_err(|_| StatusWord::TxHashFail)?;
+    if ui_approve_streaming_review(review, &summary, metadata.coin)? {
+        // Finalize the tx hash for signing
+        let mut message_hash: [u8; 64] = [0u8; 64];
+        tx_hasher
+            .finalize(&mut message_hash)
+            .map_err(|_| StatusWord::TxHashFail)?;
 
-    let tx_hash = mintlayer_hash(&message_hash[0..32])?;
+        let tx_hash = mintlayer_hash(&message_hash[0..32])?;
 
-    Ok(TxParsingContext::Signing(Box::new(TxSigningContext {
-        metadata,
-        inputs,
-        spinner,
-        num_inputs_signed: 0,
-        tx_hash,
-    })))
+        Ok(TxParsingContext::Signing(Box::new(TxSigningContext {
+            metadata,
+            inputs,
+            spinner,
+            num_inputs_signed: 0,
+            tx_hash,
+        })))
+    } else {
+        Err(StatusWord::Deny)
+    }
 }
 
 pub struct TxSigningContext {
