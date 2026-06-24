@@ -3,6 +3,10 @@
 set -e
 set -o nounset
 
+# FIXME: add a codecheck script, similar to what we have in Core, which would:
+# * prohibit FIXMEs and TODO(PR)s;
+# * maybe something else that the core checker checks but ledger's official checks don't.
+
 # Run some extra checks (for now its mostly clippy).
 
 # Notes about clippy:

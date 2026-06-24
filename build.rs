@@ -2,6 +2,8 @@ use std::process::Command;
 
 use image::{ImageFormat, ImageReader, Pixel};
 
+// FIXME: all image files currently contain the Rust logo; need to replace them with Mintlayer logo.
+
 fn main() {
     println!("cargo:rerun-if-changed=script.ld");
     println!("cargo:rerun-if-changed=icons/mintlayer_14x14.gif");

@@ -107,6 +107,8 @@ impl TxSummaryCollector {
     pub fn fees_iter(
         &self,
     ) -> impl Iterator<Item = Result<(&CoinOrTokenId, u128), StatusWord>> + '_ {
+        // FIXME: if an asset is only present in total_outputs, this will not fail with TxFeeUnderflow,
+        // but it should.
         self.total_inputs()
             .iter()
             .map(move |(coin_or_token, amount)| {
@@ -380,6 +382,15 @@ mod tests {
             0,
         )
     }
+
+    // FIXME: these tests can be improved:
+    // 1) Each test should better check everything (total inputs, total outputs, fees, tx type etc),
+    //    even if it's only dealing with one aspect of the summary collector (e.g. tx outputs).
+    // 2) More tests for fee calculation would be nice:
+    //    a) non-trivial successful case;
+    //    b) cases dealing with more than once currency (both successful and not), in particular
+    //       the case where one currency is only present in the total outputs but not total inputs.
+    // 3) Maybe something else.
 
     #[test_item]
     fn test_new_and_getters() {
