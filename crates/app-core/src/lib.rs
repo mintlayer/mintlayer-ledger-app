@@ -49,6 +49,7 @@ mod handlers {
 mod errors;
 #[cfg(test)]
 mod testing;
+mod utils;
 
 // Required for using String, Vec, format!...
 extern crate alloc;

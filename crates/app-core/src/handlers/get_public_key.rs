@@ -15,26 +15,17 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use crate::app_ui::address::ui_display_pk;
-use crate::StatusWord;
-use mintlayer_messages::{mlcp::CoinType, ChainCode, GetPubKeyReq, PublicKey, PublicKeyResponse};
-
 use ledger_device_sdk::ecc::{Secp256k1, SeedDerive};
 
-// Path should be at least [bip44, coin_type, account_index]
-const MIN_PATH_LEN: usize = 3;
+use mintlayer_messages::{ChainCode, GetPubKeyReq, PublicKey, PublicKeyResponse};
+
+use crate::{app_ui::address::ui_display_pk, utils::check_derivation_path, StatusWord};
 
 pub fn handle_get_public_key(
     req: GetPubKeyReq,
     display: bool,
 ) -> Result<PublicKeyResponse, StatusWord> {
-    if req.path.as_ref().len() < MIN_PATH_LEN {
-        return Err(StatusWord::InvalidPath);
-    }
-    let coin_type: CoinType = req.coin_type.into();
-    if req.path.as_ref()[1] != coin_type.bip44_coin_type() {
-        return Err(StatusWord::InvalidPath);
-    }
+    check_derivation_path(req.path.as_ref(), req.coin_type.into())?;
 
     let (k, cc) = Secp256k1::derive_from(req.path.as_ref());
     let pk = k.public_key().map_err(|_| StatusWord::KeyDeriveFail)?;

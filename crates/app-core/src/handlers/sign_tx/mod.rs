@@ -23,6 +23,7 @@ use crate::{
         ui_streaming_review_show_input, ui_streaming_review_show_output,
     },
     handlers::{sign_message::schnorr_sign, utils::mintlayer_hash},
+    utils::{check_derivation_path_for_tx_signing, CompressedDerivationPathForTxSigning},
     DataContext, StatusWord,
 };
 use mintlayer_messages::{
@@ -42,43 +43,23 @@ mod summary_collector;
 use summary_collector::TxSummaryCollector;
 pub use summary_collector::{CoinOrTokenId, InputCommand, TxType};
 
-const BIP44: u32 = 44 + (1 << 31);
-
-// BIP44/COIN/ACCOUNT/PURPOSE/INDEX
-const DERIVATION_PATH_LEN: usize = 5;
-// DERIVATION_PATH_LEN without the BIP44 and COIN as they are the same for all
-const COMPRESSED_DERIVATION_PATH_LEN: usize = 3;
-
 // FIXME: usize is already 32-bit.
 // we try to save a few bytes instead of using usize for indexes,
 // u32 is enough to cover max possible number of inputs and outputs
 type Index = u32;
 
 pub struct InputCompressed {
-    pub path: [u32; COMPRESSED_DERIVATION_PATH_LEN],
+    pub path: CompressedDerivationPathForTxSigning,
     pub input_idx: Index,
     pub multisig_idx: Option<Index>,
 }
 
 impl InputCompressed {
     fn new(addr: InputAddressPath, input_idx: Index, coin: PCoinType) -> Result<Self, StatusWord> {
-        let path = addr.path.as_ref();
-        if path.len() != DERIVATION_PATH_LEN {
-            return Err(StatusWord::TxInvalidInputPath);
-        }
-
-        if path[0] != BIP44 {
-            return Err(StatusWord::TxInvalidInputPath);
-        }
-
-        if path[1] != coin.bip44_coin_type() {
-            return Err(StatusWord::TxInvalidInputPath);
-        }
+        let path = check_derivation_path_for_tx_signing(addr.path.as_ref(), coin)?;
 
         Ok(Self {
-            path: path[2..]
-                .try_into()
-                .map_err(|_| StatusWord::TxInvalidInputPath)?,
+            path,
             input_idx,
             multisig_idx: addr.multisig_idx,
         })
@@ -95,6 +76,11 @@ pub struct TxParsingInputsContext {
     metadata: TxMetadata,
 
     tx_hasher: Blake2b_512,
+
+    // Note: input commitments have to be sent together with the inputs, because they contain
+    // the actual amounts that the inputs consume. But they can't be put into the transaction hasher
+    // until all inputs have been processed, so they'll have to be sent again via a separate pass.
+    // We hash the commitments to ensure that the same ones are sent during both passes.
     input_commitments_hasher: Blake2b_512,
 
     summary: TxSummaryCollector,
@@ -110,7 +96,7 @@ pub struct TxParsingInputCommitmentsContext {
 
     tx_hasher: Blake2b_512,
     input_commitments_hasher: Blake2b_512,
-    input_commitments_hash: [u8; 64],
+    expected_input_commitments_hash: [u8; 64],
 
     summary: TxSummaryCollector,
     inputs: Vec<InputCompressed>,
@@ -134,7 +120,7 @@ impl TxParsingInputCommitmentsContext {
                 .finalize(&mut input_commitments_hash)
                 .map_err(|_| StatusWord::TxHashFail)?;
 
-            if input_commitments_hash != self.input_commitments_hash {
+            if input_commitments_hash != self.expected_input_commitments_hash {
                 return Err(StatusWord::DifferentInputCommitmentHash);
             }
 
@@ -201,7 +187,7 @@ impl TxParsingInputsContext {
                     metadata: self.metadata,
                     tx_hasher: self.tx_hasher,
                     input_commitments_hasher: Blake2b_512::new(),
-                    input_commitments_hash,
+                    expected_input_commitments_hash: input_commitments_hash,
                     summary: self.summary,
                     inputs: self.inputs,
                     spinner: self.spinner,
@@ -296,9 +282,7 @@ impl TxSigningContext {
             .get(self.num_inputs_signed as usize)
             .ok_or(StatusWord::WrongContext)?;
 
-        let [p1, p2, p3] = address.path;
-        let addr = [BIP44, self.metadata.coin.bip44_coin_type(), p1, p2, p3];
-
+        let addr = address.path.to_full_path(self.metadata.coin);
         let private_key = Secp256k1::derive_from_path(&addr);
         let sig = schnorr_sign(&private_key, self.tx_hash.as_bytes())?;
 
@@ -504,6 +488,8 @@ pub fn handle_sign_tx(
     }
 }
 
+// FIXME: this function is sometimes called twice in a row; re-use the buffer in such a case
+// instead of reallocating it.
 fn update_hash<T: Encode>(data: &T, hasher: &mut Blake2b_512) -> Result<(), StatusWord> {
     let mut buf = Vec::<u8>::new();
     encode_to(data, &mut buf);

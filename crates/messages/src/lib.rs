@@ -505,7 +505,7 @@ pub enum StatusWord {
     #[display("Tx fee underflow")]
     TxFeeUnderflow = 0xB00C,
     #[display("Invalid input path")]
-    TxInvalidInputPath = 0xB00D,
+    TxInvalidInputPath = 0xB00D, // FIXME: probably this and InvalidPath should be squashed together.
     #[display("Nothing to sign")]
     NothingToSign = 0xB00E,
     #[display("Transaction already finished")]
