@@ -1,5 +1,4 @@
 import pytest
-import scalecodec  # type: ignore
 from ragger.error import ExceptionRAPDU
 
 from application_client import MAINNET

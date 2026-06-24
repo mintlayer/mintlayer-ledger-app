@@ -1,8 +1,6 @@
 from struct import unpack
 from typing import Tuple
 
-import scalecodec  # type: ignore
-
 from .mintlayer_utils import decode_response_variant
 
 

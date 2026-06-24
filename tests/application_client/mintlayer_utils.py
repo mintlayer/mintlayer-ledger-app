@@ -10,10 +10,6 @@ sign_tx_next_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_objec
 )
 
 
-class TransactionError(Exception):
-    pass
-
-
 @dataclass
 class TxInputSignatureResponse:
     signature: bytes

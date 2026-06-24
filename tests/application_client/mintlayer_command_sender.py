@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any, Generator, List, Optional
+from typing import Generator, List, Optional
 
 import scalecodec  # type: ignore
 from ragger.backend.interface import RAPDU, BackendInterface
@@ -87,7 +87,7 @@ class Errors(IntEnum):
 
 
 def split_message(message: bytes, max_size: int) -> List[bytes]:
-    return [message[x: x + max_size] for x in range(0, len(message), max_size)]
+    return [message[x : x + max_size] for x in range(0, len(message), max_size)]
 
 
 class MintlayerCommandSender:
@@ -294,9 +294,11 @@ class MintlayerCommandSender:
     def get_async_response(self) -> Optional[RAPDU]:
         return self.backend.last_async_response
 
-    def get_all_signatures(self) -> List[TxInputSignature]:
+    def get_all_signatures(self, transaction: Transaction) -> List[TxInputSignature]:
         next_sig = sign_tx_next_req_obj.encode({"ReturnNextSignature": None}).data
         sigs = []
+        expected_sigs_count = len(transaction.expected_sig_indices())
+
         while True:
             res = self.backend.exchange(
                 cla=CLA,
@@ -311,6 +313,10 @@ class MintlayerCommandSender:
 
             if not res.has_next:
                 break
+
+            assert (
+                len(sigs) < expected_sigs_count
+            ), f"has_next is still true after the expected number of signatures have been received (sigs = {sigs!r})"
         return sigs
 
 
@@ -452,7 +458,7 @@ def sign_tx_review(
             start_idx += 10
 
     # After review approval, explicitly request every signature.
-    signatures = client.get_all_signatures()
+    signatures = client.get_all_signatures(transaction)
 
     if not device.is_nano:
         # The last ReturnNextSignature is what makes the tx Finished, so on touch devices
