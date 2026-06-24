@@ -349,6 +349,9 @@ def sign_tx_review(
     has_command_input = review_transaction.has_command_input
     review_custom_screen_text = review_transaction.review_custom_screen_text
 
+    # FIXME: instead of making the +=10 jumps in the index, it's better to put snapshots for different
+    # phases into different subdirs, e.g. use test_case_name=f"{scenario_navigator.test_name}/start"
+    # etc.
     start_idx = 0
     if not device.is_nano:
         instruction = NavInsID.SWIPE_CENTER_TO_LEFT
@@ -369,6 +372,11 @@ def sign_tx_review(
                 snap_start_idx=start_idx,
             )
             start_idx += 10
+
+            # FIXME: the fixed 2-step navigate_and_compare for touch devices that is used below is
+            # unreliable. Perhaps we should add a separate field to output review saying something
+            # like "Output i/n". This might also make the signing process more clear for the user.
+            # Same should be done for inputs review (once multiple inputs review is implemented).
 
             if has_command_input:
                 if device.is_nano:
