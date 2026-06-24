@@ -189,7 +189,13 @@ impl TryFrom<RawInstruction> for Command {
             }
             Ins::PING => {
                 let _p1: PingP1 = raw.p1.try_into()?;
-                Ok(Command::Ping)
+
+                // Ping doesn't have any associated data.
+                if !raw.data.is_empty() {
+                    Err(StatusWord::InvalidData)
+                } else {
+                    Ok(Command::Ping)
+                }
             }
             _ => Err(StatusWord::InsNotSupported),
         }

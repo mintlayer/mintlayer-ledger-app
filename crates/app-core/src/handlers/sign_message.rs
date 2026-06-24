@@ -53,6 +53,8 @@ pub fn setup_sign_message(req: SignMessageStartReq) -> DataContext {
     DataContext::SignMessageContext(SignMessageContext::new(req))
 }
 
+// FIXME: implement stateful message signing, where the message is received and displayed for review
+// in portions, to allow signing messages of arbitrary sizes.
 pub fn handle_sign_message(
     message: &[u8],
     ctx: &mut SignMessageContext,
@@ -62,7 +64,7 @@ pub fn handle_sign_message(
         .public_key()
         .map_err(|_| StatusWord::KeyDeriveFail)?;
 
-    // Display review. If user approves sign it.
+    // Display review. If user approves, sign it.
     // Otherwise, return a "deny" status word.
     if ui_display_message(message, &public_key, ctx.coin, ctx.addr_type)? {
         ctx.review_finished = true;

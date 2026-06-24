@@ -53,7 +53,7 @@ pub fn check_derivation_path_for_tx_signing(
     check_derivation_path(path, coin_type)?;
 
     if path.len() != DERIV_PATH_LEN_FOR_TX_SIGNING {
-        return Err(StatusWord::TxInvalidInputPath);
+        return Err(StatusWord::InvalidPath);
     }
 
     Ok(CompressedDerivationPathForTxSigning {

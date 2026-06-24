@@ -22,7 +22,7 @@ The class byte used for all standard commands is `CLA = 0xE1`.
 The APDU buffer on the Ledger device has a maximum data length (`MAX_ADPU_DATA_LEN` = 255 bytes). To accommodate larger payloads, the app implements a chunking mechanism controlled by the `P2` parameter:
 
 - `P2 = 0x00` (`P2_DONE`): This is the final chunk (or the only chunk) of the instruction. The app will assemble the buffer and execute the command.
-- `P2 = 0x80` (`P2_MORE`): More chunks follow. The app accumulates the data into a buffer (up to a maximum of `1020` bytes) and returns `0x9000` (Success) to ask the client for the next chunk.
+- `P2 = 0x80` (`P2_MORE`): More chunks follow. The app accumulates the data into a buffer (up to a maximum of `1020` bytes) and returns SCALE-encoded `Response::ExpectingNextChunk` to ask the client for the next chunk.
 
 _Note: For chunked commands, `INS` and `P1` must remain identical across all chunks of the same sequence._
 
@@ -38,16 +38,16 @@ The SCALE representation of an enum begins with a single byte representing the v
 
 The `Response` enum structure and its variant indices are:
 
-| Variant Index | Variant Name | Inner Payload Type | Description |
-|---|---|---|---|
-| `0` | `ExpectingNextChunk` | None | Returned when more APDU chunks are expected (`P2_MORE` sequence) |
-| `1` | `PublicKey` | `PublicKeyResponse` | Public key and chain code response |
-| `2` | `TxSetup` | None | Acknowledges transaction initialization (`SIGN_TX` with `P1 = 0`) |
-| `3` | `TxNext` | None | Acknowledges receipt of a transaction chunk |
-| `4` | `TxInputSignature` | `TxInputSignatureResponse` | Contains an input signature |
-| `5` | `MessageSetup` | None | Acknowledges message signing initialization (`SIGN_MSG` with `P1 = 0`) |
-| `6` | `MessageSignature` | `MsgSignatureResponse` | Contains the final message signature |
-| `7` | `Pong` | None | Pong response for the `PING` instruction |
+| Index | Name                 | Inner Payload Type           | Description                                                            |
+|-------|----------------------|------------------------------|------------------------------------------------------------------------|
+| `0`   | `ExpectingNextChunk` | None                         | Returned when more APDU chunks are expected (`P2_MORE` sequence)       |
+| `1`   | `PublicKey`          | `PublicKeyResponse`          | Public key and chain code response                                     |
+| `2`   | `TxSetup`            | None                         | Acknowledges transaction initialization (`SIGN_TX` with `P1 = 0`)      |
+| `3`   | `TxNext`             | None                         | Acknowledges receipt of a transaction chunk                            |
+| `4`   | `TxInputSignature`   | `TxInputSignatureResponse`   | Contains an input signature                                            |
+| `5`   | `MessageSetup`       | None                         | Acknowledges message signing initialization (`SIGN_MSG` with `P1 = 0`) |
+| `6`   | `MessageSignature`   | `MsgSignatureResponse`       | Contains the final message signature                                   |
+| `7`   | `Pong`               | None                         | Pong response for the `PING` instruction                               |
 
 Any successful command output described below is prefixed by its corresponding 1-byte variant index.
 
@@ -79,14 +79,14 @@ The application returns standard Ledger status words as well as app-specific and
 | 0xB00A | `TxInvalidInputUtxo`           | Invalid input UTXO                             |
 | 0xB00B | `TxNumericOperationFail`       | Numeric operation failed                       |
 | 0xB00C | `TxFeeUnderflow`               | Tx fee underflow                               |
-| 0xB00D | `TxInvalidInputPath`           | Invalid input path                             |
+| 0xB00D | `InvalidData`                  | Invalid data                                   |
 | 0xB00E | `NothingToSign`                | Nothing to sign                                |
 | 0xB00F | `TxAlreadyFinished`            | Transaction already finished                   |
 | 0xB010 | `InvalidPath`                  | Invalid BIP32 path                             |
 | 0xB011 | `InvalidUncompressedPublicKey` | Invalid uncompressed public key                |
 | 0xB012 | `MaxBufferLenExceeded`         | Max buffer length exceeded (Chunking limit)    |
 | 0xB013 | `DifferentInputCommitmentHash` | Different input commitment hash                |
-| 0xB014 | `InvalidTimestamp`             | Invalid Timestamp                              |
+| 0xB014 | `InvalidTimestamp`             | Invalid timestamp                              |
 | 0xB100 | `EccCarry`                     | ECC Carry                                      |
 | 0xB101 | `EccLocked`                    | ECC Locked                                     |
 | 0xB102 | `EccUnlocked`                  | ECC Unlocked                                   |
@@ -123,7 +123,7 @@ Optionally displays the generated address on the device screen for user verifica
 | ----- | ----- | -------------------- |
 | E1    | 00    | `0` or `1` (Display) |
 
-**Input data (`PublicKeyReq` - SCALE encoded)**
+**Input data (`GetPubKeyReq` - SCALE encoded)**
 
 | Type        | Name        | Description                                               |
 | ----------- | ----------- | --------------------------------------------------------- |
@@ -164,7 +164,7 @@ Because transactions can be larger than available APDU buffers and RAM, the pars
 | Type  | Name          | Description                                               |
 | ----- | ------------- | --------------------------------------------------------- |
 | `u8`  | `coin`        | `0` = Mainnet, `1` = Testnet, `2` = Regtest, `3` = Signet |
-| `u8`  | `version`     | Transaction version                                       |
+| `u8`  | `version`     | Transaction version (0 = V1)                            |
 | `u32` | `num_inputs`  | Total number of inputs in the transaction                 |
 | `u32` | `num_outputs` | Total number of outputs in the transaction                |
 
@@ -186,8 +186,8 @@ The response payload is prefixed with the `TxInputSignature` variant index (`0x0
 | Type          | Name           | Description                                 |
 | ------------- | -------------- | ------------------------------------------- |
 | `[u8; 64]`    | `signature`    | The 64-byte cryptographic signature         |
-| `Option<u32>` | `multisig_idx` | Optional multisig index                     |
 | `u32`         | `input_idx`    | The index of the input that was just signed |
+| `Option<u32>` | `multisig_idx` | Optional multisig index                     |
 | `bool`        | `has_next`     | True if there are more signatures remaining |
 
 *Note: For `Start` (`P1 = 0`) and intermediate `Next` (`P1 = 1`) data chunks (before signatures), the app returns `Response::TxSetup` (variant index `0x02`) and `Response::TxNext` (variant index `0x03`) respectively, with no extra fields.*
@@ -205,7 +205,7 @@ To sign a transaction, the client must follow a strict order:
 
 ### SIGN_MSG
 
-Signs a generic message using a BIP-32 derived key. The process is stateful to allow streaming long messages.
+Signs a generic message using a BIP-32 derived key.
 
 #### Encoding
 

@@ -504,8 +504,8 @@ pub enum StatusWord {
     TxNumericOperationFail = 0xB00B,
     #[display("Tx fee underflow")]
     TxFeeUnderflow = 0xB00C,
-    #[display("Invalid input path")]
-    TxInvalidInputPath = 0xB00D, // FIXME: probably this and InvalidPath should be squashed together.
+    #[display("Invalid data")]
+    InvalidData = 0xB00D,
     #[display("Nothing to sign")]
     NothingToSign = 0xB00E,
     #[display("Transaction already finished")]
@@ -518,7 +518,7 @@ pub enum StatusWord {
     MaxBufferLenExceeded = 0xB012,
     #[display("Different input commitment hash")]
     DifferentInputCommitmentHash = 0xB013,
-    #[display("Invalid Timestamp")]
+    #[display("Invalid timestamp")]
     InvalidTimestamp = 0xB014,
 
     // Ecc Errors
