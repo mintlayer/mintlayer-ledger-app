@@ -1,4 +1,4 @@
-#  Copyright (c) 2022 RBB S.r.l
+#  Copyright (c) 2025-2026 RBB S.r.l
 #  opensource@mintlayer.org
 #  SPDX-License-Identifier: MIT
 #  Licensed under the MIT License;
