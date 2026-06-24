@@ -68,16 +68,16 @@ path = ["44'/19788'", "44'/1'"]
 name = "Mintlayer"
 
 [package.metadata.ledger.nanox]
-icon = "icons/mintlayer_14x14.gif"
+icon = "media/icons/mintlayer_14x14.gif"
 
 [package.metadata.ledger.nanosplus]
-icon = "icons/mintlayer_14x14.gif"
+icon = "media/icons/mintlayer_14x14.gif"
 
 [package.metadata.ledger.stax]
-icon = "icons/mintlayer_32x32.gif"
+icon = "media/icons/mintlayer_32x32.gif"
 
 [package.metadata.ledger.flex]
-icon = "icons/mintlayer_40x40.gif"
+icon = "media/icons/mintlayer_40x40.gif"
 
 [package.metadata.ledger.apex_p]
-icon = "icons/mintlayer_32x32.png"
+icon = "media/icons/mintlayer_32x32.png"

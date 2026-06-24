@@ -6,16 +6,18 @@ use image::{ImageFormat, ImageReader, Pixel};
 
 fn main() {
     println!("cargo:rerun-if-changed=script.ld");
-    println!("cargo:rerun-if-changed=icons/mintlayer_14x14.gif");
-    println!("cargo:rerun-if-changed=icons/mask_14x14.gif");
+    println!("cargo:rerun-if-changed=media/icons/mintlayer_14x14.gif");
+    println!("cargo:rerun-if-changed=media/icons/mask_14x14.gif");
 
-    let path = std::path::PathBuf::from("icons");
-    let reader = ImageReader::open(path.join("mintlayer_14x14.gif")).unwrap();
-    let img = reader.decode().unwrap();
-    let mut gray = img.into_luma8();
+    let icons_path = std::path::PathBuf::from("media/icons");
+    let mut gray = ImageReader::open(icons_path.join("mintlayer_14x14.gif"))
+        .unwrap()
+        .decode()
+        .unwrap()
+        .into_luma8();
 
     // Apply mask
-    let mask = ImageReader::open(path.join("mask_14x14.gif"))
+    let mask = ImageReader::open(icons_path.join("mask_14x14.gif"))
         .unwrap()
         .decode()
         .unwrap()
@@ -32,7 +34,7 @@ fn main() {
         gray.put_pixel(x, y, gray_pixel);
     }
 
-    let glyph_path = std::path::PathBuf::from("glyphs");
+    let glyph_path = std::path::PathBuf::from("media/glyphs");
     gray.save_with_format(glyph_path.join("home_nano_nbgl.png"), ImageFormat::Png)
         .unwrap();
 
