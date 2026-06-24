@@ -36,7 +36,7 @@ pub use mintlayer_core_primitives as mlcp;
 pub use parity_scale_codec::Encode;
 
 pub const APDU_CLASS: u8 = 0xE1;
-pub const MAX_ADPU_DATA_LEN: usize = u8::MAX as usize;
+pub const MAX_APDU_DATA_LEN: usize = u8::MAX as usize;
 
 // P2 is used to indicate APDU chunking.
 // `P2_DONE` marks the final chunk, while `P2_MORE` indicates that more chunks follow.
@@ -396,7 +396,7 @@ impl<'a> Apdu<'a> {
         param1_byte: u8,
         command_data: &'a [u8],
     ) -> Option<Self> {
-        (command_data.len() <= MAX_ADPU_DATA_LEN).then_some(Self {
+        (command_data.len() <= MAX_APDU_DATA_LEN).then_some(Self {
             instruction_byte,
             param1_byte,
             command_data,
@@ -404,13 +404,13 @@ impl<'a> Apdu<'a> {
         })
     }
 
-    /// Returns an ExactSizeIterator of APDUs by chunking the data to MAX_ADPU_DATA_LEN
+    /// Returns an ExactSizeIterator of APDUs by chunking the data to MAX_APDU_DATA_LEN
     pub fn new_chunks(
         instruction_byte: u8,
         param1_byte: u8,
         data: &'a [u8],
     ) -> impl ExactSizeIterator<Item = Self> {
-        let chunk_iter = data.chunks(MAX_ADPU_DATA_LEN);
+        let chunk_iter = data.chunks(MAX_APDU_DATA_LEN);
         let last_chunk_idx = chunk_iter.len() - 1;
 
         chunk_iter.enumerate().map(move |(chunk_idx, chunk)| Self {

@@ -45,7 +45,7 @@ use ledger_device_sdk::{
     },
 };
 
-struct FormatedOutput {
+struct FormattedOutput {
     name: &'static str,
     value: String,
 }
@@ -186,13 +186,16 @@ fn transaction_title(tx_type: &Option<TxType>) -> &'static str {
 ///
 /// # Arguments
 ///
-/// * `message` - A byte slice (`&[u8]`) containing the message to be signed.
+/// * `message`    - The message to be signed.
+/// * `public_key` - The public key corresponding to the private key that will be used for signing.
+/// * `coin_type`  - The coin type (mainnet, testnet etc).
+/// * `addr_type`  - The address type (pk or pkh); this determines how `public_key` will be displayed.
 ///
 /// # Returns
 ///
 /// * `Ok(true)` if the user approves the signing.
 /// * `Ok(false)` if the user rejects.
-/// * `Err(AppSW)` on error.
+/// * `Err(StatusWord)` on error.
 pub fn ui_display_message<const T: char>(
     message: &[u8],
     public_key: &ECPublicKey<65, T>,
@@ -296,15 +299,15 @@ fn format_lock(lock: &OutputTimeLock) -> Result<String, StatusWord> {
     Ok(s)
 }
 
-/// Formats a transaction output into a FormatedOutput.
+/// Formats a transaction output into a FormattedOutput.
 ///
 /// # Arguments
 /// * `output` - A reference to the `TxOutput` enum variant to format.
-/// * `coin` - The coin information, used for formatting amounts.
+/// * `coin` - The coin type (mainnet, testnet etc).
 ///
 /// # Returns
-/// A FormatedOutput containing the title and value of the output.
-fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormatedOutput, StatusWord> {
+/// A FormattedOutput containing the title and value of the output.
+fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormattedOutput, StatusWord> {
     let (name, value) = match output {
         TxOutput::Transfer(value, destination) => (
             "Transfer",
@@ -334,8 +337,15 @@ fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormatedOutput, St
         TxOutput::CreateStakePool(pool_id, data) => {
             let address_short = format!(
                 "Pool ID: {}\nStaker key: {}\nDecommission key: {}\nVRF public key: {}\nMargin ratio per thousand: {}\nCost per block: {}\nPledge{}\n",
-                id_to_address(pool_id.hash(), coin.pool_id_address_prefix())?, to_address(&data.staker, coin)?, to_address(&data.decommission_key, coin)?, vrf_to_address(&data.vrf_public_key, coin)?, data.margin_ratio_per_thousand.0, format_amount(data.cost_per_block, coin),
-                format_amount(data.pledge, coin));
+                id_to_address(pool_id.hash(),
+                coin.pool_id_address_prefix())?,
+                to_address(&data.staker, coin)?,
+                to_address(&data.decommission_key, coin)?,
+                vrf_to_address(&data.vrf_public_key, coin)?,
+                data.margin_ratio_per_thousand.0,
+                format_amount(data.cost_per_block, coin),
+                format_amount(data.pledge, coin)
+            );
 
             let name = if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
                 "Create pool"
@@ -464,10 +474,10 @@ fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormatedOutput, St
         }
     };
 
-    Ok(FormatedOutput { name, value })
+    Ok(FormattedOutput { name, value })
 }
 
-fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, StatusWord> {
+fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormattedOutput, StatusWord> {
     let (name, value) = match input {
         InputCommand::AccountSpending(cmd) => match cmd {
             AccountSpending::DelegationBalance(delegation_id, amount) => {
@@ -595,5 +605,5 @@ fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, 
         },
     };
 
-    Ok(FormatedOutput { name, value })
+    Ok(FormattedOutput { name, value })
 }

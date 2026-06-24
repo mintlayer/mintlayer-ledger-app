@@ -69,10 +69,16 @@ use handlers::{
 };
 use mintlayer_messages::{
     decode_all, encode, GetPubKeyP1, Ins, PingP1, Response, SignMsgP1, SignTxP1, StatusWord,
-    APDU_CLASS, MAX_ADPU_DATA_LEN,
+    APDU_CLASS, MAX_APDU_DATA_LEN,
 };
 
-pub const MAX_BUFFER_LEN: usize = 4 * MAX_ADPU_DATA_LEN;
+/// 16 max APDUs (= 4080 bytes) was chosen because:
+/// * it should be enough to hold our biggest TxOutput (IssueNft with max possible URIs and other
+///   fields will be slightly bigger than 3Kb);
+/// * a buffer bigger than this will likely lead to OOM and crash (reallocating a 4Kb Vec will
+///   temporarily consume 8Kb of RAM, which is half of the entire available Rust heap, see HEAP_SIZE
+///   in .cargo/config.toml).
+pub const MAX_BUFFER_LEN: usize = 16 * MAX_APDU_DATA_LEN;
 
 /// Represents a fully assembled Low-Level Instruction.
 /// Contains the aggregated data from one or more APDUs (if P2 indicated more data).

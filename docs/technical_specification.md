@@ -19,10 +19,10 @@ The class byte used for all standard commands is `CLA = 0xE1`.
 
 ### Chunking and P2
 
-The APDU buffer on the Ledger device has a maximum data length (`MAX_ADPU_DATA_LEN` = 255 bytes). To accommodate larger payloads, the app implements a chunking mechanism controlled by the `P2` parameter:
+The APDU buffer on the Ledger device has a maximum data length (`MAX_APDU_DATA_LEN` = 255 bytes). To accommodate larger payloads, the app implements a chunking mechanism controlled by the `P2` parameter:
 
 - `P2 = 0x00` (`P2_DONE`): This is the final chunk (or the only chunk) of the instruction. The app will assemble the buffer and execute the command.
-- `P2 = 0x80` (`P2_MORE`): More chunks follow. The app accumulates the data into a buffer (up to a maximum of `1020` bytes) and returns SCALE-encoded `Response::ExpectingNextChunk` to ask the client for the next chunk.
+- `P2 = 0x80` (`P2_MORE`): More chunks follow. The app accumulates the data into a buffer (up to a maximum of `4080` bytes) and returns SCALE-encoded `Response::ExpectingNextChunk` to ask the client for the next chunk.
 
 _Note: For chunked commands, `INS` and `P1` must remain identical across all chunks of the same sequence._
 

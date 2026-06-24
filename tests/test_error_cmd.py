@@ -220,13 +220,13 @@ def test_sign_tx_too_large_data(backend, scenario_navigator, device, navigator):
     assert res.status == 0x9000
 
     with pytest.raises(ExceptionRAPDU) as e:
-        for _ in range(100):
+        for _ in range(1000):
             res = backend.exchange(
                 cla=CLA,
                 ins=InsType.SIGN_TX,
                 p1=SignTxP1.P1_NEXT,
                 p2=P2.P2_MORE,
-                data=b"big_input_data",
+                data=b"input_data",
             )
 
     assert e.value.status == Errors.SW_MAX_BUFFER_LEN_EXCEEDED

@@ -46,6 +46,8 @@ fn main() {
     let git_hash = String::from_utf8(output.stdout).expect("Failed to convert git output to UTF-8");
 
     // Expose the Git hash as an environment variable
+    // FIXME: this is unused. Either implement a custom command that would return this info
+    // (e.g. in the form of a full semantic version), or remove this.
     println!("cargo:rustc-env=GIT_HASH={}", git_hash.trim());
 
     // Rerun the build script if .git/HEAD changes
