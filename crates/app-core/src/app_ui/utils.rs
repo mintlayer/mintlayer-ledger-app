@@ -24,11 +24,9 @@ use ledger_device_sdk::{
     nbgl::NbglGlyph,
 };
 
-use crate::StatusWord;
-use mintlayer_messages::{
-    encode,
-    mlcp::{CoinType, Destination, PublicKeyHash, Secp256k1PublicKey},
-};
+use mintlayer_messages::{encode, Destination, PublicKeyHash, Secp256k1PublicKey};
+
+use crate::{mlcp, StatusWord};
 
 pub fn bech32m_encode(hrp: &str, data: &[u8]) -> Result<String, StatusWord> {
     let parsed_hrp = bech32::Hrp::parse(hrp).map_err(|_| StatusWord::TxAddressFail)?;
@@ -39,7 +37,7 @@ pub fn bech32m_encode(hrp: &str, data: &[u8]) -> Result<String, StatusWord> {
     Ok(encoded)
 }
 
-pub fn to_address(destination: &Destination, coin: CoinType) -> Result<String, StatusWord> {
+pub fn to_address(destination: &Destination, coin: mlcp::CoinType) -> Result<String, StatusWord> {
     let hrp = coin.address_prefix(destination.into());
     bech32m_encode(hrp, &encode(destination))
 }

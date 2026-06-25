@@ -17,26 +17,27 @@
 
 use alloc::{boxed::Box, vec::Vec};
 
+use ledger_device_sdk::{
+    ecc::{Secp256k1, SeedDerive},
+    hash::{blake2::Blake2b_512, HashInit},
+    nbgl::{NbglSpinner, NbglStreamingReview},
+};
+
+use mintlayer_messages::{
+    encode_as_compact, encode_to, Encode, InputAddressPath, Response, SignTxNextReq,
+    SignTxStartReq, Signature, TransactionVersion, TxInputCommitmentData, TxInputData,
+    TxInputSignatureResponse, TxOutputData, H256,
+};
+
 use crate::{
     app_ui::sign::{
         ui_approve_streaming_review, ui_new_streaming_review, ui_start_streaming_review,
         ui_streaming_review_show_input, ui_streaming_review_show_output,
     },
     handlers::{sign_message::schnorr_sign, utils::mintlayer_hash},
+    mlcp,
     utils::{check_derivation_path_for_tx_signing, CompressedDerivationPathForTxSigning},
     DataContext, StatusWord,
-};
-use mintlayer_messages::{
-    encode_as_compact, encode_to,
-    mlcp::{CoinType as PCoinType, H256},
-    Encode, InputAddressPath, Response, SignTxNextReq, SignTxStartReq, Signature,
-    TransactionVersion, TxInputCommitmentData, TxInputData, TxInputSignatureResponse, TxOutputData,
-};
-
-use ledger_device_sdk::{
-    ecc::{Secp256k1, SeedDerive},
-    hash::{blake2::Blake2b_512, HashInit},
-    nbgl::{NbglSpinner, NbglStreamingReview},
 };
 
 mod summary_collector;
@@ -55,7 +56,11 @@ pub struct InputCompressed {
 }
 
 impl InputCompressed {
-    fn new(addr: InputAddressPath, input_idx: Index, coin: PCoinType) -> Result<Self, StatusWord> {
+    fn new(
+        addr: InputAddressPath,
+        input_idx: Index,
+        coin: mlcp::CoinType,
+    ) -> Result<Self, StatusWord> {
         let path = check_derivation_path_for_tx_signing(addr.path.as_ref(), coin)?;
 
         Ok(Self {
@@ -67,7 +72,7 @@ impl InputCompressed {
 }
 
 pub struct TxMetadata {
-    coin: PCoinType,
+    coin: mlcp::CoinType,
     num_inputs: Index,
     num_outputs: Index,
 }
@@ -218,7 +223,7 @@ pub struct TxParsingOutputsContext {
 }
 
 impl TxParsingOutputsContext {
-    pub fn coin(&self) -> PCoinType {
+    pub fn coin(&self) -> mlcp::CoinType {
         self.metadata.coin
     }
 

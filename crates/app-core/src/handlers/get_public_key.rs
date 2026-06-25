@@ -17,7 +17,9 @@
 
 use ledger_device_sdk::ecc::{Secp256k1, SeedDerive};
 
-use mintlayer_messages::{ChainCode, GetPubKeyReq, PublicKey, PublicKeyResponse};
+use mintlayer_messages::{
+    ChainCode, GetPubKeyReq, PublicKeyResponse, UncompressedSecp256k1PublicKey,
+};
 
 use crate::{app_ui::address::ui_display_pk, utils::check_derivation_path, StatusWord};
 
@@ -36,7 +38,7 @@ pub fn handle_get_public_key(
         return Err(StatusWord::Deny);
     }
     let response = PublicKeyResponse {
-        public_key: PublicKey(pk.pubkey),
+        public_key: UncompressedSecp256k1PublicKey(pk.pubkey),
         chain_code: ChainCode(code.value),
     };
 

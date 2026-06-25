@@ -15,34 +15,30 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use alloc::string::String;
-use alloc::{format, string::ToString};
+use alloc::{format, string::String, string::ToString};
+use chrono::{TimeZone, Utc};
 use core::fmt::Write;
 
-use crate::{
-    app_ui::utils::{
-        bech32m_encode, compress_public_key, load_glyph, to_address, to_public_key_hash,
-    },
-    handlers::sign_tx::{CoinOrTokenId, InputCommand, TxSummaryCollector, TxType},
-    StatusWord,
-};
-use mintlayer_messages::{
-    encode,
-    mlcp::{
-        AccountCommand, AccountSpending, Amount, CoinType, Destination, IsTokenFreezable,
-        IsTokenUnfreezable, NftIssuance, OrderAccountCommand, OutputTimeLock, OutputValue,
-        PublicKey, TokenIssuance, TokenTotalSupply, TxOutput, VrfPublicKey, H256,
-    },
-    AddrType,
-};
-
-use chrono::{TimeZone, Utc};
 use ledger_device_sdk::{
     ecc::ECPublicKey,
     nbgl::{
         Field, NbglGlyph, NbglReview, NbglStreamingReview, NbglStreamingReviewStatus,
         TransactionType,
     },
+};
+
+use mintlayer_messages::{
+    encode, AccountCommand, AccountSpending, AddrType, Amount, Destination, IsTokenFreezable,
+    IsTokenUnfreezable, NftIssuance, OrderAccountCommand, OutputTimeLock, OutputValue, PublicKey,
+    TokenIssuance, TokenTotalSupply, TxOutput, VrfPublicKey, H256,
+};
+
+use crate::{
+    app_ui::utils::{
+        bech32m_encode, compress_public_key, load_glyph, to_address, to_public_key_hash,
+    },
+    handlers::sign_tx::{CoinOrTokenId, InputCommand, TxSummaryCollector, TxType},
+    mlcp, StatusWord,
 };
 
 struct FormattedOutput {
@@ -65,7 +61,7 @@ pub fn ui_start_streaming_review(review: &NbglStreamingReview) -> bool {
 pub fn ui_streaming_review_show_input(
     review: &NbglStreamingReview,
     input: &InputCommand,
-    coin: CoinType,
+    coin: mlcp::CoinType,
 ) -> Result<bool, StatusWord> {
     let input = format_input(input, coin)?;
 
@@ -85,7 +81,7 @@ pub fn ui_streaming_review_show_input(
 pub fn ui_streaming_review_show_output(
     review: &NbglStreamingReview,
     output: &TxOutput,
-    coin: CoinType,
+    coin: mlcp::CoinType,
 ) -> Result<bool, StatusWord> {
     let output = format_output(output, coin)?;
 
@@ -105,7 +101,7 @@ pub fn ui_streaming_review_show_output(
 pub fn ui_approve_streaming_review(
     review: &NbglStreamingReview,
     tx_summary: &TxSummaryCollector,
-    coin: CoinType,
+    coin: mlcp::CoinType,
 ) -> Result<bool, StatusWord> {
     let fees = tx_summary.fees_iter().try_fold(
         String::new(),
@@ -199,7 +195,7 @@ fn transaction_title(tx_type: &Option<TxType>) -> &'static str {
 pub fn ui_display_message<const T: char>(
     message: &[u8],
     public_key: &ECPublicKey<65, T>,
-    coin_type: CoinType,
+    coin_type: mlcp::CoinType,
     addr_type: AddrType,
 ) -> Result<bool, StatusWord> {
     let pk = compress_public_key(public_key)?;
@@ -246,7 +242,7 @@ pub fn ui_display_message<const T: char>(
     Ok(review.show(&msg_fields))
 }
 
-fn vrf_to_address(key: &VrfPublicKey, coin: CoinType) -> Result<String, StatusWord> {
+fn vrf_to_address(key: &VrfPublicKey, coin: mlcp::CoinType) -> Result<String, StatusWord> {
     bech32m_encode(coin.vrf_public_key_address_prefix(), &encode(key))
 }
 
@@ -254,7 +250,7 @@ fn id_to_address(id: &H256, hrp: &str) -> Result<String, StatusWord> {
     bech32m_encode(hrp, &id.0)
 }
 
-fn format_amount(amount: Amount, coin: CoinType) -> String {
+fn format_amount(amount: Amount, coin: mlcp::CoinType) -> String {
     let decimals = coin.coin_decimals() as usize;
     let mantissa = amount.into_atoms();
 
@@ -270,7 +266,7 @@ fn format_atoms(amount: Amount) -> String {
     amount.into_atoms().to_string()
 }
 
-fn format_value(value: &OutputValue, coin: CoinType) -> Result<String, StatusWord> {
+fn format_value(value: &OutputValue, coin: mlcp::CoinType) -> Result<String, StatusWord> {
     match value {
         OutputValue::Coin(amount) => Ok(format!("Coins: {}", format_amount(*amount, coin))),
         OutputValue::TokenV1(token_id, amount) => Ok(format!(
@@ -311,7 +307,7 @@ fn format_lock(lock: &OutputTimeLock) -> Result<String, StatusWord> {
 ///
 /// # Returns
 /// A FormattedOutput containing the title and value of the output.
-fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormattedOutput, StatusWord> {
+fn format_output(output: &TxOutput, coin: mlcp::CoinType) -> Result<FormattedOutput, StatusWord> {
     let (name, value) = match output {
         TxOutput::Transfer(value, destination) => (
             "Transfer",
@@ -480,7 +476,7 @@ fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormattedOutput, S
     Ok(FormattedOutput { name, value })
 }
 
-fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormattedOutput, StatusWord> {
+fn format_input(input: &InputCommand, coin: mlcp::CoinType) -> Result<FormattedOutput, StatusWord> {
     let (name, value) = match input {
         InputCommand::AccountSpending(cmd) => match cmd {
             AccountSpending::DelegationBalance(delegation_id, amount) => {

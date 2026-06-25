@@ -15,7 +15,9 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use mintlayer_messages::{mlcp::CoinType as PCoinType, StatusWord};
+use mintlayer_messages::StatusWord;
+
+use crate::mlcp;
 
 const DERIV_PATH_IDX_BIP44: usize = 0;
 const DERIV_PATH_IDX_COIN_TYPE: usize = 1;
@@ -30,7 +32,7 @@ const DERIV_PATH_LEN_FOR_TX_SIGNING: usize = 5;
 
 const DERIV_PATH_BIP44_ITEM: u32 = 44 + (1 << 31);
 
-pub fn check_derivation_path(path: &[u32], coin_type: PCoinType) -> Result<(), StatusWord> {
+pub fn check_derivation_path(path: &[u32], coin_type: mlcp::CoinType) -> Result<(), StatusWord> {
     if path.len() < DERIV_PATH_MIN_LEN {
         return Err(StatusWord::InvalidPath);
     }
@@ -48,7 +50,7 @@ pub fn check_derivation_path(path: &[u32], coin_type: PCoinType) -> Result<(), S
 
 pub fn check_derivation_path_for_tx_signing(
     path: &[u32],
-    coin_type: PCoinType,
+    coin_type: mlcp::CoinType,
 ) -> Result<CompressedDerivationPathForTxSigning, StatusWord> {
     check_derivation_path(path, coin_type)?;
 
@@ -70,7 +72,7 @@ pub struct CompressedDerivationPathForTxSigning {
 }
 
 impl CompressedDerivationPathForTxSigning {
-    pub fn to_full_path(&self, coin_type: PCoinType) -> [u32; DERIV_PATH_LEN_FOR_TX_SIGNING] {
+    pub fn to_full_path(&self, coin_type: mlcp::CoinType) -> [u32; DERIV_PATH_LEN_FOR_TX_SIGNING] {
         [
             DERIV_PATH_BIP44_ITEM,
             coin_type.bip44_coin_type(),

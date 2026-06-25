@@ -355,13 +355,13 @@ def init_mintlayer_types():
                     ["has_next", "bool"],
                 ],
             },
-            "PublicKeyInResponse": "[u8; 65]",
-            "ChainCodeResponse": "[u8; 32]",
+            "UncompressedSecp256k1PublicKey": "[u8; 65]",
+            "ChainCode": "[u8; 32]",
             "PublicKeyResponse": {
                 "type": "struct",
                 "type_mapping": [
-                    ["public_key", "PublicKeyInResponse"],
-                    ["chain_code", "ChainCodeResponse"],
+                    ["public_key", "UncompressedSecp256k1PublicKey"],
+                    ["chain_code", "ChainCode"],
                 ],
             },
             "MsgSignatureResponse": {

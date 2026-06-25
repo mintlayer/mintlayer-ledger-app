@@ -17,13 +17,12 @@
 
 use alloc::collections::BTreeMap;
 
-use crate::StatusWord;
 use mintlayer_messages::{
-    mlcp::{
-        AccountCommand, AccountSpending, Amount, OrderAccountCommand, OutputValue, TxOutput, H256,
-    },
-    AdditionalOrderInfo, AdditionalUtxoInfo, TxInputWithAdditionalInfo,
+    AccountCommand, AccountSpending, AdditionalOrderInfo, AdditionalUtxoInfo, Amount,
+    OrderAccountCommand, OutputValue, TxInputWithAdditionalInfo, TxOutput, H256,
 };
+
+use crate::StatusWord;
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum CoinOrTokenId {

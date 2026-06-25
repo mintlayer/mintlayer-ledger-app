@@ -15,21 +15,23 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use crate::{
-    app_ui::sign::ui_display_message, errors::cx_err_to_status, handlers::utils::mintlayer_hash,
-    DataContext, StatusWord,
-};
-use mintlayer_messages::{
-    mlcp::CoinType, AddrType, Bip32Path, MsgSignatureResponse, SignMessageStartReq, Signature,
-};
-
 use alloc::vec::Vec;
+
 use ledger_device_sdk::ecc::{ECPrivateKey, Secp256k1, SeedDerive};
 use ledger_secure_sdk_sys::*;
 
+use mintlayer_messages::{
+    AddrType, Bip32Path, MsgSignatureResponse, SignMessageStartReq, Signature,
+};
+
+use crate::{
+    app_ui::sign::ui_display_message, errors::cx_err_to_status, handlers::utils::mintlayer_hash,
+    mlcp, DataContext, StatusWord,
+};
+
 pub struct SignMessageContext {
     path: Bip32Path,
-    coin: CoinType,
+    coin: mlcp::CoinType,
     addr_type: AddrType,
     review_finished: bool,
 }

@@ -29,11 +29,21 @@ use alloc::{boxed::Box, vec::Vec};
 use core::iter::ExactSizeIterator;
 
 use derive_more::Display;
+use mintlayer_core_primitives as mlcp;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use parity_scale_codec::{Decode, DecodeAll};
 
-pub use mintlayer_core_primitives as mlcp;
 pub use parity_scale_codec::Encode;
+
+pub use mlcp::{
+    AccountCommand, AccountNonce, AccountOutPoint, AccountSpending, Amount, BlockHeight,
+    BlockTimestamp, BlocksCount, DelegationId, Destination, GenBlockId, H256,
+    HashedTimelockContract, IsTokenFreezable, IsTokenUnfreezable, NftIssuance, OrderAccountCommand,
+    OrderData, OrderId, OutPointSourceId, OutputTimeLock, OutputValue, PerThousand, PoolId,
+    PublicKey, PublicKeyHash, ScriptId, SecondsCount, Secp256k1PublicKey, SighashInputCommitment,
+    StakePoolData, TokenId, TokenIssuance, TokenTotalSupply, TransactionId, TxInput, TxOutput,
+    UtxoOutPoint, VrfPublicKey,
+};
 
 pub const APDU_CLASS: u8 = 0xE1;
 pub const MAX_APDU_DATA_LEN: usize = u8::MAX as usize;
@@ -162,7 +172,7 @@ pub struct TxInputData {
 
 #[derive(Encode, Decode)]
 pub struct TxInputCommitmentData {
-    pub commitment: mlcp::SighashInputCommitment,
+    pub commitment: SighashInputCommitment,
 }
 
 // FIXME:
@@ -182,37 +192,37 @@ pub struct TxInputCommitmentData {
 //    but mark it as change.
 #[derive(Encode, Decode)]
 pub struct TxOutputData {
-    pub output: mlcp::TxOutput,
+    pub output: TxOutput,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub struct AdditionalOrderInfo {
-    pub initially_asked: mlcp::OutputValue,
-    pub initially_given: mlcp::OutputValue,
-    pub ask_balance: mlcp::Amount,
-    pub give_balance: mlcp::Amount,
+    pub initially_asked: OutputValue,
+    pub initially_given: OutputValue,
+    pub ask_balance: Amount,
+    pub give_balance: Amount,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub enum AdditionalUtxoInfo {
     #[codec(index = 0)]
-    Utxo(mlcp::TxOutput),
+    Utxo(TxOutput),
 
     #[codec(index = 1)]
     UtxoWithPoolData {
-        utxo: mlcp::TxOutput,
-        staker_balance: mlcp::Amount,
+        utxo: TxOutput,
+        staker_balance: Amount,
     },
 }
 
-impl From<AdditionalUtxoInfo> for mlcp::SighashInputCommitment {
+impl From<AdditionalUtxoInfo> for SighashInputCommitment {
     fn from(value: AdditionalUtxoInfo) -> Self {
         match value {
-            AdditionalUtxoInfo::Utxo(output) => mlcp::SighashInputCommitment::Utxo(output),
+            AdditionalUtxoInfo::Utxo(output) => SighashInputCommitment::Utxo(output),
             AdditionalUtxoInfo::UtxoWithPoolData {
                 utxo,
                 staker_balance,
-            } => mlcp::SighashInputCommitment::ProduceBlockFromStakeUtxo {
+            } => SighashInputCommitment::ProduceBlockFromStakeUtxo {
                 utxo,
                 staker_balance,
             },
@@ -223,49 +233,48 @@ impl From<AdditionalUtxoInfo> for mlcp::SighashInputCommitment {
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub enum TxInputWithAdditionalInfo {
     #[codec(index = 0)]
-    Utxo(mlcp::UtxoOutPoint, AdditionalUtxoInfo),
+    Utxo(UtxoOutPoint, AdditionalUtxoInfo),
 
     #[codec(index = 1)]
-    Account(mlcp::AccountOutPoint),
+    Account(AccountOutPoint),
 
     #[codec(index = 2)]
-    AccountCommand(mlcp::AccountNonce, mlcp::AccountCommand),
+    AccountCommand(AccountNonce, AccountCommand),
 
     #[codec(index = 3)]
-    OrderAccountCommand(mlcp::OrderAccountCommand, AdditionalOrderInfo),
+    OrderAccountCommand(OrderAccountCommand, AdditionalOrderInfo),
 }
 
 impl TxInputWithAdditionalInfo {
-    pub fn into_input_and_commitment(self) -> (mlcp::TxInput, mlcp::SighashInputCommitment) {
+    pub fn into_input_and_commitment(self) -> (TxInput, SighashInputCommitment) {
         match self {
-            TxInputWithAdditionalInfo::Utxo(utxo, info) => (mlcp::TxInput::Utxo(utxo), info.into()),
-            TxInputWithAdditionalInfo::Account(acc) => (
-                mlcp::TxInput::Account(acc),
-                mlcp::SighashInputCommitment::None,
-            ),
+            TxInputWithAdditionalInfo::Utxo(utxo, info) => (TxInput::Utxo(utxo), info.into()),
+            TxInputWithAdditionalInfo::Account(acc) => {
+                (TxInput::Account(acc), SighashInputCommitment::None)
+            }
             TxInputWithAdditionalInfo::AccountCommand(nonce, cmd) => (
-                mlcp::TxInput::AccountCommand(nonce, cmd),
-                mlcp::SighashInputCommitment::None,
+                TxInput::AccountCommand(nonce, cmd),
+                SighashInputCommitment::None,
             ),
             TxInputWithAdditionalInfo::OrderAccountCommand(cmd, info) => {
                 let commitment = match &cmd {
-                    mlcp::OrderAccountCommand::FillOrder(_, _) => {
-                        mlcp::SighashInputCommitment::FillOrderAccountCommand {
+                    OrderAccountCommand::FillOrder(_, _) => {
+                        SighashInputCommitment::FillOrderAccountCommand {
                             initially_asked: info.initially_asked,
                             initially_given: info.initially_given,
                         }
                     }
-                    mlcp::OrderAccountCommand::ConcludeOrder(_) => {
-                        mlcp::SighashInputCommitment::ConcludeOrderAccountCommand {
+                    OrderAccountCommand::ConcludeOrder(_) => {
+                        SighashInputCommitment::ConcludeOrderAccountCommand {
                             initially_asked: info.initially_asked,
                             initially_given: info.initially_given,
                             ask_balance: info.ask_balance,
                             give_balance: info.give_balance,
                         }
                     }
-                    mlcp::OrderAccountCommand::FreezeOrder(_) => mlcp::SighashInputCommitment::None,
+                    OrderAccountCommand::FreezeOrder(_) => SighashInputCommitment::None,
                 };
-                (mlcp::TxInput::OrderAccountCommand(cmd), commitment)
+                (TxInput::OrderAccountCommand(cmd), commitment)
             }
         }
     }
@@ -316,14 +325,14 @@ pub struct InputAddressPath {
 }
 
 #[derive(Encode, Decode)]
-pub struct PublicKey(pub [u8; 65]);
+pub struct UncompressedSecp256k1PublicKey(pub [u8; 65]);
 
 #[derive(Encode, Decode)]
 pub struct ChainCode(pub [u8; 32]);
 
 #[derive(Encode, Decode)]
 pub struct PublicKeyResponse {
-    pub public_key: PublicKey,
+    pub public_key: UncompressedSecp256k1PublicKey,
     pub chain_code: ChainCode,
 }
 

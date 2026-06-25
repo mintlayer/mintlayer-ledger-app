@@ -16,20 +16,21 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use crate::{
-    app_ui::utils::{compress_public_key, load_glyph, to_address},
-    StatusWord,
-};
-use mintlayer_messages::mlcp::{CoinType, Destination, PublicKey};
-
 use ledger_device_sdk::{
     ecc::ECPublicKey,
     nbgl::{NbglAddressReview, NbglGlyph},
 };
 
+use mintlayer_messages::{Destination, PublicKey};
+
+use crate::{
+    app_ui::utils::{compress_public_key, load_glyph, to_address},
+    mlcp, StatusWord,
+};
+
 pub fn ui_display_pk<const T: char>(
     public_key: &ECPublicKey<65, T>,
-    coin_type: CoinType,
+    coin_type: mlcp::CoinType,
 ) -> Result<bool, StatusWord> {
     let pk = compress_public_key(public_key)?;
 
