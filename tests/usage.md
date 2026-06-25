@@ -57,23 +57,9 @@ except for `nanosplus`, whose corresponding device model name is `nanosp`.
 ### Run tests using a physical Ledger device
 
 The Mintlayer app must be built, loaded on the device, and opened before running the tests.
+See [Loading on device](../README.md#loading-on-device) for platform-specific loading instructions.
 
-On Linux, loading can be done inside the Docker container:
-
-```bash
-docker run --user "$(id -u)":"$(id -g)" --rm -ti --privileged -v "/dev/bus/usb:/dev/bus/usb" -v "$(realpath .):/app" -w /app ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder:latest
-```
-
-ℹ️ Note the `--privileged -v "/dev/bus/usb:/dev/bus/usb"` part, which is needed to be able to load the app.
-
-Then, inside the container:
-
-```bash
-cargo ledger build nanox --load
-```
-
-Then run the tests against the physical device:
-
+After the app has been installed on the device, run the tests via:
 ```bash
 pytest tests/ --tb=short -v --device nanox --backend ledgerwallet
 ```
