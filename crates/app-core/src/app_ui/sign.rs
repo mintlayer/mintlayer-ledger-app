@@ -340,9 +340,8 @@ fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormattedOutput, S
 
         TxOutput::CreateStakePool(pool_id, data) => {
             let address_short = format!(
-                "Pool ID: {}\nStaker key: {}\nDecommission key: {}\nVRF public key: {}\nMargin ratio per thousand: {}\nCost per block: {}\nPledge{}\n",
-                id_to_address(pool_id.hash(),
-                coin.pool_id_address_prefix())?,
+                "Pool ID: {}\nStaker key: {}\nDecommission key: {}\nVRF public key: {}\nMargin ratio per thousand: {}\nCost per block: {}\nPledge: {}\n",
+                id_to_address(pool_id.hash(), coin.pool_id_address_prefix())?,
                 to_address(&data.staker, coin)?,
                 to_address(&data.decommission_key, coin)?,
                 vrf_to_address(&data.vrf_public_key, coin)?,

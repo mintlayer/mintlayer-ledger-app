@@ -72,6 +72,7 @@ pub struct TxMetadata {
     num_outputs: Index,
 }
 
+// FIXME: rename this and other types, so that the names are based on "process" rather than "parse".
 pub struct TxParsingInputsContext {
     metadata: TxMetadata,
 

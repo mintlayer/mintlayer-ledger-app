@@ -195,7 +195,10 @@ pub struct AdditionalOrderInfo {
 
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub enum AdditionalUtxoInfo {
+    #[codec(index = 0)]
     Utxo(mlcp::TxOutput),
+
+    #[codec(index = 1)]
     UtxoWithPoolData {
         utxo: mlcp::TxOutput,
         staker_balance: mlcp::Amount,
