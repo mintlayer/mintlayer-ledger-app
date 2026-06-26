@@ -45,16 +45,19 @@ mod summary_collector;
 pub use summary_collector::{CoinOrTokenId, InputCommand, TxSummaryCollector, TxType};
 
 // u32 is enough to cover max possible number of inputs and outputs (note that usize is also
-// 32-bit on this platform, but we want to be specific about size)
+// 32-bit on Ledger, but we want to be specific about size)
 type Index = u32;
 
-pub struct InputCompressed {
+/// A "signature target". Usually, one input will produce one SigTarget (more than one SigTarget
+/// is possible in the case of multisig; it can also be zero for non-signable pseudo-inputs, such
+/// as FillOrder).
+pub struct SigTarget {
     pub path: CompressedDerivationPathForTxSigning,
     pub input_idx: Index,
     pub multisig_idx: Option<Index>,
 }
 
-impl InputCompressed {
+impl SigTarget {
     fn new(
         addr: InputAddressPath,
         input_idx: Index,
@@ -88,7 +91,7 @@ pub struct TxInputsProcessingContext {
     input_commitments_hasher: Blake2b_512,
 
     summary: TxSummaryCollector,
-    inputs: Vec<InputCompressed>,
+    sig_targets: Vec<SigTarget>,
 
     spinner: NbglSpinner,
 
@@ -101,7 +104,7 @@ impl TxInputsProcessingContext {
         let finished_with_inputs = self.num_inputs_parsed >= self.metadata.num_inputs;
 
         if finished_with_inputs {
-            if self.inputs.is_empty() {
+            if self.sig_targets.is_empty() {
                 return Err(StatusWord::NothingToSign);
             }
 
@@ -122,7 +125,7 @@ impl TxInputsProcessingContext {
                     input_commitments_hasher: Blake2b_512::new(),
                     expected_input_commitments_hash: input_commitments_hash,
                     summary: self.summary,
-                    inputs: self.inputs,
+                    sig_targets: self.sig_targets,
                     spinner: self.spinner,
                     num_inputs_parsed: 0,
                 },
@@ -141,7 +144,7 @@ pub struct TxInputCommitmentsProcessingContext {
     expected_input_commitments_hash: [u8; 64],
 
     summary: TxSummaryCollector,
-    inputs: Vec<InputCompressed>,
+    sig_targets: Vec<SigTarget>,
 
     spinner: NbglSpinner,
 
@@ -185,7 +188,7 @@ impl TxInputCommitmentsProcessingContext {
                         metadata: self.metadata,
                         tx_hasher: self.tx_hasher,
                         summary: self.summary,
-                        inputs: self.inputs,
+                        sig_targets: self.sig_targets,
                         spinner: self.spinner,
                         num_outputs_parsed: 0,
                     }));
@@ -196,7 +199,7 @@ impl TxInputCommitmentsProcessingContext {
                     self.tx_hasher,
                     self.summary,
                     self.metadata,
-                    self.inputs,
+                    self.sig_targets,
                     self.spinner,
                 )
             }
@@ -213,7 +216,7 @@ pub struct TxOutputsProcessingContext {
     tx_hasher: Blake2b_512,
 
     summary: TxSummaryCollector,
-    inputs: Vec<InputCompressed>,
+    sig_targets: Vec<SigTarget>,
 
     spinner: NbglSpinner,
 
@@ -242,7 +245,7 @@ impl TxOutputsProcessingContext {
                 self.tx_hasher,
                 self.summary,
                 self.metadata,
-                self.inputs,
+                self.sig_targets,
                 self.spinner,
             )
         }
@@ -254,7 +257,7 @@ fn switch_to_signing(
     mut tx_hasher: Blake2b_512,
     summary: TxSummaryCollector,
     metadata: TxMetadata,
-    inputs: Vec<InputCompressed>,
+    sig_targets: Vec<SigTarget>,
     spinner: NbglSpinner,
 ) -> Result<TxProcessingContext, StatusWord> {
     if ui_approve_streaming_review(review, &summary, metadata.coin)? {
@@ -268,9 +271,9 @@ fn switch_to_signing(
 
         Ok(TxProcessingContext::Signing(Box::new(TxSigningContext {
             metadata,
-            inputs,
+            sig_targets,
             spinner,
-            num_inputs_signed: 0,
+            num_sigs_produced: 0,
             tx_hash,
         })))
     } else {
@@ -282,31 +285,31 @@ pub struct TxSigningContext {
     metadata: TxMetadata,
     tx_hash: H256,
 
-    inputs: Vec<InputCompressed>,
+    sig_targets: Vec<SigTarget>,
 
     spinner: NbglSpinner,
 
-    num_inputs_signed: Index,
+    num_sigs_produced: Index,
 }
 
 impl TxSigningContext {
     fn compute_signature_and_append(
         mut self: Box<Self>,
     ) -> Result<(TxInputSignatureResponse, TxProcessingContext), StatusWord> {
-        let address = self
-            .inputs
-            .get(self.num_inputs_signed as usize)
+        let sig_target = self
+            .sig_targets
+            .get(self.num_sigs_produced as usize)
             .ok_or(StatusWord::WrongContext)?;
 
-        let addr = address.path.to_full_path(self.metadata.coin);
-        let private_key = Secp256k1::derive_from_path(&addr);
+        let path = sig_target.path.to_full_path(self.metadata.coin);
+        let private_key = Secp256k1::derive_from_path(&path);
         let sig = schnorr_sign(&private_key, self.tx_hash.as_bytes())?;
 
         let signature = Signature(sig);
-        let input_idx = address.input_idx;
-        let multisig_idx = address.multisig_idx;
+        let input_idx = sig_target.input_idx;
+        let multisig_idx = sig_target.multisig_idx;
 
-        let has_next = ((self.num_inputs_signed + 1) as usize) < self.inputs.len();
+        let has_next = ((self.num_sigs_produced + 1) as usize) < self.sig_targets.len();
 
         let response = TxInputSignatureResponse {
             signature,
@@ -316,7 +319,7 @@ impl TxSigningContext {
         };
 
         let new_ctx = if has_next {
-            self.num_inputs_signed += 1;
+            self.num_sigs_produced += 1;
             TxProcessingContext::Signing(self)
         } else {
             TxProcessingContext::Finished
@@ -378,7 +381,7 @@ impl TxProcessingContext {
                         summary: TxSummaryCollector::new(),
                         num_inputs_parsed: 0,
                         input_commitments_hasher: Blake2b_512::new(),
-                        inputs: Vec::new(),
+                        sig_targets: Vec::new(),
                     },
                 )))
             }
@@ -430,15 +433,12 @@ fn handle_input(
     mut ctx: Box<TxInputsProcessingContext>,
 ) -> Result<TxProcessingContext, StatusWord> {
     let num_inputs_parsed = ctx.num_inputs_parsed;
-    let compressed_inputs = input_data
+    let sig_targets = input_data
         .addresses
         .into_iter()
-        .map(|a| InputCompressed::new(a, num_inputs_parsed, ctx.metadata.coin))
+        .map(|a| SigTarget::new(a, num_inputs_parsed, ctx.metadata.coin))
         .collect::<Result<Vec<_>, StatusWord>>()?;
-    // FIXME: `ctx.inputs` is not really a collection of inputs, as it can contain multiple entries
-    // for one input in the case of multisig. Possible alternative name: "signature targets"
-    // (need to rename InputCompressed as well).
-    ctx.inputs.extend(compressed_inputs);
+    ctx.sig_targets.extend(sig_targets);
 
     ctx.summary.process_input(&input_data.input)?;
 
