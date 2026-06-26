@@ -206,8 +206,7 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
-# FIXME: rename to test_sign_tx_delegate_staking
-def test_sign_tx_delegation_staking(backend, scenario_navigator, device, navigator):
+def test_sign_tx_delegate_staking(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
     h = 1 << 31
