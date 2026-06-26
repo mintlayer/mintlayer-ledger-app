@@ -69,8 +69,8 @@ The application returns standard Ledger status words as well as app-specific and
 | 0xB000 | `TxDisplayFail`                | Transaction display failed                     |
 | 0xB001 | `TxLockTimeInvalid`            | Transaction lock time value is invalid         |
 | 0xB002 | `TxWrongLength`                | Transaction wrong length                       |
-| 0xB003 | `TxHashFail`                   | Transaction hashing failed                     |
-| 0xB004 | `TxAddressFail`                | Transaction address failed                     |
+| 0xB003 | `HashFail`                     | Hashing failed                                 |
+| 0xB004 | `AddressEncodingFail`          | Address encoding failed                        |
 | 0xB005 | `WrongInstruction`             | Different instruction than expected            |
 | 0xB006 | `KeyDeriveFail`                | Key derivation failed                          |
 | 0xB007 | `OrdersV0NotSupported`         | Orders V0 not supported                        |

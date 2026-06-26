@@ -19,6 +19,7 @@ image = "0.25.8"
 ledger_device_sdk = "1.35.1"
 ledger_secure_sdk_sys = "1.16.1"
 num_enum = { version = "0.7.5", default-features = false }
+num-traits = { version = "0.2", default-features = false }
 # Note: the testmacro crate is published by Ledger and its source code comes from the `testmacro`
 # dir inside the sdk repo, i.e. https://github.com/LedgerHQ/ledger-device-rust-sdk/tree/cad196841dbd72c037cfa01bec81a4a3ae57a04e/testmacro
 # (though the published version is a bit older).

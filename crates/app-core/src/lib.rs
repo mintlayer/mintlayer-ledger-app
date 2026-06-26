@@ -33,20 +33,10 @@
 // specified above; we'll call it from our `sample_main`.
 #![reexport_test_harness_main = "test_main"]
 
-mod app_ui {
-    pub mod address;
-    pub mod menu;
-    pub mod sign;
-    pub mod utils;
-}
-mod handlers {
-    pub mod get_public_key;
-    pub mod sign_message;
-    pub mod sign_tx;
-    pub mod utils;
-}
-
+mod app_ui;
 mod errors;
+mod handlers;
+mod hasher;
 #[cfg(test)]
 mod testing;
 mod utils;

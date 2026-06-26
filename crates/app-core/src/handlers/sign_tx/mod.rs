@@ -19,14 +19,13 @@ use alloc::{boxed::Box, vec::Vec};
 
 use ledger_device_sdk::{
     ecc::{Secp256k1, SeedDerive},
-    hash::{blake2::Blake2b_512, HashInit},
     nbgl::{NbglSpinner, NbglStreamingReview},
 };
 
 use mintlayer_messages::{
-    encode_as_compact, encode_to, Encode, InputAddressPath, Response, SignTxNextReq,
-    SignTxStartReq, Signature, TransactionVersion, TxInputCommitmentData, TxInputData,
-    TxInputSignatureResponse, TxOutputData, H256,
+    encode_as_compact_to, encode_to, InputAddressPath, Response, SignTxNextReq, SignTxStartReq,
+    Signature, TransactionVersion, TxInputCommitmentData, TxInputData, TxInputSignatureResponse,
+    TxOutputData, H256,
 };
 
 use crate::{
@@ -34,7 +33,8 @@ use crate::{
         ui_approve_streaming_review, ui_new_streaming_review, ui_start_streaming_review,
         ui_streaming_review_show_input, ui_streaming_review_show_output,
     },
-    handlers::{sign_message::schnorr_sign, utils::mintlayer_hash},
+    handlers::sign_message::schnorr_sign,
+    hasher::Hasher,
     mlcp,
     utils::{check_derivation_path_for_tx_signing, CompressedDerivationPathForTxSigning},
     DataContext, StatusWord,
@@ -82,13 +82,13 @@ pub struct TxMetadata {
 pub struct TxInputsProcessingContext {
     metadata: TxMetadata,
 
-    tx_hasher: Blake2b_512,
+    tx_hasher: Hasher,
 
     // Note: input commitments have to be sent together with the inputs, because they contain
     // the actual amounts that the inputs consume. But they can't be put into the transaction hasher
     // until all inputs have been processed, so they'll have to be sent again via a separate pass.
     // We hash the commitments to ensure that the same ones are sent during both passes.
-    input_commitments_hasher: Blake2b_512,
+    input_commitments_hasher: Hasher,
 
     summary: TxSummaryCollector,
     sig_targets: Vec<SigTarget>,
@@ -110,19 +110,15 @@ impl TxInputsProcessingContext {
 
             // Update hash for input commitments and proceed with outputs
             self.tx_hasher
-                .update(&self.metadata.num_inputs.to_le_bytes())
-                .map_err(|_| StatusWord::TxHashFail)?;
+                .update(&self.metadata.num_inputs.to_le_bytes());
 
-            let mut input_commitments_hash: [u8; 64] = [0u8; 64];
-            self.input_commitments_hasher
-                .finalize(&mut input_commitments_hash)
-                .map_err(|_| StatusWord::TxHashFail)?;
+            let input_commitments_hash = self.input_commitments_hasher.finalize()?;
 
             Ok(TxProcessingContext::ProcessingInputCommitments(Box::new(
                 TxInputCommitmentsProcessingContext {
                     metadata: self.metadata,
                     tx_hasher: self.tx_hasher,
-                    input_commitments_hasher: Blake2b_512::new(),
+                    input_commitments_hasher: Hasher::new(),
                     expected_input_commitments_hash: input_commitments_hash,
                     summary: self.summary,
                     sig_targets: self.sig_targets,
@@ -139,9 +135,9 @@ impl TxInputsProcessingContext {
 pub struct TxInputCommitmentsProcessingContext {
     metadata: TxMetadata,
 
-    tx_hasher: Blake2b_512,
-    input_commitments_hasher: Blake2b_512,
-    expected_input_commitments_hash: [u8; 64],
+    tx_hasher: Hasher,
+    input_commitments_hasher: Hasher,
+    expected_input_commitments_hash: H256,
 
     summary: TxSummaryCollector,
     sig_targets: Vec<SigTarget>,
@@ -160,10 +156,7 @@ impl TxInputCommitmentsProcessingContext {
 
         if finished_with_inputs {
             // Make sure the hashes match before continuing with the outputs
-            let mut input_commitments_hash: [u8; 64] = [0u8; 64];
-            self.input_commitments_hasher
-                .finalize(&mut input_commitments_hash)
-                .map_err(|_| StatusWord::TxHashFail)?;
+            let input_commitments_hash = self.input_commitments_hasher.finalize()?;
 
             if input_commitments_hash != self.expected_input_commitments_hash {
                 return Err(StatusWord::DifferentInputCommitmentHash);
@@ -179,9 +172,8 @@ impl TxInputCommitmentsProcessingContext {
                 }
             }
 
-            self.tx_hasher
-                .update(&encode_as_compact(self.metadata.num_outputs))
-                .map_err(|_| StatusWord::TxHashFail)?;
+            encode_as_compact_to(self.metadata.num_outputs, &mut self.tx_hasher);
+
             if self.metadata.num_outputs > 0 {
                 let new_context =
                     TxProcessingContext::ProcessingOutputs(Box::new(TxOutputsProcessingContext {
@@ -213,7 +205,7 @@ impl TxInputCommitmentsProcessingContext {
 pub struct TxOutputsProcessingContext {
     metadata: TxMetadata,
 
-    tx_hasher: Blake2b_512,
+    tx_hasher: Hasher,
 
     summary: TxSummaryCollector,
     sig_targets: Vec<SigTarget>,
@@ -254,7 +246,7 @@ impl TxOutputsProcessingContext {
 
 fn switch_to_signing(
     review: &NbglStreamingReview,
-    mut tx_hasher: Blake2b_512,
+    tx_hasher: Hasher,
     summary: TxSummaryCollector,
     metadata: TxMetadata,
     sig_targets: Vec<SigTarget>,
@@ -262,12 +254,8 @@ fn switch_to_signing(
 ) -> Result<TxProcessingContext, StatusWord> {
     if ui_approve_streaming_review(review, &summary, metadata.coin)? {
         // Finalize the tx hash for signing
-        let mut message_hash: [u8; 64] = [0u8; 64];
-        tx_hasher
-            .finalize(&mut message_hash)
-            .map_err(|_| StatusWord::TxHashFail)?;
-
-        let tx_hash = mintlayer_hash(&message_hash[0..32])?;
+        let first_hash = tx_hasher.finalize()?;
+        let tx_hash = Hasher::hash(first_hash.as_bytes())?;
 
         Ok(TxProcessingContext::Signing(Box::new(TxSigningContext {
             metadata,
@@ -351,23 +339,15 @@ impl TxProcessingContext {
                 const VERSION_1: u8 = 1;
                 const SIG_HASH_TYPE_ALL: u8 = 1;
 
-                let mut tx_hasher = Blake2b_512::new();
+                let mut tx_hasher = Hasher::new();
                 // mode
-                tx_hasher
-                    .update(&[SIG_HASH_TYPE_ALL])
-                    .map_err(|_| StatusWord::TxHashFail)?;
+                tx_hasher.update(&[SIG_HASH_TYPE_ALL]);
                 // version
-                tx_hasher
-                    .update(&[VERSION_1])
-                    .map_err(|_| StatusWord::TxHashFail)?;
+                tx_hasher.update(&[VERSION_1]);
                 // flags
-                tx_hasher
-                    .update(&[0; 16])
-                    .map_err(|_| StatusWord::TxHashFail)?;
+                tx_hasher.update(&[0; 16]);
 
-                tx_hasher
-                    .update(&num_inputs.to_le_bytes())
-                    .map_err(|_| StatusWord::TxHashFail)?;
+                tx_hasher.update(&num_inputs.to_le_bytes());
 
                 Ok(Self::ProcessingInputs(Box::new(
                     TxInputsProcessingContext {
@@ -380,7 +360,7 @@ impl TxProcessingContext {
                         spinner: NbglSpinner::new(),
                         summary: TxSummaryCollector::new(),
                         num_inputs_parsed: 0,
-                        input_commitments_hasher: Blake2b_512::new(),
+                        input_commitments_hasher: Hasher::new(),
                         sig_targets: Vec::new(),
                     },
                 )))
@@ -443,8 +423,8 @@ fn handle_input(
     ctx.summary.process_input(&input_data.input)?;
 
     let (input, commitment) = input_data.input.into_input_and_commitment();
-    update_hash(&commitment, &mut ctx.input_commitments_hasher)?;
-    update_hash(&input, &mut ctx.tx_hasher)?;
+    encode_to(&commitment, &mut ctx.input_commitments_hasher);
+    encode_to(&input, &mut ctx.tx_hasher);
     ctx.advance_next_input_step()
 }
 
@@ -453,8 +433,8 @@ fn handle_input_commitment(
     mut ctx: Box<TxInputCommitmentsProcessingContext>,
     review: &NbglStreamingReview,
 ) -> Result<TxProcessingContext, StatusWord> {
-    update_hash(&comm_data.commitment, &mut ctx.input_commitments_hasher)?;
-    update_hash(&comm_data.commitment, &mut ctx.tx_hasher)?;
+    encode_to(&comm_data.commitment, &mut ctx.input_commitments_hasher);
+    encode_to(&comm_data.commitment, &mut ctx.tx_hasher);
     ctx.advance_next_input_additional_info_step(review)
 }
 
@@ -465,7 +445,7 @@ fn handle_output(
 ) -> Result<TxProcessingContext, StatusWord> {
     if ui_streaming_review_show_output(review, &output_data.output, ctx.metadata.coin)? {
         ctx.summary.process_output(&output_data.output)?;
-        update_hash(&output_data.output, &mut ctx.tx_hasher)?;
+        encode_to(&output_data.output, &mut ctx.tx_hasher);
         ctx.advance_next_output_state(review)
     } else {
         Err(StatusWord::Deny)
@@ -504,15 +484,4 @@ pub fn handle_sign_tx(
         }
         _ => Err(StatusWord::WrongContext),
     }
-}
-
-// FIXME: this function is sometimes called twice in a row; re-use the buffer in such a case
-// instead of reallocating it.
-fn update_hash<T: Encode>(data: &T, hasher: &mut Blake2b_512) -> Result<(), StatusWord> {
-    let mut buf = Vec::<u8>::new();
-    encode_to(data, &mut buf);
-    hasher
-        .update(buf.as_slice())
-        .map_err(|_| StatusWord::TxHashFail)?;
-    Ok(())
 }

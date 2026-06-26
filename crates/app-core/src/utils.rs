@@ -82,3 +82,19 @@ impl CompressedDerivationPathForTxSigning {
         ]
     }
 }
+
+/// Cut an array of Copy types to a smaller size.
+///
+/// Fail at compile time if the destination size is bigger than the original.
+pub fn cut_array<T, const ORIG_SIZE: usize, const DEST_SIZE: usize>(
+    orig: &[T; ORIG_SIZE],
+) -> [T; DEST_SIZE]
+where
+    T: Default + Copy,
+{
+    const { assert!(DEST_SIZE <= ORIG_SIZE) };
+
+    let mut result = [T::default(); DEST_SIZE];
+    result.copy_from_slice(&orig[..DEST_SIZE]);
+    result
+}

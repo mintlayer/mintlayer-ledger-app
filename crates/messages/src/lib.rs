@@ -39,7 +39,7 @@ use mintlayer_core_primitives as mlcp;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use parity_scale_codec::{Decode, DecodeAll};
 
-pub use parity_scale_codec::Encode;
+pub use parity_scale_codec::{self, Encode};
 
 pub use mlcp::{
     AccountCommand, AccountNonce, AccountOutPoint, AccountSpending, Amount, BlockHeight,
@@ -382,16 +382,39 @@ pub fn encode<T: Encode>(t: T) -> Vec<u8> {
     t.encode()
 }
 
-pub fn encode_to<T: Encode>(t: T, buf: &mut Vec<u8>) {
-    t.encode_to(buf)
+pub fn encode_to<T, O>(t: T, output: &mut O)
+where
+    T: Encode,
+    O: parity_scale_codec::Output,
+{
+    t.encode_to(output)
+}
+
+pub fn encode_as_compact<N>(num: N) -> Vec<u8>
+where
+    // Note: without the Num bound, if N is a reference, the compilation would fail with
+    // "overflow evaluating the requirement `for<'b> CompactRef<'b, _>: Encode`".
+    // With the bound, the error is much clearer.
+    N: num_traits::Num,
+    N: parity_scale_codec::HasCompact,
+    <N as parity_scale_codec::HasCompact>::Type: Encode,
+{
+    <N as parity_scale_codec::HasCompact>::Type::from(num).encode()
+}
+
+pub fn encode_as_compact_to<N, O>(num: N, output: &mut O)
+where
+    // Same note as in encode_as_compact.
+    N: num_traits::Num,
+    N: parity_scale_codec::HasCompact,
+    <N as parity_scale_codec::HasCompact>::Type: Encode,
+    O: parity_scale_codec::Output,
+{
+    <N as parity_scale_codec::HasCompact>::Type::from(num).encode_to(output)
 }
 
 pub fn decode_all<T: Decode>(mut bytes: &[u8]) -> Option<T> {
     T::decode_all(&mut bytes).ok()
-}
-
-pub fn encode_as_compact(num: u32) -> Vec<u8> {
-    parity_scale_codec::Compact::<u32>::encode(&num.into())
 }
 
 /// This represents an APDU used in communication with Mintlayer Ledger app.
@@ -502,10 +525,10 @@ pub enum StatusWord {
     TxLockTimeInvalid = 0xB001,
     #[display("Transaction wrong length")]
     TxWrongLength = 0xB002,
-    #[display("Transaction hashing failed")]
-    TxHashFail = 0xB003,
-    #[display("Transaction address failed")]
-    TxAddressFail = 0xB004,
+    #[display("Hashing failed")]
+    HashFail = 0xB003,
+    #[display("Address encoding failed")]
+    AddressEncodingFail = 0xB004,
     #[display("Different instruction than expected")]
     WrongInstruction = 0xB005,
     #[display("Key derivation failed")]

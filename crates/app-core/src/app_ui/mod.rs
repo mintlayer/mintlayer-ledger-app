@@ -15,18 +15,7 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use crate::StatusWord;
-
-use mintlayer_messages::H256;
-
-use ledger_device_sdk::hash::{blake2::Blake2b_512, HashInit};
-
-pub fn mintlayer_hash(data: &[u8]) -> Result<H256, StatusWord> {
-    let mut hasher = Blake2b_512::new();
-    let mut message_hash: [u8; 64] = [0u8; 64];
-    hasher
-        .hash(data, &mut message_hash)
-        .map_err(|_| StatusWord::TxHashFail)?;
-
-    Ok(H256::from_slice(&message_hash[..32]))
-}
+pub mod address;
+pub mod menu;
+pub mod sign;
+pub mod utils;

@@ -25,8 +25,8 @@ use mintlayer_messages::{
 };
 
 use crate::{
-    app_ui::sign::ui_display_message, errors::cx_err_to_status, handlers::utils::mintlayer_hash,
-    mlcp, DataContext, StatusWord,
+    app_ui::sign::ui_display_message, errors::cx_err_to_status, hasher::Hasher, mlcp, DataContext,
+    StatusWord,
 };
 
 pub struct SignMessageContext {
@@ -92,8 +92,8 @@ fn compute_signature<const N: usize>(
         .copied()
         .collect::<Vec<_>>();
 
-    let message_hash = mintlayer_hash(&message)?;
-    let message_hash2 = mintlayer_hash(message_hash.as_bytes())?;
+    let message_hash = Hasher::hash(&message)?;
+    let message_hash2 = Hasher::hash(message_hash.as_bytes())?;
 
     let sig = schnorr_sign(private_key, message_hash2.as_bytes())?;
 
