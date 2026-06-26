@@ -308,6 +308,14 @@ fn format_lock(lock: &OutputTimeLock) -> Result<String, StatusWord> {
 /// # Returns
 /// A FormattedOutput containing the title and value of the output.
 fn format_output(output: &TxOutput, coin: mlcp::CoinType) -> Result<FormattedOutput, StatusWord> {
+    // Note: on nanox and nanosp the screen space is very limited. Moreover, if the name part of
+    // a field doesn't fit into one line, it will be shrunk instead of being wrapped to the next
+    // line, which will make it incomprehensible.
+    // The limit is about 11-12 characters (e.g. "Chg token auth" is already too long and becomes
+    // "Chg to...th").
+    // So, choose names carefully and always check the screen snapshots after they're regenerated.
+    // Same for inputs.
+
     let (name, value) = match output {
         TxOutput::Transfer(value, destination) => (
             "Transfer",
@@ -486,7 +494,7 @@ fn format_input(input: &InputCommand, coin: mlcp::CoinType) -> Result<FormattedO
                     format_amount(*amount, coin)
                 );
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                    ("Del Wdrwl", address_short)
+                    ("Deleg wdrwl", address_short)
                 } else {
                     ("Delegation withdrawal", address_short)
                 }
@@ -549,7 +557,7 @@ fn format_input(input: &InputCommand, coin: mlcp::CoinType) -> Result<FormattedO
                     to_address(new_authority, coin)?
                 );
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                    ("Chg token auth", address_short)
+                    ("Chg tkn auth", address_short)
                 } else {
                     ("Change token authority", address_short)
                 }
@@ -561,7 +569,7 @@ fn format_input(input: &InputCommand, coin: mlcp::CoinType) -> Result<FormattedO
                     String::from_utf8_lossy(new_metadata_uri)
                 );
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                    ("Chg token meta", address_short)
+                    ("Chg tkn meta", address_short)
                 } else {
                     ("Change token metadata URI", address_short)
                 }
@@ -591,9 +599,6 @@ fn format_input(input: &InputCommand, coin: mlcp::CoinType) -> Result<FormattedO
                     "Order ID: {}",
                     id_to_address(order_id.hash(), coin.order_id_address_prefix())?
                 );
-                // FIXME: here and in other places above - the contracted forms should be consistent,
-                // e.g. if we use "ord" in one place then use it in all other places. And also use "tkn"
-                // for tokens. Etc.
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
                     ("Conclude ord", address_short)
                 } else {
