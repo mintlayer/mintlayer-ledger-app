@@ -19,8 +19,14 @@
 
 // FIXME: need tests that ensure encoding stability - encode a certain message or a message part and
 // expect concrete bytes, decode it back, expect the same object.
-// FIXME: types from mintlayer core primitives should not be part of the protocol (though need to
-// check the resulting binary size after switching to separate types in the protocol).
+
+// FIXME: types from mintlayer core primitives should probably not be used as part of the protocol
+// (but note that this will increase the size of the binary slightly - a test attempt at using distinct
+// types increased the binary from ~100Kb to ~106Kb).
+// Alternatively, we may want to keep some basic mlcp types in the protocol (the primitives that
+// won't ever change). Though note that we'll have to have a separate type for Destination if we
+// want to be able to detect change addresses, so all types that contain Destination will have to
+// be distinct as well.
 
 // Required for using String, Vec, format!...
 extern crate alloc;

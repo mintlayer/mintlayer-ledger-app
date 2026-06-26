@@ -271,12 +271,12 @@ impl AppContext {
 pub fn mintlayer_main() {
     let mut comm = Comm::new().set_expected_cla(APDU_CLASS);
 
-    let mut tx_ctx = AppContext::new(); // FIXME: it's not "tx_ctx".
+    let mut app_ctx = AppContext::new();
 
     // Initialize reference to Comm instance for NBGL API calls.
     init_comm(&mut comm);
-    tx_ctx.home = ui_menu_main();
-    tx_ctx.home.show_and_return();
+    app_ctx.home = ui_menu_main();
+    app_ctx.home.show_and_return();
 
     let mut transport = ApduTransport::default();
 
@@ -303,7 +303,7 @@ pub fn mintlayer_main() {
             }
         };
 
-        let status = match handle_command(&command, &mut tx_ctx) {
+        let status = match handle_command(&command, &mut app_ctx) {
             Ok(response) => {
                 comm.append(&encode(response));
                 comm.reply_ok();
@@ -315,7 +315,7 @@ pub fn mintlayer_main() {
             }
         };
 
-        show_status_and_home_if_needed(&command, &mut tx_ctx, status);
+        show_status_and_home_if_needed(&command, &mut app_ctx, status);
     }
 }
 

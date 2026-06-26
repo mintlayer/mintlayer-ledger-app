@@ -44,9 +44,8 @@ mod summary_collector;
 
 pub use summary_collector::{CoinOrTokenId, InputCommand, TxSummaryCollector, TxType};
 
-// FIXME: usize is already 32-bit.
-// we try to save a few bytes instead of using usize for indexes,
-// u32 is enough to cover max possible number of inputs and outputs
+// u32 is enough to cover max possible number of inputs and outputs (note that usize is also
+// 32-bit on this platform, but we want to be specific about size)
 type Index = u32;
 
 pub struct InputCompressed {
@@ -95,6 +94,44 @@ pub struct TxParsingInputsContext {
     spinner: NbglSpinner,
 
     num_inputs_parsed: Index,
+}
+
+impl TxParsingInputsContext {
+    fn advance_next_input_step(mut self: Box<Self>) -> Result<TxParsingContext, StatusWord> {
+        self.num_inputs_parsed += 1;
+        let finished_with_inputs = self.num_inputs_parsed >= self.metadata.num_inputs;
+
+        if finished_with_inputs {
+            if self.inputs.is_empty() {
+                return Err(StatusWord::NothingToSign);
+            }
+
+            // Update hash for input commitments and proceed with outputs
+            self.tx_hasher
+                .update(&self.metadata.num_inputs.to_le_bytes())
+                .map_err(|_| StatusWord::TxHashFail)?;
+
+            let mut input_commitments_hash: [u8; 64] = [0u8; 64];
+            self.input_commitments_hasher
+                .finalize(&mut input_commitments_hash)
+                .map_err(|_| StatusWord::TxHashFail)?;
+
+            Ok(TxParsingContext::ParsingInputCommitments(Box::new(
+                TxParsingInputCommitmentsContext {
+                    metadata: self.metadata,
+                    tx_hasher: self.tx_hasher,
+                    input_commitments_hasher: Blake2b_512::new(),
+                    expected_input_commitments_hash: input_commitments_hash,
+                    summary: self.summary,
+                    inputs: self.inputs,
+                    spinner: self.spinner,
+                    num_inputs_parsed: 0,
+                },
+            )))
+        } else {
+            Ok(TxParsingContext::ParsingInputs(self))
+        }
+    }
 }
 
 pub struct TxParsingInputCommitmentsContext {
@@ -167,44 +204,6 @@ impl TxParsingInputCommitmentsContext {
         } else {
             self.num_inputs_parsed += 1;
             Ok(TxParsingContext::ParsingInputCommitments(self))
-        }
-    }
-}
-
-impl TxParsingInputsContext {
-    fn advance_next_input_step(mut self: Box<Self>) -> Result<TxParsingContext, StatusWord> {
-        self.num_inputs_parsed += 1;
-        let finished_with_inputs = self.num_inputs_parsed >= self.metadata.num_inputs;
-
-        if finished_with_inputs {
-            if self.inputs.is_empty() {
-                return Err(StatusWord::NothingToSign);
-            }
-
-            // Update hash for input commitments and proceed with outputs
-            self.tx_hasher
-                .update(&self.metadata.num_inputs.to_le_bytes())
-                .map_err(|_| StatusWord::TxHashFail)?;
-
-            let mut input_commitments_hash: [u8; 64] = [0u8; 64];
-            self.input_commitments_hasher
-                .finalize(&mut input_commitments_hash)
-                .map_err(|_| StatusWord::TxHashFail)?;
-
-            Ok(TxParsingContext::ParsingInputCommitments(Box::new(
-                TxParsingInputCommitmentsContext {
-                    metadata: self.metadata,
-                    tx_hasher: self.tx_hasher,
-                    input_commitments_hasher: Blake2b_512::new(),
-                    expected_input_commitments_hash: input_commitments_hash,
-                    summary: self.summary,
-                    inputs: self.inputs,
-                    spinner: self.spinner,
-                    num_inputs_parsed: 0,
-                },
-            )))
-        } else {
-            Ok(TxParsingContext::ParsingInputs(self))
         }
     }
 }
