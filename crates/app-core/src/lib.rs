@@ -73,7 +73,7 @@ use self::{
     handlers::{
         get_public_key::handle_get_public_key,
         sign_message::{handle_sign_message, setup_sign_message, SignMessageContext},
-        sign_tx::{handle_sign_tx, setup_sign_tx, TxParsingContext},
+        sign_tx::{handle_sign_tx, setup_sign_tx, TxProcessingContext},
     },
 };
 
@@ -243,7 +243,7 @@ fn show_status_and_home_if_needed(cmd: &Command, ctx: &mut AppContext, status: S
 }
 
 pub enum DataContext {
-    TxContext(TxParsingContext, NbglStreamingReview),
+    TxContext(TxProcessingContext, NbglStreamingReview),
     SignMessageContext(SignMessageContext),
 }
 
