@@ -1172,7 +1172,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     order_id = bytes([0] * 32)
     account_input = {
         "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
+            "addresses": [], # FillOrder input must not be signed
             "input": {
                 "OrderAccountCommand": [
                     {

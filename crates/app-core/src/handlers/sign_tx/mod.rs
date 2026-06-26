@@ -23,9 +23,9 @@ use ledger_device_sdk::{
 };
 
 use mintlayer_messages::{
-    encode_as_compact_to, encode_to, InputAddressPath, Response, SignTxNextReq, SignTxStartReq,
-    Signature, TransactionVersion, TxInputCommitmentData, TxInputData, TxInputSignatureResponse,
-    TxOutputData, H256,
+    encode_as_compact_to, encode_to, InputAddressPath, OrderAccountCommand, Response,
+    SignTxNextReq, SignTxStartReq, Signature, TransactionVersion, TxInputCommitmentData,
+    TxInputData, TxInputSignatureResponse, TxInputWithAdditionalInfo, TxOutputData, H256,
 };
 
 use crate::{
@@ -412,6 +412,14 @@ fn handle_input(
     input_data: Box<TxInputData>,
     mut ctx: Box<TxInputsProcessingContext>,
 ) -> Result<TxProcessingContext, StatusWord> {
+    // FillOrder inputs are pseudo-inputs that should not be signed; if the host requests
+    // a signature in such a case, it is doing something wrong, so we reject it.
+    // Note that we only check for V1 orders here, since V0 are not supported by the app
+    // (see StatusWord::OrdersV0NotSupported).
+    if is_v1_fill_order_input(&input_data.input) && !input_data.addresses.is_empty() {
+        return Err(StatusWord::FillOrderSigRequested);
+    }
+
     let num_inputs_parsed = ctx.num_inputs_parsed;
     let sig_targets = input_data
         .addresses
@@ -426,6 +434,18 @@ fn handle_input(
     encode_to(&commitment, &mut ctx.input_commitments_hasher);
     encode_to(&input, &mut ctx.tx_hasher);
     ctx.advance_next_input_step()
+}
+
+fn is_v1_fill_order_input(input: &TxInputWithAdditionalInfo) -> bool {
+    match input {
+        TxInputWithAdditionalInfo::OrderAccountCommand(cmd, _) => match cmd {
+            OrderAccountCommand::FillOrder(_, _) => true,
+            OrderAccountCommand::FreezeOrder(_) | OrderAccountCommand::ConcludeOrder(_) => false,
+        },
+        TxInputWithAdditionalInfo::Utxo(_, _)
+        | TxInputWithAdditionalInfo::Account(_)
+        | TxInputWithAdditionalInfo::AccountCommand(_, _) => false,
+    }
 }
 
 fn handle_input_commitment(

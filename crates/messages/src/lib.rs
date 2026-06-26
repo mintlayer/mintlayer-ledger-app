@@ -167,9 +167,6 @@ pub enum SignTxNextReq {
 //    and input 1 with key A; in such a case the signature 0 will be valid for input 1 and vice versa.
 //    This does not allow the host to change the reviewed transaction, but it means that the app must
 //    not promise the user that a particular input was signed by the key specified in `addresses`.
-// FIXME: mention this in the docs?
-// FIXME: explicitly check that signatures are not requested for fill order inputs? (probably
-// redundant, given the second note above).
 #[derive(Encode, Decode)]
 pub struct TxInputData {
     pub addresses: Vec<InputAddressPath>,
@@ -561,6 +558,8 @@ pub enum StatusWord {
     DifferentInputCommitmentHash = 0xB013,
     #[display("Invalid timestamp")]
     InvalidTimestamp = 0xB014,
+    #[display("Signature for FillOrder input requested")]
+    FillOrderSigRequested = 0xB015,
 
     // Ecc Errors
     #[display("ECC Carry")]
