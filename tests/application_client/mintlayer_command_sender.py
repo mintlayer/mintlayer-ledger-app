@@ -355,7 +355,12 @@ def sign_tx_review(
     has_command_input = review_transaction.has_command_input
     review_custom_screen_text = review_transaction.review_custom_screen_text
 
+    # The snapshot index (used to make its name) and the amount by which it should be increased
+    # after each step. The increase should be large enough, so that snapshots from later steps
+    # don't overwrite the previous ones (10 is not enough).
     start_idx = 0
+    idx_inc = 100
+
     if not device.is_nano:
         instruction = NavInsID.SWIPE_CENTER_TO_LEFT
     else:
@@ -374,7 +379,7 @@ def sign_tx_review(
                 screen_change_after_last_instruction=False,
                 snap_start_idx=start_idx,
             )
-            start_idx += 10
+            start_idx += idx_inc
 
             if has_command_input:
                 if device.is_nano:
@@ -397,7 +402,7 @@ def sign_tx_review(
                         screen_change_after_last_instruction=False,
                         snap_start_idx=start_idx,
                     )
-                start_idx += 10
+                start_idx += idx_inc
 
         if step.kind == "output":
             if device.is_nano:
@@ -420,7 +425,7 @@ def sign_tx_review(
                     screen_change_after_last_instruction=False,
                     snap_start_idx=start_idx,
                 )
-            start_idx += 10
+            start_idx += idx_inc
 
         elif step.kind == "sign":
             scenario = NavigationScenarioData(
@@ -447,7 +452,7 @@ def sign_tx_review(
                 screen_change_after_last_instruction=False,
                 snap_start_idx=start_idx,
             )
-            start_idx += 10
+            start_idx += idx_inc
 
     # After review approval, explicitly request every signature.
     signatures = client.get_all_signatures(transaction)
