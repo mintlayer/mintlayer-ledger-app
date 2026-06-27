@@ -1,6 +1,6 @@
-import scalecodec  # type: ignore
 from dataclasses import dataclass
 from typing import List, Optional
+import scalecodec  # type: ignore
 
 sign_tx_start_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
     "SignTxStartReq"
@@ -19,16 +19,16 @@ class TxInputSignatureResponse:
 
     @staticmethod
     def from_data(response: bytes):
-        response = decode_response_variant(response, "TxInputSignature")
+        decoded_response = decode_response_variant(response, "TxInputSignature")
 
-        signature = bytes.fromhex(response["signature"][2:])
+        signature = bytes.fromhex(decoded_response["signature"][2:])
         assert len(signature) == 64
 
         return TxInputSignatureResponse(
             signature=signature,
-            input_idx=response["input_idx"],
-            multisig_idx=response["multisig_idx"],
-            has_next=response["has_next"],
+            input_idx=decoded_response["input_idx"],
+            multisig_idx=decoded_response["multisig_idx"],
+            has_next=decoded_response["has_next"],
         )
 
 
@@ -68,11 +68,11 @@ class Transaction:
 
     def expected_sig_indices(self) -> set[TxInputSignatureIndices]:
         result = set()
-        for input_idx, input in enumerate(self.inputs):
-            input_data = input.get("ProcessInput")
+        for input_idx, inp in enumerate(self.inputs):
+            input_data = inp.get("ProcessInput")
             assert (
                 input_data is not None
-            ), f"Transaction input is not a ProcessInput request: {input!r}"
+            ), f"Transaction input is not a ProcessInput request: {inp!r}"
 
             for addr in input_data["addresses"]:
                 multisig_idx = addr["multisig_idx"]
@@ -85,7 +85,7 @@ class Transaction:
         return result
 
 
-def decode_response(response: bytes):
+def decode_response(response: bytes) -> dict:
     response_bytes = scalecodec.base.ScaleBytes(response)
     response_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
         "Response", data=response_bytes
@@ -93,13 +93,13 @@ def decode_response(response: bytes):
     return response_obj.decode()
 
 
-def decode_response_variant(response: bytes, expected_variant: str):
-    response = decode_response(response)
+def decode_response_variant(response: bytes, expected_variant: str) -> dict:
+    decoded_response = decode_response(response)
 
     assert (
-        isinstance(response, dict)
-        and len(response) == 1
-        and expected_variant in response
-    ), f"Expecting a dict with a single key '{expected_variant}', but got: {response!r}"
+        isinstance(decoded_response, dict)
+        and len(decoded_response) == 1
+        and expected_variant in decoded_response
+    ), f"Expecting a dict with a single key '{expected_variant}', but got: {decoded_response!r}"
 
-    return response[expected_variant]
+    return decoded_response[expected_variant]

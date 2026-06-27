@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Generator, List, Optional
+from typing import Generator, List
 
 import scalecodec  # type: ignore
 from ragger.backend.interface import RAPDU, BackendInterface
@@ -126,8 +126,8 @@ class MintlayerCommandSender:
             p1=GetPublicKeyP1.P1_CONFIRM,
             p2=P2.P2_LAST,
             data=data,
-        ) as response:
-            yield response
+        ):
+            yield
 
     @contextmanager
     def sign_message(
@@ -166,8 +166,8 @@ class MintlayerCommandSender:
             p1=SignMessageP1.P1_NEXT,
             p2=P2.P2_LAST,
             data=chunks[-1],
-        ) as response:
-            yield response
+        ):
+            yield
 
     def sign_tx(self, transaction: Transaction) -> Generator[SignTxStep, None, None]:
         # ---- Start req ----
@@ -291,8 +291,10 @@ class MintlayerCommandSender:
         )
         return decode_response_variant(response.data, expected_last_response_variant)
 
-    def get_async_response(self) -> Optional[RAPDU]:
-        return self.backend.last_async_response
+    def get_async_response(self) -> RAPDU:
+        response = self.backend.last_async_response
+        assert response is not None
+        return response
 
     def get_all_signatures(self, transaction: Transaction) -> List[TxInputSignature]:
         next_sig = sign_tx_next_req_obj.encode({"ReturnNextSignature": None}).data
@@ -314,9 +316,10 @@ class MintlayerCommandSender:
             if not res.has_next:
                 break
 
-            assert (
-                len(sigs) < expected_sigs_count
-            ), f"has_next is still true after the expected number of signatures have been received (sigs = {sigs!r})"
+            assert len(sigs) < expected_sigs_count, (
+                "has_next is still true after the expected number of signatures "
+                f"have been received (sigs = {sigs!r})"
+            )
         return sigs
 
 
@@ -344,6 +347,7 @@ def pack_derivation_path(derivation_path: str) -> bytes:
     return path_obj.encode(path).data
 
 
+# pylint: disable-next=too-many-locals,too-many-branches
 def sign_tx_review(
     client,
     device,
@@ -459,7 +463,9 @@ def sign_tx_review(
 
     # The last ReturnNextSignature is what makes the tx Finished, so the "Transaction signed"
     # status screen is expected here.
-    validation_instructions = [] if device.is_nano else [NavInsID.USE_CASE_STATUS_DISMISS]
+    validation_instructions = (
+        [] if device.is_nano else [NavInsID.USE_CASE_STATUS_DISMISS]
+    )
     navigator.navigate_until_text_and_compare(
         navigate_instruction=NavInsID.WAIT_FOR_SCREEN_CHANGE,
         validation_instructions=validation_instructions,

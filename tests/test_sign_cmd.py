@@ -1171,7 +1171,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     order_id = bytes([0] * 32)
     account_input = {
         "ProcessInput": {
-            "addresses": [], # FillOrder input must not be signed
+            "addresses": [],  # FillOrder input must not be signed
             "input": {
                 "OrderAccountCommand": [
                     {

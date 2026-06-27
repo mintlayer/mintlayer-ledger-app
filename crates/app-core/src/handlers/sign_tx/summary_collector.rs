@@ -366,12 +366,9 @@ fn into_coin_or_token_id_and_amount(
 
 #[cfg(test)]
 mod tests {
-    use crate::testing::prelude::*;
-    use crate::StatusWord;
+    use mintlayer_messages::{AdditionalOrderInfo, AdditionalUtxoInfo, TxInputWithAdditionalInfo};
 
-    use mintlayer_messages::{
-        mlcp, AdditionalOrderInfo, AdditionalUtxoInfo, TxInputWithAdditionalInfo,
-    };
+    use crate::{mlcp, testing::prelude::*, StatusWord};
 
     use super::*;
 
