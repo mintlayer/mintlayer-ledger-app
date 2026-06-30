@@ -33,7 +33,8 @@ def init_mintlayer_types():
                 "type_mapping": [
                     ["Coin", "Amount"],
                     # Note: need to have this variant to make sure TokenV1's index is 2.
-                    # FIXME: the protocol should not use types from mintlayer core primitives. # pylint: disable=fixme
+                    # TODO: the protocol should probably not use types from mintlayer core primitives.
+                    # See https://github.com/mintlayer/mintlayer-ledger-app/issues/18.
                     ["DeprecatedTokenV0", ""],
                     ["TokenV1", "(TokenId, Amount)"],
                 ],

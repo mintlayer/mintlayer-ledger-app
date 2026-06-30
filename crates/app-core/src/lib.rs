@@ -308,14 +308,16 @@ pub fn mintlayer_main() {
     }
 }
 
-// FIXME:
+// TODO:
 // 1) On all errors, the context should probably be reset.
-// 2) The simple `ctx.data_context = None` doesn't seem to reset the UI and `show_status_and_home_if_needed`
+// 2) Note that the simple `ctx.data_context = None` doesn't reset the UI, while `show_status_and_home_if_needed`
 //    doesn't reset the UI on any error.
+// See https://github.com/mintlayer/mintlayer-ledger-app/issues/12.
+// Also see the TODO inside the function.
 fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, StatusWord> {
     match cmd {
         Command::GetPubKey { p1, data } => {
-            // FIXME: the context should be reset here, especially if `display` is true.
+            // TODO: the context should be reset here, especially if `display` is true.
             // Note that `show_status_and_home_if_needed` calls `ctx.home.show_and_return()`
             // on Pings, so:
             // a) the context should be reset on Command::Ping below as well,

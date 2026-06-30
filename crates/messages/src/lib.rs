@@ -17,16 +17,19 @@
 
 #![no_std]
 
-// FIXME: need tests that ensure encoding stability - encode a certain message or a message part and
+// TODO: need tests that ensure encoding stability - encode a certain message or a message part and
 // expect concrete bytes, decode it back, expect the same object.
+// See https://github.com/mintlayer/mintlayer-ledger-app/issues/16.
 
-// FIXME: types from mintlayer core primitives should probably not be used as part of the protocol
+// TODO: types from mintlayer core primitives should probably not be used as part of the protocol
 // (but note that this will increase the size of the binary slightly - a test attempt at using distinct
 // types increased the binary from ~100Kb to ~106Kb).
 // Alternatively, we may want to keep some basic mlcp types in the protocol (the primitives that
 // won't ever change). Though note that we'll have to have a separate type for Destination if we
 // want to be able to detect change addresses, so all types that contain Destination will have to
 // be distinct as well.
+// See https://github.com/mintlayer/mintlayer-ledger-app/issues/18.
+// Also see the TODO in `tests/application_client/__init__.py`.
 
 // Required for using String, Vec, format!...
 extern crate alloc;
@@ -178,7 +181,7 @@ pub struct TxInputCommitmentData {
     pub commitment: SighashInputCommitment,
 }
 
-// FIXME:
+// TODO:
 // 1) In order to be able to detect change outputs, there should be a way of specifying the destination
 //    via a derivation path.
 //    Note: the contents of Destination::PublicKeyHash and Destination::PublicKey should probably be
@@ -193,6 +196,7 @@ pub struct TxInputCommitmentData {
 //    omit the output from review. If the output references a change address but multiple accounts
 //    are referenced by inputs, or if the output is not a simple Transfer, then don't omit it,
 //    but mark it as change.
+// See https://github.com/mintlayer/mintlayer-ledger-app/issues/17.
 #[derive(Encode, Decode)]
 pub struct TxOutputData {
     pub output: TxOutput,

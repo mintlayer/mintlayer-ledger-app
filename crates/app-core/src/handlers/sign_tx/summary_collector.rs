@@ -80,13 +80,15 @@ impl TxSummaryCollector {
         }
     }
 
-    // FIXME:
+    // TODO:
     // 1) currently consensus only forbids multiple account commands (AccountCommand or OrderAccountCommand) per tx,
     //    but the number of account spendings is unlimited and they can co-exist with an account command;
     // 2) probably the app shouldn't try being smart and assume any number of account commands is possible, asking
     //    the user to approve them as they arrive, same as it's done for outputs;
     // 3) if the app does try to be smart, then it should fail when multiple commands are encountered, instead of
     //    silently overwriting `input_command`.
+    // See https://github.com/mintlayer/mintlayer-ledger-app/issues/14.
+    // Also see the TODO near `TxProcessingContext::show_spinner`.
     pub fn input_command(&self) -> Option<&InputCommand> {
         self.input_command.as_ref()
     }
@@ -106,8 +108,9 @@ impl TxSummaryCollector {
     pub fn fees_iter(
         &self,
     ) -> impl Iterator<Item = Result<(&CoinOrTokenId, u128), StatusWord>> + '_ {
-        // FIXME: if an asset is only present in total_outputs, this will not fail with TxFeeUnderflow,
+        // TODO: if an asset is only present in total_outputs, this will not fail with TxFeeUnderflow,
         // but it should.
+        // See https://github.com/mintlayer/mintlayer-ledger-app/issues/15.
         self.total_inputs()
             .iter()
             .map(move |(coin_or_token, amount)| {
@@ -379,7 +382,7 @@ mod tests {
         )
     }
 
-    // FIXME: these tests can be improved:
+    // TODO: these tests can be improved:
     // 1) Each test should better check everything (total inputs, total outputs, fees, tx type etc),
     //    even if it's only dealing with one aspect of the summary collector (e.g. tx outputs).
     // 2) More tests for fee calculation would be nice:
@@ -387,6 +390,7 @@ mod tests {
     //    b) cases dealing with more than once currency (both successful and not), in particular
     //       the case where one currency is only present in the total outputs but not total inputs.
     // 3) Maybe something else.
+    // See https://github.com/mintlayer/mintlayer-ledger-app/issues/15.
 
     #[test_item]
     fn test_new_and_getters() {

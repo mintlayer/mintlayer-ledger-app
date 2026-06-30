@@ -55,8 +55,9 @@ pub fn setup_sign_message(req: SignMessageStartReq) -> DataContext {
     DataContext::SignMessageContext(SignMessageContext::new(req))
 }
 
-// FIXME: implement stateful message signing, where the message is received and displayed for review
+// TODO: implement stateful message signing, where the message is received and displayed for review
 // in portions, to allow signing messages of arbitrary sizes.
+// See https://github.com/mintlayer/mintlayer-ledger-app/issues/13.
 pub fn handle_sign_message(
     message: &[u8],
     ctx: &mut SignMessageContext,

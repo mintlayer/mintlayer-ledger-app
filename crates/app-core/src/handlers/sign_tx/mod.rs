@@ -379,10 +379,14 @@ impl TxProcessingContext {
                 return;
             }
             // While parsing outputs we are showing the review and not the spinner.
-            // FIXME: inputs may need to be reviewed one by one, just like outputs, see the FIXME near
-            // TxSummaryCollector::input_command.
-            // FIXME: change outputs should be detected and not presented for review; once this is
+
+            // TODO: inputs may need to be reviewed one by one, just like outputs.
+            // See https://github.com/mintlayer/mintlayer-ledger-app/issues/14.
+            // Also see the TODO near `TxSummaryCollector::input_command`.
+
+            // TODO: change outputs should be detected and not presented for review; once this is
             // implemented, the spinner logic may need to be revised.
+            // See https://github.com/mintlayer/mintlayer-ledger-app/issues/17.
             Self::ProcessingOutputs(_) | Self::Finished => return,
         };
 

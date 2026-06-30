@@ -6,12 +6,11 @@ set -e
 set -o nounset
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-PYTHON=$(which python || which python3)
 
 cd "$SCRIPT_DIR"
 
 echo "Running codecheck.py"
-"$PYTHON" "tools/codecheck.py"
+python3 "tools/codecheck.py"
 
 # Notes about clippy:
 # 1. Ledger's guideline enforcer also runs it. But at the moment of writing this it doesn't check

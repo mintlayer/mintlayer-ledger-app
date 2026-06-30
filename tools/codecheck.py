@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import fnmatch
 import itertools
 import os
 import pathlib
@@ -48,21 +47,22 @@ LICENSE_TEMPLATE2 = [
     r" \*{77}/",
 ]
 
-COMMON_EXCLUDE_DIRS = [
-    "target",
-    ".git",
-    ".mypy_cache"
-]
+COMMON_EXCLUDE_DIRS = ["target", ".git", ".mypy_cache"]
 
 
 # List source files with the given extension. If the extension is None, list all files.
 def sources_with_extension(ext: str | None, top_dir=".", exclude=[]):
-    exclude_full_paths = [os.path.normpath(rel_path) for rel_path in COMMON_EXCLUDE_DIRS + exclude]
-    exclude_names = ['__pycache__']
+    exclude_full_paths = [
+        os.path.normpath(rel_path) for rel_path in COMMON_EXCLUDE_DIRS + exclude
+    ]
+    exclude_names = ["__pycache__"]
 
     def is_excluded(dirpath, entry_name):
-        return (entry_name in exclude_names or
-                os.path.normpath(os.path.join(dirpath, entry_name).lower()) in exclude_full_paths)
+        return (
+            entry_name in exclude_names
+            or os.path.normpath(os.path.join(dirpath, entry_name).lower())
+            in exclude_full_paths
+        )
 
     for dirpath, dirnames, filenames in os.walk(top_dir, topdown=True):
         dirnames[:] = [d for d in dirnames if not is_excluded(dirpath, d)]
@@ -73,7 +73,7 @@ def sources_with_extension(ext: str | None, top_dir=".", exclude=[]):
 
 
 # List all files
-def all_files(exclude = []):
+def all_files(exclude=[]):
     return sources_with_extension(None, exclude=exclude)
 
 
@@ -102,8 +102,7 @@ def check_local_licenses():
     print("==== Checking local license headers:")
 
     # List of files/dirs excluded from the check
-    exclude = [
-    ]
+    exclude = []
 
     template1 = re.compile("(?:" + r")\n(?:".join(LICENSE_TEMPLATE1) + ")")
     template2 = re.compile("(?:" + r")\n(?:".join(LICENSE_TEMPLATE2) + ")")
@@ -125,11 +124,17 @@ def check_todos():
     print("==== Checking TODO(PR) and FIXME instances:")
 
     # List of files/dirs excluded from the check
-    exclude = []
+    exclude = [
+        # Exclude itself
+        "tools/codecheck.py",
+    ]
 
     ok = True
     for path in itertools.chain(
-        rs_sources(exclude), cargo_config_files(exclude), py_sources(exclude), github_workflows(exclude)
+        rs_sources(exclude),
+        cargo_config_files(exclude),
+        py_sources(exclude),
+        github_workflows(exclude),
     ):
         with open(path, "r", encoding="utf-8") as file:
             file_data = file.read()
@@ -145,24 +150,24 @@ def check_todos():
 def check_trailing_whitespaces():
     print("==== Checking for trailing whitespaces:")
 
-     # List of files/dirs excluded from the check
-    exclude = [
-        'media',
-        'tests/snapshots'
-    ]
+    # List of files/dirs excluded from the check
+    exclude = ["media", "tests/snapshots"]
 
     ok = True
     for path in all_files(exclude):
-        with open(path, 'r', encoding='utf-8') as file:
+        with open(path, "r", encoding="utf-8") as file:
             try:
                 for line_idx, line in enumerate(file, start=1):
-                    line = line.rstrip('\n\r')
+                    line = line.rstrip("\n\r")
                     if line != line.rstrip():
                         ok = False
                         print(f"{path}: trailing whitespaces at line {line_idx}")
             except:
-                print(f"{path}: can't check for trailing whitespaces, "
-                      "perhaps the file should be in the 'exclude' list?")
+                ok = False
+                print(
+                    f"{path}: can't check for trailing whitespaces, "
+                    "perhaps the file should be in the 'exclude' list?"
+                )
 
     print()
     return ok
