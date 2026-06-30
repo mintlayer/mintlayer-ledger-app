@@ -32,7 +32,7 @@ The app uses **SCALE codec** (`parity_scale_codec`) for the serialization and de
 
 #### Response Wrapper
 
-On a successful command execution (returning status word `0x9000`), the app encodes the returned payload inside a top-level SCALE-encoded `Response` enum. 
+On a successful command execution (returning status word `0x9000`), the app encodes the returned payload inside a top-level SCALE-encoded `Response` enum.
 
 The SCALE representation of an enum begins with a single byte representing the variant index, followed by the encoded fields of that variant.
 
