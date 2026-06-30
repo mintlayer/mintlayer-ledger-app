@@ -24,6 +24,11 @@ PACKAGES=(mintlayer-app-core)
 for package in "${PACKAGES[@]}"; do
     echo "*** Building unit tests for $package ***"
 
+    # Build the test with normal output and without capturing it, so that build errors, if any,
+    # are visible.
+    cargo test -p "$package" --release --no-run --target="$TARGET"
+
+    # Build the test again using `--message-format=json`, to capture the name of the test executable.
     output=$(cargo test -p "$package" --release --no-run --message-format=json --target="$TARGET")
     jq_selector='select(.reason == "compiler-artifact") | select(.profile.test == true) | select(.executable != null) | .executable'
     test_exe_path=$(jq -r "$jq_selector" <<< "$output")

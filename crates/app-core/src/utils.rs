@@ -15,6 +15,9 @@
  *  limitations under the License.
  *****************************************************************************/
 
+use alloc::{borrow::Cow, format};
+use core::fmt;
+
 use mintlayer_messages::StatusWord;
 
 use crate::mlcp;
@@ -97,4 +100,112 @@ where
     let mut result = [T::default(); DEST_SIZE];
     result.copy_from_slice(&orig[..DEST_SIZE]);
     result
+}
+
+/// If `bytes` consists of only "displayable" ASCII chars, return the ASCII string directly
+/// in the borrowed form.
+/// Otherwise return hex-encode bytes as a newly allocated string.
+pub fn make_displayable_str(bytes: &[u8]) -> Cow<'_, str> {
+    if let Some(s) = as_displayable_chars(bytes) {
+        Cow::Borrowed(s)
+    } else {
+        Cow::Owned(format!("{:#x}", const_hex::display(bytes)))
+    }
+}
+
+/// This is similar to `make_displayable_str`, but instead of returning a string it returns
+/// an object that will produce the string during formatting.
+///
+/// This should be preferred to `make_displayable_str` if the result has to be passed to
+/// `format!` anyway, because it should result in fewer reallocations.
+pub fn make_displayable<'a>(bytes: &'a [u8]) -> impl fmt::Display + 'a {
+    if let Some(s) = as_displayable_chars(bytes) {
+        DisplayableMessage::Str(s)
+    } else {
+        DisplayableMessage::Hex(bytes)
+    }
+}
+
+enum DisplayableMessage<'a> {
+    Str(&'a str),
+    Hex(&'a [u8]),
+}
+
+impl<'a> fmt::Display for DisplayableMessage<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Str(s) => f.write_str(s),
+            Self::Hex(bytes) => {
+                write!(f, "{:#x}", const_hex::display(bytes))
+            }
+        }
+    }
+}
+
+fn as_displayable_chars(bytes: &[u8]) -> Option<&'_ str> {
+    let as_str = core::str::from_utf8(bytes).ok()?;
+    as_str
+        .bytes()
+        .all(|b| (0x20..=0x7E).contains(&b))
+        .then_some(as_str)
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::borrow::ToOwned as _;
+
+    use crate::testing::prelude::*;
+
+    use super::*;
+
+    #[test_item]
+    fn test_make_displayable() {
+        // ASCII displayable string.
+        {
+            let data = "qwe123".as_bytes();
+            let expected_res = "qwe123";
+
+            let res = make_displayable_str(data).to_owned();
+            assert_eq!(res, expected_res);
+
+            let res = format!("{}", make_displayable(data));
+            assert_eq!(res, expected_res);
+        }
+
+        // ASCII non-displayable string.
+        {
+            let data = "qwe\t123".as_bytes();
+            let expected_res = "0x71776509313233";
+
+            let res = make_displayable_str(data).to_owned();
+            assert_eq!(res, expected_res);
+
+            let res = format!("{}", make_displayable(data));
+            assert_eq!(res, expected_res);
+        }
+
+        // Non-ASCII string.
+        {
+            let data = "今日は".as_bytes();
+            let expected_res = "0xe4bb8ae697a5e381af";
+
+            let res = make_displayable_str(data).to_owned();
+            assert_eq!(res, expected_res);
+
+            let res = format!("{}", make_displayable(data));
+            assert_eq!(res, expected_res);
+        }
+
+        // Not a string.
+        {
+            let data = [0xAA, 0xBB, 0xCC];
+            let expected_res = "0xaabbcc";
+
+            let res = make_displayable_str(&data).to_owned();
+            assert_eq!(res, expected_res);
+
+            let res = format!("{}", make_displayable(&data));
+            assert_eq!(res, expected_res);
+        }
+    }
 }

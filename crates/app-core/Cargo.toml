@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 bech32 = { workspace = true, default-features = false, features = ["alloc"] }
 chrono = { workspace = true, default-features = false, features = ["alloc"] }
-hex = { workspace = true, default-features = false, features = ["alloc"] }
+const-hex = { workspace = true, default-features = false, features = ["alloc"] }
 ledger_device_sdk.workspace = true
 ledger_secure_sdk_sys.workspace = true
 

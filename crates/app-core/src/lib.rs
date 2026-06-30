@@ -342,6 +342,8 @@ fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, Statu
 
                 let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
 
+                // TODO: it makes sense to drop `data` right after decoding, to free the memory.
+
                 tx_ctx.show_spinner();
 
                 match handle_sign_tx(req, tx_ctx, &mut review) {

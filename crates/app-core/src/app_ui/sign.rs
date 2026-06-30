@@ -38,7 +38,9 @@ use crate::{
         bech32m_encode, compress_public_key, load_glyph, to_address, to_public_key_hash,
     },
     handlers::sign_tx::{CoinOrTokenId, InputCommand, TxSummaryCollector, TxType},
-    mlcp, StatusWord,
+    mlcp,
+    utils::{make_displayable, make_displayable_str},
+    StatusWord,
 };
 
 struct FormattedOutput {
@@ -206,10 +208,7 @@ pub fn ui_display_message<const T: char>(
     };
     let addr = to_address(&dest, coin_type)?;
 
-    let message_str = match core::str::from_utf8(message) {
-        Ok(s) if s.bytes().all(|b| (0x20..=0x7E).contains(&b)) => s.to_string(),
-        Ok(_) | Err(_) => format!("0x{}", hex::encode(message)),
-    };
+    let message_str = make_displayable_str(message);
 
     let msg_fields = [
         Field {
@@ -218,7 +217,7 @@ pub fn ui_display_message<const T: char>(
         },
         Field {
             name: "Message",
-            value: message_str.as_str(),
+            value: &message_str,
         },
     ];
 
@@ -409,8 +408,13 @@ fn format_output(output: &TxOutput, coin: mlcp::CoinType) -> Result<FormattedOut
         TxOutput::IssueFungibleToken(x) => {
             let TokenIssuance::V1(data) = x;
 
-            let ticker = String::from_utf8_lossy(data.token_ticker.as_ref());
-            let metadata_uri = String::from_utf8_lossy(data.metadata_uri.as_ref());
+            // Note: currently the consensus rules require that a token ticker can only be
+            // ascii alphanumeric, so we could just reject non-ascii tickers here.
+            // We use `make_displayable` here for simplicity and consistency.
+            let ticker = make_displayable(&data.token_ticker);
+            // Note: a metadata URI is allowed to have non-ascii chars, so `make_displayable`
+            // is not redundant here.
+            let metadata_uri = make_displayable(&data.metadata_uri);
 
             let total_supply_str = match data.total_supply {
                 TokenTotalSupply::Unlimited => "UNLIMITED".to_string(),
@@ -440,26 +444,33 @@ fn format_output(output: &TxOutput, coin: mlcp::CoinType) -> Result<FormattedOut
 
         TxOutput::IssueNft(_nft_id, data, destination) => {
             let NftIssuance::V0(data) = data;
+            // Note: consensus rules require that name, description and ticker are ascii alphanumeric.
+            // But same as in the IssueFungibleToken case, we use `make_displayable` for consistency
+            // and simplicity.
+            // Note: the URIs are allowed to have non-ascii chars, so `make_displayable` is not redundant
+            // for them.
             let address_short = format!(
-                "Name: {}\nCreator: {}\nTicker: {}\nAddress: {}\nIcon URI: {}\nAdditional metadata URI: {}\nMedia URI: {}",
-                String::from_utf8_lossy(data.name.as_ref()),
+                "Name: {}\nDescription: {}\nCreator: {}\nTicker: {}\nAddress: {}\nIcon URI: {}\nAdditional metadata URI: {}\nMedia URI: {}, Media hash: {}",
+                make_displayable(&data.name),
+                make_displayable(&data.description),
                 data.creator.clone().map(|creator| to_address(&Destination::PublicKey(creator), coin)).transpose()?.unwrap_or_default(),
-                String::from_utf8_lossy(data.ticker.as_ref()),
+                make_displayable(&data.ticker),
                 to_address(destination, coin)?,
-                String::from_utf8_lossy(data.icon_uri.as_ref()),
-                String::from_utf8_lossy(data.additional_metadata_uri.as_ref()),
-                String::from_utf8_lossy(data.media_uri.as_ref())
+                make_displayable(&data.icon_uri),
+                make_displayable(&data.additional_metadata_uri),
+                make_displayable(&data.media_uri),
+                make_displayable(&data.media_hash),
             );
 
             ("Issue NFT", address_short)
         }
 
-        TxOutput::DataDeposit(data) => ("Data deposit", hex::encode(data)),
+        TxOutput::DataDeposit(data) => ("Data deposit", const_hex::encode(data)),
 
         TxOutput::Htlc(value, data) => {
             let address_short = format!(
-                "Secret hash: {}\nSpend key: {}\nRefund key: {}\nRefund time lock: {}\n{}",
-                hex::encode(data.secret_hash.0),
+                "Secret hash: {:x}\nSpend key: {}\nRefund key: {}\nRefund time lock: {}\n{}",
+                const_hex::display(data.secret_hash.0),
                 to_address(&data.spend_key, coin)?,
                 to_address(&data.refund_key, coin)?,
                 format_lock(&data.refund_timelock)?,
@@ -566,7 +577,7 @@ fn format_input(input: &InputCommand, coin: mlcp::CoinType) -> Result<FormattedO
                 let address_short = format!(
                     "Token ID: {}\nNew metadata URI: {}",
                     id_to_address(token_id.hash(), coin.token_id_address_prefix())?,
-                    String::from_utf8_lossy(new_metadata_uri)
+                    make_displayable(new_metadata_uri)
                 );
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
                     ("Chg tkn meta", address_short)
