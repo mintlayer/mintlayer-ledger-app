@@ -51,8 +51,10 @@ impl SignMessageContext {
     }
 }
 
-pub fn setup_sign_message(req: SignMessageStartReq) -> DataContext {
-    DataContext::SignMessageContext(SignMessageContext::new(req))
+pub fn setup_sign_message(req: SignMessageStartReq) -> Result<DataContext, StatusWord> {
+    check_derivation_path(req.path.as_ref(), req.coin_type.into())?;
+
+    Ok(DataContext::SignMessageContext(SignMessageContext::new(req)))
 }
 
 // TODO: implement stateful message signing, where the message is received and displayed for review

@@ -359,7 +359,7 @@ fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, Statu
         Command::SignMessage { p1, data } => match p1 {
             SignMsgP1::Start => {
                 let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
-                ctx.data_context = Some(setup_sign_message(req));
+                ctx.data_context = Some(setup_sign_message(req)?);
                 Ok(Response::MessageSetup)
             }
             SignMsgP1::Next => {
