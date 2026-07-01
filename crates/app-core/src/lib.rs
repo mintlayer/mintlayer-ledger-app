@@ -323,6 +323,7 @@ fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, Statu
             // a) the context should be reset on Command::Ping below as well,
             // b) since a Ping resets the context, then GetPubKey should do it even if `display`
             //    is false;
+            // c) Command::SignMessage below should also reset the context when it's done.
             // In any case, it's better to put UI update (at least on success) in the same place where
             // the context is changed.
             let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;

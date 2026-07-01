@@ -1,6 +1,3 @@
-import pytest
-from ragger.navigator import NavIns, NavInsID
-
 from application_client import MAINNET
 from application_client.mintlayer_command_sender import (
     MintlayerCommandSender,
@@ -11,6 +8,12 @@ from application_client.mintlayer_response_unpacker import (
     unpack_get_public_key_response,
 )
 from application_client.mintlayer_utils import Transaction, sign_tx_next_req_obj
+
+# FIXME: missing tests:
+# * CreateOrder, DataDeposit, Burn outputs;
+# * pool decommissioning;
+# * LockTokenSupply, FreezeOrder commands;
+# * maybe something else.
 
 
 def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
@@ -101,7 +104,7 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
             "input": {
                 "Account": {
                     "nonce": 1,
-                    "account": {"Delegation": [[0] * 32, 11]},
+                    "spending": {"DelegationBalance": [[0] * 32, 11]},
                 }
             },
         }
@@ -305,7 +308,7 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
                 "CreateStakePool": [
                     [0] * 32,
                     {
-                        "value": 40000,
+                        "pledge": 40000,
                         "staker": {
                             "PublicKey": {
                                 "key": {

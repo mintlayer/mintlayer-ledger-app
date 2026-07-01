@@ -28,6 +28,7 @@ def init_mintlayer_types():
             "Amount": "Compact<u128>",
             "H256": "[u8; 32]",
             "BlockHeight": "Compact<u64>",
+            "BlockTimestamp": "Compact<u64>",
             "OutputValue": {
                 "type": "enum",
                 "type_mapping": [
@@ -50,10 +51,10 @@ def init_mintlayer_types():
                 "type": "enum",
                 "type_mapping": [
                     ["AnyoneCanSpend", "()"],
-                    ["Address", "(PublicKeyHash)"],
+                    ["PublicKeyHash", "PublicKeyHash"],
                     ["PublicKey", "PublicKey"],
                     ["ScriptHash", "ScriptId"],
-                    ["ClassicMultiSig", "(PublicKeyHash)"],
+                    ["ClassicMultisig", "PublicKeyHash"],
                 ],
             },
             "PublicKeyHash": "[u8; 20]",
@@ -66,7 +67,7 @@ def init_mintlayer_types():
             "PublicKeyHolder": {
                 "type": "enum",
                 "type_mapping": [
-                    ["Secp256k1Schnorr", "(Secp256k1PublicKey)"],
+                    ["Secp256k1Schnorr", "Secp256k1PublicKey"],
                 ],
             },
             "Secp256k1PublicKey": {
@@ -141,12 +142,20 @@ def init_mintlayer_types():
                     ["V0", "NftIssuanceV0"],
                 ],
             },
+            "OrderData": {
+                "type": "struct",
+                "type_mapping": [
+                    ["conclude_key", "Destination"],
+                    ["ask", "OutputValue"],
+                    ["give", "OutputValue"],
+                ],
+            },
             "TxOutput": {
                 "type": "enum",
                 "type_mapping": [
                     ["Transfer", "(OutputValue, Destination)"],
                     ["LockThenTransfer", "(OutputValue, Destination, OutputTimeLock)"],
-                    ["Burn", "(OutputValue)"],
+                    ["Burn", "OutputValue"],
                     ["CreateStakePool", "(PoolId, StakePoolData)"],
                     ["ProduceBlockFromStake", "(Destination, PoolId)"],
                     ["CreateDelegationId", "(Destination, PoolId)"],
@@ -155,6 +164,7 @@ def init_mintlayer_types():
                     ["IssueNft", "(TokenId, NftIssuance, Destination)"],
                     ["DataDeposit", "Vec<u8>"],
                     ["Htlc", "(OutputValue, HashedTimelockContract)"],
+                    ["CreateOrder", "OrderData"],
                 ],
             },
             "HashedTimelockContract": {
@@ -169,10 +179,10 @@ def init_mintlayer_types():
             "OutputTimeLock": {
                 "type": "enum",
                 "type_mapping": [
-                    ["UntilHeight", "(BlockHeight)"],
-                    ["UntilTime", "(BlockTimestamp)"],
+                    ["UntilHeight", "BlockHeight"],
+                    ["UntilTime", "BlockTimestamp"],
                     ["ForBlockCount", "Compact<u64>"],
-                    ["ForSeconds", "Compat<u64>"],
+                    ["ForSeconds", "Compact<u64>"],
                 ],
             },
             "PoolId": "H256",
@@ -182,7 +192,7 @@ def init_mintlayer_types():
             "StakePoolData": {
                 "type": "struct",
                 "type_mapping": [
-                    ["value", "Amount"],
+                    ["pledge", "Amount"],
                     ["staker", "Destination"],
                     ["vrf_public_key", "VRFPublicKey"],
                     ["decommission_key", "Destination"],
@@ -199,7 +209,7 @@ def init_mintlayer_types():
             "VRFPublicKeyHolder": {
                 "type": "enum",
                 "type_mapping": [
-                    ["Schnorrkel", "(SchnorrkelPublicKey)"],
+                    ["Schnorrkel", "SchnorrkelPublicKey"],
                 ],
             },
             "SchnorrkelPublicKey": {
@@ -256,7 +266,7 @@ def init_mintlayer_types():
                 "type": "enum",
                 "type_mapping": [
                     ["Utxo", "(OutPoint, AdditionalUtxoInfo)"],
-                    ["Account", "(AccountOutPoint)"],
+                    ["Account", "AccountOutPoint"],
                     ["AccountCommand", "(AccountNonce, AccountCommand)"],
                     [
                         "OrderAccountCommand",
@@ -268,13 +278,13 @@ def init_mintlayer_types():
                 "type": "struct",
                 "type_mapping": [
                     ["nonce", "Compact<u64>"],
-                    ["account", "AccountSpending"],
+                    ["spending", "AccountSpending"],
                 ],
             },
             "AccountSpending": {
                 "type": "enum",
                 "type_mapping": [
-                    ["Delegation", "(H256, Amount)"],
+                    ["DelegationBalance", "(H256, Amount)"],
                 ],
             },
             "SighashInputCommitment": {
@@ -312,14 +322,18 @@ def init_mintlayer_types():
                     ["commitment", "SighashInputCommitment"],
                 ],
             },
+            "UtxoWithPoolData": {
+                "type": "struct",
+                "type_mapping": [
+                    ["utxo", "TxOutput"],
+                    ["staker_balance", "Amount"],
+                ],
+            },
             "AdditionalUtxoInfo": {
                 "type": "enum",
                 "type_mapping": [
                     ["Utxo", "TxOutput"],
-                    [
-                        "PoolInfo",
-                        "(TxOutput, Amount)",
-                    ],
+                    ["UtxoWithPoolData", "UtxoWithPoolData"],
                 ],
             },
             "AdditionalOrderInfo": {
