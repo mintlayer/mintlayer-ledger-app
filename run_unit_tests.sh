@@ -3,13 +3,16 @@
 set -e
 set -o nounset
 
-# Run unit tests; the first argument must be the device model: nanox, nanosp, stax, flex or apex_p.
+# Run unit tests.
+# The first argument must be the device model: nanox, nanosp, stax, flex or apex_p.
+# The second argument is optional (defaults to all) and specifies the crate whose tests must be run.
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
 cd "$SCRIPT_DIR"
 
 MODEL=$1
+PACKAGE=${2:-all}
 
 if [[ "$MODEL" == "nanosp" ]]; then
     TARGET="nanosplus"
@@ -19,7 +22,11 @@ fi
 
 echo "*** Running unit tests on $MODEL ***"
 
-PACKAGES=(mintlayer-app-core)
+if [[ "$PACKAGE" == "all" ]]; then
+    PACKAGES=(mintlayer-app-core mintlayer-messages)
+else
+    PACKAGES=("$PACKAGE")
+fi
 
 for package in "${PACKAGES[@]}"; do
     echo "*** Building unit tests for $package ***"

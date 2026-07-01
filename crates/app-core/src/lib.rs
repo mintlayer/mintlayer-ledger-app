@@ -17,6 +17,7 @@
  *****************************************************************************/
 
 #![no_std]
+
 // See the comment in `crates/test-utils/src/lib.rs` for the meaning of these attributes.
 #![cfg_attr(test, no_main)]
 #![feature(custom_test_frameworks)]

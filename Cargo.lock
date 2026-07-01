@@ -759,10 +759,12 @@ name = "mintlayer-messages"
 version = "0.1.0"
 dependencies = [
  "derive_more",
+ "ledger_device_sdk",
  "mintlayer-core-primitives",
  "num-traits",
  "num_enum",
  "parity-scale-codec",
+ "test-utils",
 ]
 
 [[package]]

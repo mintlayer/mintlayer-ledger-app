@@ -16,6 +16,19 @@
  *****************************************************************************/
 
 #![no_std]
+// See the comment in `crates/test-utils/src/lib.rs` for the meaning of these attributes.
+#![cfg_attr(test, no_main)]
+#![feature(custom_test_frameworks)]
+#![test_runner(ledger_device_sdk::testing::sdk_test_runner)]
+#![reexport_test_harness_main = "test_main"]
+
+#[cfg(test)]
+test_utils::impl_panic_handler!();
+#[cfg(test)]
+test_utils::impl_main!();
+
+#[cfg(test)]
+mod tests;
 
 // TODO: need tests that ensure encoding stability - encode a certain message or a message part and
 // expect concrete bytes, decode it back, expect the same object.
@@ -446,20 +459,26 @@ impl<'a> Apdu<'a> {
         })
     }
 
-    /// Returns an ExactSizeIterator of APDUs by chunking the data to MAX_APDU_DATA_LEN
+    /// Returns an ExactSizeIterator of APDUs by chunking the data to MAX_APDU_DATA_LEN.
     pub fn new_chunks(
         instruction_byte: u8,
         param1_byte: u8,
         data: &'a [u8],
     ) -> impl ExactSizeIterator<Item = Self> {
-        let chunk_iter = data.chunks(MAX_APDU_DATA_LEN);
-        let last_chunk_idx = chunk_iter.len() - 1;
+        // Note: the standard `chunks` method returns zero-length iterator if the data has zero
+        // length, but we need to return 1 APDU with zero-length data in such a case.
+        let chunk_count = data.len().div_ceil(MAX_APDU_DATA_LEN).max(1);
+        let chunk_iter = (0..chunk_count).map(|i| {
+            let start = i * MAX_APDU_DATA_LEN;
+            let end = (start + MAX_APDU_DATA_LEN).min(data.len());
+            &data[start..end]
+        });
 
         chunk_iter.enumerate().map(move |(chunk_idx, chunk)| Self {
             instruction_byte,
             param1_byte,
             command_data: chunk,
-            is_last_chunk: chunk_idx == last_chunk_idx,
+            is_last_chunk: chunk_idx == chunk_count - 1,
         })
     }
 

@@ -14,8 +14,7 @@ parity-scale-codec = { workspace = true, default-features = false, features = ["
 
 mintlayer-core-primitives.workspace = true
 
-[lib]
-# Note: this crate doesn't have unit tests at the moment. If we ever need them, a custom runner
-# has to be set up the same way it's done in `mintlayer-app-core`. For now we just disable tests
-# completely to prevent Cargo from producing an uncompilable test binary.
-test = false
+[dev-dependencies]
+ledger_device_sdk.workspace = true
+
+test-utils.workspace = true
