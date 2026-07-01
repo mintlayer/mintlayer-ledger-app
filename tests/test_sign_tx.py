@@ -9,11 +9,12 @@ from application_client.mintlayer_response_unpacker import (
 )
 from application_client.mintlayer_utils import Transaction, sign_tx_next_req_obj
 
-# FIXME: missing tests:
+# TODO: implement missing tests:
 # * CreateOrder, DataDeposit, Burn outputs;
 # * pool decommissioning;
 # * LockTokenSupply, FreezeOrder commands;
 # * maybe something else.
+# See https://github.com/mintlayer/mintlayer-ledger-app/issues/19.
 
 
 def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
