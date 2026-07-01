@@ -154,7 +154,7 @@ fn as_displayable_chars(bytes: &[u8]) -> Option<&'_ str> {
 mod tests {
     use alloc::borrow::ToOwned as _;
 
-    use crate::testing::prelude::*;
+    use test_utils::prelude::*;
 
     use super::*;
 

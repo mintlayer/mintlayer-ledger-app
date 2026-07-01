@@ -4,7 +4,7 @@ version.workspace = true
 edition = "2021"
 
 [workspace]
-members = ["crates/app-core", "crates/messages"]
+members = ["crates/app-core", "crates/messages", "crates/test-utils"]
 resolver = "2"
 
 [workspace.package]
@@ -27,6 +27,7 @@ testmacro = "0.1"
 
 mintlayer-app-core = { path = "crates/app-core" }
 mintlayer-messages = { path = "crates/messages" }
+test-utils = { path = "crates/test-utils" }
 
 [workspace.dependencies.parity-scale-codec]
 git = "https://github.com/paritytech/parity-scale-codec.git"
