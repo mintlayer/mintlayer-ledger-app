@@ -18,8 +18,8 @@
 use alloc::collections::BTreeMap;
 
 use mintlayer_messages::{
-    AccountCommand, AccountSpending, AdditionalOrderInfo, AdditionalUtxoInfo, Amount, H256,
-    OrderAccountCommand, OutputValue, TxInputWithAdditionalInfo, TxOutput,
+    AccountCommand, AccountSpending, AdditionalOrderInfo, AdditionalUtxoInfo, Amount,
+    OrderAccountCommand, OutputValue, TokenId, TxInputWithAdditionalInfo, TxOutput,
 };
 
 use crate::StatusWord;
@@ -27,7 +27,7 @@ use crate::StatusWord;
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum CoinOrTokenId {
     Coin,
-    TokenId(H256),
+    TokenId(TokenId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,7 +60,7 @@ pub enum TxType {
 pub enum InputCommand {
     AccountSpending(AccountSpending),
     AccountCommand(AccountCommand),
-    OrderCommand(OrderAccountCommand),
+    OrderCommand(OrderAccountCommand, AdditionalOrderInfo),
 }
 
 pub struct TxSummaryCollector {
@@ -212,7 +212,7 @@ impl TxSummaryCollector {
                         }
                         TxOutput::IssueNft(nft_id, _, _) => {
                             self.increase_input_totals(
-                                CoinOrTokenId::TokenId(*nft_id.hash()),
+                                CoinOrTokenId::TokenId(*nft_id),
                                 Amount::from_atoms(1),
                             )?;
                         }
@@ -233,10 +233,7 @@ impl TxSummaryCollector {
                 match cmd {
                     AccountCommand::MintTokens(token_id, amount) => {
                         self.tx_type = merge_tx_type(self.tx_type, TxType::MintTokens);
-                        self.increase_input_totals(
-                            CoinOrTokenId::TokenId(*token_id.hash()),
-                            *amount,
-                        )?;
+                        self.increase_input_totals(CoinOrTokenId::TokenId(*token_id), *amount)?;
                     }
                     AccountCommand::ConcludeOrder(_) | AccountCommand::FillOrder(_, _, _) => {
                         return Err(StatusWord::OrdersV0NotSupported);
@@ -261,22 +258,17 @@ impl TxSummaryCollector {
                     }
                 }
             }
-            TxInputWithAdditionalInfo::OrderAccountCommand(
-                cmd,
-                AdditionalOrderInfo {
-                    initially_asked,
-                    initially_given,
-                    ask_balance,
-                    give_balance,
-                },
-            ) => {
-                self.input_command = Some(InputCommand::OrderCommand(cmd.clone()));
+            TxInputWithAdditionalInfo::OrderAccountCommand(cmd, additional_info) => {
+                self.input_command = Some(InputCommand::OrderCommand(
+                    cmd.clone(),
+                    additional_info.clone(),
+                ));
                 match cmd {
                     OrderAccountCommand::FillOrder(_, fill_amount) => {
                         let (fill_coin_or_token_id, asked_amount) =
-                            into_coin_or_token_id_and_amount(initially_asked)?;
+                            into_coin_or_token_id_and_amount(&additional_info.initially_asked)?;
                         let (given_coin_or_token_id, given_amount) =
-                            into_coin_or_token_id_and_amount(initially_given)?;
+                            into_coin_or_token_id_and_amount(&additional_info.initially_given)?;
 
                         self.increase_output_totals(fill_coin_or_token_id, *fill_amount)?;
 
@@ -293,12 +285,12 @@ impl TxSummaryCollector {
                     }
                     OrderAccountCommand::ConcludeOrder(_) => {
                         let (coin_or_token_id, _) =
-                            into_coin_or_token_id_and_amount(initially_asked)?;
-                        self.increase_input_totals(coin_or_token_id, *ask_balance)?;
+                            into_coin_or_token_id_and_amount(&additional_info.initially_asked)?;
+                        self.increase_input_totals(coin_or_token_id, additional_info.ask_balance)?;
 
                         let (coin_or_token_id, _) =
-                            into_coin_or_token_id_and_amount(initially_given)?;
-                        self.increase_input_totals(coin_or_token_id, *give_balance)?;
+                            into_coin_or_token_id_and_amount(&additional_info.initially_given)?;
+                        self.increase_input_totals(coin_or_token_id, additional_info.give_balance)?;
 
                         self.tx_type = merge_tx_type(self.tx_type, TxType::ConcludeOrder);
                     }
@@ -361,9 +353,7 @@ fn into_coin_or_token_id_and_amount(
 ) -> Result<(CoinOrTokenId, Amount), StatusWord> {
     match value {
         OutputValue::Coin(amount) => Ok((CoinOrTokenId::Coin, *amount)),
-        OutputValue::TokenV1(token_id, amount) => {
-            Ok((CoinOrTokenId::TokenId(*token_id.hash()), *amount))
-        }
+        OutputValue::TokenV1(token_id, amount) => Ok((CoinOrTokenId::TokenId(*token_id), *amount)),
     }
 }
 
@@ -431,7 +421,7 @@ mod tests {
         assert_eq!(
             collector
                 .total_outputs()
-                .get(&CoinOrTokenId::TokenId(*token_id.hash())),
+                .get(&CoinOrTokenId::TokenId(token_id)),
             Some(&token_amount)
         );
     }
@@ -727,7 +717,7 @@ mod tests {
         assert_eq!(
             collector
                 .total_inputs()
-                .get(&CoinOrTokenId::TokenId(*nft_id.hash())),
+                .get(&CoinOrTokenId::TokenId(nft_id)),
             Some(&mlcp::Amount::from_atoms(1))
         );
     }
@@ -794,7 +784,7 @@ mod tests {
         assert_eq!(
             collector
                 .total_inputs()
-                .get(&CoinOrTokenId::TokenId(*token_id.hash())),
+                .get(&CoinOrTokenId::TokenId(token_id)),
             Some(&mint_amount)
         );
         assert!(matches!(
@@ -915,7 +905,8 @@ mod tests {
         assert!(matches!(
             collector.input_command(),
             Some(InputCommand::OrderCommand(
-                mlcp::OrderAccountCommand::FillOrder(_, _)
+                mlcp::OrderAccountCommand::FillOrder(_, _),
+                AdditionalOrderInfo { .. }
             ))
         ));
     }
@@ -947,7 +938,7 @@ mod tests {
         assert_eq!(
             collector
                 .total_inputs()
-                .get(&CoinOrTokenId::TokenId(*token_id.hash())),
+                .get(&CoinOrTokenId::TokenId(token_id)),
             Some(&give_balance)
         );
     }

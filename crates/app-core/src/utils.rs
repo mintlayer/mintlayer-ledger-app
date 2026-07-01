@@ -18,7 +18,7 @@
 use alloc::{borrow::Cow, format};
 use core::fmt;
 
-use mintlayer_messages::StatusWord;
+use mintlayer_messages::{Amount, OutputValue, StatusWord};
 
 use crate::mlcp;
 
@@ -148,6 +148,13 @@ fn as_displayable_chars(bytes: &[u8]) -> Option<&'_ str> {
         .bytes()
         .all(|b| (0x20..=0x7E).contains(&b))
         .then_some(as_str)
+}
+
+pub fn output_value_with_amount(value: &OutputValue, amount: Amount) -> OutputValue {
+    match value {
+        OutputValue::Coin(_) => OutputValue::Coin(amount),
+        OutputValue::TokenV1(token_id, _) => OutputValue::TokenV1(*token_id, amount),
+    }
 }
 
 #[cfg(test)]
