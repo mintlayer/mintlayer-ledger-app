@@ -55,7 +55,7 @@ mintlayer-app-core.workspace = true
 image.workspace = true
 
 [[bin]]
-# Note: we only have this section to disable tests, but Cargo inists that "name" should also
+# Note: we only have this section to disable tests, but Cargo insists that "name" should also
 # be specified.
 name = "mintlayer-app"
 # The app bin crate is a thin wrapper around `mintlayer-app-core` and it's not supposed to have

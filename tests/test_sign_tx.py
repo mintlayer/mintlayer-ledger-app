@@ -1119,9 +1119,9 @@ def test_sign_tx_change_token_metadata_uri(
 
 def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     """
-    Test signing a transaction with two inputs:
+    Test signing a transaction with 3 inputs:
     1. A standard UTXO input to pay for tx fees.
-    2. An AccountCommand input to fill an order.
+    2. An account command input to fill an order.
     3. A standard UTXO input to be used for the fill.
     And one output to transfer the change coins.
     """
@@ -1129,7 +1129,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     h = 1 << 31
     bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
-    # The additionl info (the previous TxOutput that this UTXO input spends)
+    # The additional info (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
     additional_info = {
         "Utxo": {

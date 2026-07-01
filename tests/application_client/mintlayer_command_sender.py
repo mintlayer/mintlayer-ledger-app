@@ -88,6 +88,9 @@ class Errors(IntEnum):
 
 
 def split_message(message: bytes, max_size: int) -> List[bytes]:
+    if len(message) == 0:
+        return [[]]
+
     return [message[x : x + max_size] for x in range(0, len(message), max_size)]
 
 

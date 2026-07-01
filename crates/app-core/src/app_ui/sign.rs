@@ -485,11 +485,16 @@ fn format_output(output: &TxOutput, coin: mlcp::CoinType) -> Result<FormattedOut
 
         TxOutput::IssueNft(_nft_id, data, destination) => {
             let NftIssuance::V0(data) = data;
-            // Note: consensus rules require that name, description and ticker are ascii alphanumeric.
-            // But same as in the IssueFungibleToken case, we use `make_displayable` for consistency
-            // and simplicity.
-            // Note: the URIs are allowed to have non-ascii chars, so `make_displayable` is not redundant
-            // for them.
+            // Note:
+            // 1. Consensus rules require that name, description and ticker are ascii alphanumeric.
+            //    But same as in the IssueFungibleToken case, we use `make_displayable` for consistency
+            //    and simplicity.
+            // 2. The URIs are allowed to have non-ascii chars, so `make_displayable` is not redundant
+            //    for them.
+            // 3. There is no point in reviewing the NFT id - consensus rules require that the id is
+            //    calculated from transaction inputs and if the host cheats or malfunctions, the
+            //    transaction will become invalid (note that the id is only present in the output due
+            //    to historical reasons and e.g. IssueFungibleToken doesn't contain the token id).
             let address_short = format!(
                 "Name: {}\nDescription: {}\nCreator: {}\nTicker: {}\nAddress: {}\nIcon URI: {}\nAdditional metadata URI: {}\nMedia URI: {}, Media hash: {}",
                 make_displayable(&data.name),

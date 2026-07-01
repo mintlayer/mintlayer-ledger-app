@@ -152,7 +152,9 @@ impl TxInputCommitmentsProcessingContext {
         mut self: Box<Self>,
         review: &NbglStreamingReview,
     ) -> Result<TxProcessingContext, StatusWord> {
-        let finished_with_inputs = self.num_inputs_parsed >= (self.metadata.num_inputs - 1);
+        self.num_inputs_parsed += 1;
+
+        let finished_with_inputs = self.num_inputs_parsed >= self.metadata.num_inputs;
 
         if finished_with_inputs {
             // Make sure the hashes match before continuing with the outputs
@@ -196,7 +198,6 @@ impl TxInputCommitmentsProcessingContext {
                 )
             }
         } else {
-            self.num_inputs_parsed += 1;
             Ok(TxProcessingContext::ProcessingInputCommitments(self))
         }
     }
@@ -334,6 +335,10 @@ impl TxProcessingContext {
             num_outputs,
         }: SignTxStartReq,
     ) -> Result<Self, StatusWord> {
+        if num_inputs == 0 {
+            return Err(StatusWord::TxWithZeroInputs);
+        }
+
         match version {
             TransactionVersion::V1 => {
                 const VERSION_1: u8 = 1;

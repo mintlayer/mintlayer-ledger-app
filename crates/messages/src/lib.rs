@@ -583,6 +583,8 @@ pub enum StatusWord {
     InvalidTimestamp = 0xB014,
     #[display("Signature for FillOrder input requested")]
     FillOrderSigRequested = 0xB015,
+    #[display("Transaction has zero inputs")]
+    TxWithZeroInputs = 0xB016,
 
     // Ecc Errors
     #[display("ECC Carry")]

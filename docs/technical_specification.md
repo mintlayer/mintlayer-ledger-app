@@ -88,6 +88,7 @@ The application returns standard Ledger status words as well as app-specific and
 | 0xB013 | `DifferentInputCommitmentHash` | Different input commitment hash                |
 | 0xB014 | `InvalidTimestamp`             | Invalid timestamp                              |
 | 0xB015 | `FillOrderSigRequested`        | Signature for FillOrder input requested        |
+| 0xB016 | `TxWithZeroInputs`             | Transaction has zero inputs                    |
 | 0xB100 | `EccCarry`                     | ECC Carry                                      |
 | 0xB101 | `EccLocked`                    | ECC Locked                                     |
 | 0xB102 | `EccUnlocked`                  | ECC Unlocked                                   |
