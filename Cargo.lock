@@ -722,7 +722,7 @@ dependencies = [
 
 [[package]]
 name = "mintlayer-app"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "image",
  "ledger_device_sdk",
@@ -731,7 +731,7 @@ dependencies = [
 
 [[package]]
 name = "mintlayer-app-core"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "bech32",
  "chrono",
@@ -756,7 +756,7 @@ dependencies = [
 
 [[package]]
 name = "mintlayer-messages"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "derive_more",
  "ledger_device_sdk",
@@ -1393,7 +1393,7 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 
 [[package]]
 name = "test-utils"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "ledger_device_sdk",
  "testmacro",
