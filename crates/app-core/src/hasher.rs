@@ -17,9 +17,9 @@
 
 use crate::StatusWord;
 
-use mintlayer_messages::{parity_scale_codec, H256};
+use mintlayer_messages::{H256, parity_scale_codec};
 
-use ledger_device_sdk::hash::{blake2::Blake2b_512, HashInit};
+use ledger_device_sdk::hash::{HashInit, blake2::Blake2b_512};
 
 /// The hasher that produces Mintlayer-specific hashes.
 ///

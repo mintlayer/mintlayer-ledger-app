@@ -28,19 +28,19 @@ use ledger_device_sdk::{
 };
 
 use mintlayer_messages::{
-    encode, AccountCommand, AccountSpending, AddrType, Amount, Destination, IsTokenFreezable,
+    AccountCommand, AccountSpending, AddrType, Amount, Destination, H256, IsTokenFreezable,
     IsTokenUnfreezable, NftIssuance, OrderAccountCommand, OutputTimeLock, OutputValue, PublicKey,
-    TokenIssuance, TokenTotalSupply, TxOutput, VrfPublicKey, H256,
+    TokenIssuance, TokenTotalSupply, TxOutput, VrfPublicKey, encode,
 };
 
 use crate::{
+    StatusWord,
     app_ui::utils::{
         bech32m_encode, compress_public_key, load_glyph, to_address, to_public_key_hash,
     },
     handlers::sign_tx::{CoinOrTokenId, InputCommand, TxSummaryCollector, TxType},
     mlcp,
     utils::{make_displayable, make_displayable_str},
-    StatusWord,
 };
 
 struct FormattedOutput {
@@ -291,7 +291,7 @@ fn format_timestamp(seconds_u64: u64) -> Result<String, StatusWord> {
 fn format_lock(lock: &OutputTimeLock) -> Result<String, StatusWord> {
     let s = match lock {
         OutputTimeLock::UntilHeight(h) => format!("Lock until block height {}", h.0),
-        OutputTimeLock::UntilTime(t) => format!("Lock until {}", format_timestamp(t.0 .0)?),
+        OutputTimeLock::UntilTime(t) => format!("Lock until {}", format_timestamp(t.0.0)?),
         OutputTimeLock::ForBlockCount(b) => format!("Lock for {} blocks", b.0),
         OutputTimeLock::ForSeconds(s) => format!("Lock for {} seconds", s.0),
     };
@@ -431,7 +431,12 @@ fn format_output(output: &TxOutput, coin: mlcp::CoinType) -> Result<FormattedOut
 
             let address_short = format!(
                 "Ticker: {}\nAuthority: {}\nMetadata URI: {}\nTotal token supply: {}\nNumber of decimals: {}\nIs freezable: {}",
-                ticker, to_address(&data.authority, coin)?, metadata_uri, total_supply_str, data.number_of_decimals, is_freezable
+                ticker,
+                to_address(&data.authority, coin)?,
+                metadata_uri,
+                total_supply_str,
+                data.number_of_decimals,
+                is_freezable
             );
             let name = if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
                 "Issue token"
@@ -453,7 +458,11 @@ fn format_output(output: &TxOutput, coin: mlcp::CoinType) -> Result<FormattedOut
                 "Name: {}\nDescription: {}\nCreator: {}\nTicker: {}\nAddress: {}\nIcon URI: {}\nAdditional metadata URI: {}\nMedia URI: {}, Media hash: {}",
                 make_displayable(&data.name),
                 make_displayable(&data.description),
-                data.creator.clone().map(|creator| to_address(&Destination::PublicKey(creator), coin)).transpose()?.unwrap_or_default(),
+                data.creator
+                    .clone()
+                    .map(|creator| to_address(&Destination::PublicKey(creator), coin))
+                    .transpose()?
+                    .unwrap_or_default(),
                 make_displayable(&data.ticker),
                 to_address(destination, coin)?,
                 make_displayable(&data.icon_uri),

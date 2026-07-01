@@ -30,8 +30,8 @@
 //!    3. Specify the custom test runner. All test cases collected by `#[test_case]` will be passed
 //!       to this function. In particular, `sdk_test_runner` will loop over the array of test cases
 //!       and:
-//!         a) fix references stored inside the test case via pic_rs/pic;
-//!         b) invoke the closure associated with the test case.
+//!       a) fix references stored inside the test case via pic_rs/pic;
+//!       b) invoke the closure associated with the test case.
 //!
 //!       #![test_runner(ledger_device_sdk::testing::sdk_test_runner)]
 //!
@@ -67,6 +67,7 @@ macro_rules! impl_panic_handler {
     };
 }
 
+#[allow(clippy::crate_in_macro_def)]
 #[macro_export]
 macro_rules! impl_main {
     () => {

@@ -21,7 +21,7 @@ use mintlayer_messages::{
     ChainCode, GetPubKeyReq, PublicKeyResponse, UncompressedSecp256k1PublicKey,
 };
 
-use crate::{app_ui::address::ui_display_pk, utils::check_derivation_path, StatusWord};
+use crate::{StatusWord, app_ui::address::ui_display_pk, utils::check_derivation_path};
 
 pub fn handle_get_public_key(
     req: GetPubKeyReq,

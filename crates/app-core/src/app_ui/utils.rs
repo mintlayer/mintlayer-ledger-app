@@ -20,9 +20,9 @@ use alloc::string::String;
 use ledger_device_sdk::{ecc::ECPublicKey, include_gif, nbgl::NbglGlyph};
 
 use mintlayer_core_primitives::PUBLIC_KEY_HASH_SIZE;
-use mintlayer_messages::{encode, encode_to, Destination, PublicKeyHash, Secp256k1PublicKey};
+use mintlayer_messages::{Destination, PublicKeyHash, Secp256k1PublicKey, encode, encode_to};
 
-use crate::{hasher::Hasher, mlcp, utils::cut_array, StatusWord};
+use crate::{StatusWord, hasher::Hasher, mlcp, utils::cut_array};
 
 pub fn bech32m_encode(hrp: &str, data: &[u8]) -> Result<String, StatusWord> {
     let parsed_hrp = bech32::Hrp::parse(hrp).map_err(|_| StatusWord::AddressEncodingFail)?;

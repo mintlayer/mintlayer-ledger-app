@@ -17,7 +17,6 @@
  *****************************************************************************/
 
 #![no_std]
-
 // See the comment in `crates/test-utils/src/lib.rs` for the meaning of these attributes.
 #![cfg_attr(test, no_main)]
 #![feature(custom_test_frameworks)]
@@ -41,14 +40,14 @@ use alloc::vec::Vec;
 
 use ledger_device_sdk::{
     io::{ApduHeader, Comm, Reply},
-    nbgl::{init_comm, NbglHomeAndSettings, NbglReviewStatus, NbglStreamingReview, StatusType},
+    nbgl::{NbglHomeAndSettings, NbglReviewStatus, NbglStreamingReview, StatusType, init_comm},
 };
 
 use mintlayer_core_primitives as mlcp;
 
 use mintlayer_messages::{
-    decode_all, encode, GetPubKeyP1, Ins, PingP1, Response, SignMsgP1, SignTxP1, StatusWord,
-    APDU_CLASS, MAX_APDU_DATA_LEN,
+    APDU_CLASS, GetPubKeyP1, Ins, MAX_APDU_DATA_LEN, PingP1, Response, SignMsgP1, SignTxP1,
+    StatusWord, decode_all, encode,
 };
 
 use self::{
@@ -56,8 +55,8 @@ use self::{
     errors::sdk_err_to_status,
     handlers::{
         get_public_key::handle_get_public_key,
-        sign_message::{handle_sign_message, setup_sign_message, SignMessageContext},
-        sign_tx::{handle_sign_tx, setup_sign_tx, TxProcessingContext},
+        sign_message::{SignMessageContext, handle_sign_message, setup_sign_message},
+        sign_tx::{TxProcessingContext, handle_sign_tx, setup_sign_tx},
     },
 };
 

@@ -24,8 +24,9 @@ use ledger_device_sdk::{
 use mintlayer_messages::{Destination, PublicKey};
 
 use crate::{
+    StatusWord,
     app_ui::utils::{compress_public_key, load_glyph, to_address},
-    mlcp, StatusWord,
+    mlcp,
 };
 
 pub fn ui_display_pk<const T: char>(

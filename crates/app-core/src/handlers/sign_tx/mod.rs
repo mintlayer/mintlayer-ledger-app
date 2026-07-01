@@ -23,12 +23,13 @@ use ledger_device_sdk::{
 };
 
 use mintlayer_messages::{
-    encode_as_compact_to, encode_to, InputAddressPath, OrderAccountCommand, Response,
-    SignTxNextReq, SignTxStartReq, Signature, TransactionVersion, TxInputCommitmentData,
-    TxInputData, TxInputSignatureResponse, TxInputWithAdditionalInfo, TxOutputData, H256,
+    H256, InputAddressPath, OrderAccountCommand, Response, SignTxNextReq, SignTxStartReq,
+    Signature, TransactionVersion, TxInputCommitmentData, TxInputData, TxInputSignatureResponse,
+    TxInputWithAdditionalInfo, TxOutputData, encode_as_compact_to, encode_to,
 };
 
 use crate::{
+    DataContext, StatusWord,
     app_ui::sign::{
         ui_approve_streaming_review, ui_new_streaming_review, ui_start_streaming_review,
         ui_streaming_review_show_input, ui_streaming_review_show_output,
@@ -36,8 +37,7 @@ use crate::{
     handlers::sign_message::schnorr_sign,
     hasher::Hasher,
     mlcp,
-    utils::{check_derivation_path_for_tx_signing, CompressedDerivationPathForTxSigning},
-    DataContext, StatusWord,
+    utils::{CompressedDerivationPathForTxSigning, check_derivation_path_for_tx_signing},
 };
 
 mod summary_collector;
@@ -166,10 +166,10 @@ impl TxInputCommitmentsProcessingContext {
                 return Err(StatusWord::Deny);
             }
 
-            if let Some(command) = self.summary.input_command() {
-                if !ui_streaming_review_show_input(review, command, self.metadata.coin)? {
-                    return Err(StatusWord::Deny);
-                }
+            if let Some(command) = self.summary.input_command()
+                && !ui_streaming_review_show_input(review, command, self.metadata.coin)?
+            {
+                return Err(StatusWord::Deny);
             }
 
             encode_as_compact_to(self.metadata.num_outputs, &mut self.tx_hasher);

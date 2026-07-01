@@ -15,63 +15,60 @@
  *  limitations under the License.
  *****************************************************************************/
 
-#[cfg(test)]
-mod tests {
-    use alloc::vec::Vec;
+use alloc::vec::Vec;
 
-    use test_utils::prelude::*;
+use test_utils::prelude::*;
 
-    use crate::Apdu;
+use super::*;
 
-    #[test_item]
-    fn test_apdu_chunking() {
-        let byte_iter = || core::iter::repeat(0..=9).flatten();
+#[test_item]
+fn test_apdu_chunking() {
+    let byte_iter = || core::iter::repeat(0..=9).flatten();
 
-        let ins = 0xaa;
-        let p1 = 0xbb;
+    let ins = 0xaa;
+    let p1 = 0xbb;
 
-        // One chunk
-        {
-            let data = byte_iter().take(100).collect::<Vec<_>>();
-            let chunks = Apdu::new_chunks(ins, p1, &data).collect::<Vec<_>>();
-            assert_eq!(chunks.len(), 1);
-            assert_eq!(chunks[0].instruction_byte, ins);
-            assert_eq!(chunks[0].param1_byte, p1);
-            assert_eq!(chunks[0].command_data, &data);
-            assert!(chunks[0].is_last_chunk);
-        }
+    // One chunk
+    {
+        let data = byte_iter().take(100).collect::<Vec<_>>();
+        let chunks = Apdu::new_chunks(ins, p1, &data).collect::<Vec<_>>();
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].instruction_byte, ins);
+        assert_eq!(chunks[0].param1_byte, p1);
+        assert_eq!(chunks[0].command_data, &data);
+        assert!(chunks[0].is_last_chunk);
+    }
 
-        // One chunk, data is zero length
-        {
-            let chunks = Apdu::new_chunks(ins, p1, &[]).collect::<Vec<_>>();
-            assert_eq!(chunks.len(), 1);
-            assert_eq!(chunks[0].instruction_byte, ins);
-            assert_eq!(chunks[0].param1_byte, p1);
-            assert_eq!(chunks[0].command_data, &[]);
-            assert!(chunks[0].is_last_chunk);
-        }
+    // One chunk, data is zero length
+    {
+        let chunks = Apdu::new_chunks(ins, p1, &[]).collect::<Vec<_>>();
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].instruction_byte, ins);
+        assert_eq!(chunks[0].param1_byte, p1);
+        assert_eq!(chunks[0].command_data, &[]);
+        assert!(chunks[0].is_last_chunk);
+    }
 
-        // Multiple chunks
-        {
-            let data = byte_iter().take(600).collect::<Vec<_>>();
-            let chunks = Apdu::new_chunks(ins, p1, &data).collect::<Vec<_>>();
+    // Multiple chunks
+    {
+        let data = byte_iter().take(600).collect::<Vec<_>>();
+        let chunks = Apdu::new_chunks(ins, p1, &data).collect::<Vec<_>>();
 
-            assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks.len(), 3);
 
-            assert_eq!(chunks[0].instruction_byte, ins);
-            assert_eq!(chunks[0].param1_byte, p1);
-            assert_eq!(chunks[0].command_data, &data[0..255]);
-            assert!(!chunks[0].is_last_chunk);
+        assert_eq!(chunks[0].instruction_byte, ins);
+        assert_eq!(chunks[0].param1_byte, p1);
+        assert_eq!(chunks[0].command_data, &data[0..255]);
+        assert!(!chunks[0].is_last_chunk);
 
-            assert_eq!(chunks[1].instruction_byte, ins);
-            assert_eq!(chunks[1].param1_byte, p1);
-            assert_eq!(chunks[1].command_data, &data[255..510]);
-            assert!(!chunks[1].is_last_chunk);
+        assert_eq!(chunks[1].instruction_byte, ins);
+        assert_eq!(chunks[1].param1_byte, p1);
+        assert_eq!(chunks[1].command_data, &data[255..510]);
+        assert!(!chunks[1].is_last_chunk);
 
-            assert_eq!(chunks[2].instruction_byte, ins);
-            assert_eq!(chunks[2].param1_byte, p1);
-            assert_eq!(chunks[2].command_data, &data[510..]);
-            assert!(chunks[2].is_last_chunk);
-        }
+        assert_eq!(chunks[2].instruction_byte, ins);
+        assert_eq!(chunks[2].param1_byte, p1);
+        assert_eq!(chunks[2].command_data, &data[510..]);
+        assert!(chunks[2].is_last_chunk);
     }
 }

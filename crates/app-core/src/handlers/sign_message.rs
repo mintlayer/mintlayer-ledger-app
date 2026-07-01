@@ -25,7 +25,8 @@ use mintlayer_messages::{
 };
 
 use crate::{
-    DataContext, StatusWord, app_ui::sign::ui_display_message, errors::cx_err_to_status, hasher::Hasher, mlcp, utils::check_derivation_path,
+    DataContext, StatusWord, app_ui::sign::ui_display_message, errors::cx_err_to_status,
+    hasher::Hasher, mlcp, utils::check_derivation_path,
 };
 
 pub struct SignMessageContext {
@@ -53,7 +54,9 @@ impl SignMessageContext {
 pub fn setup_sign_message(req: SignMessageStartReq) -> Result<DataContext, StatusWord> {
     check_derivation_path(req.path.as_ref(), req.coin.into())?;
 
-    Ok(DataContext::SignMessageContext(SignMessageContext::new(req)))
+    Ok(DataContext::SignMessageContext(SignMessageContext::new(
+        req,
+    )))
 }
 
 // TODO: implement stateful message signing, where the message is received and displayed for review

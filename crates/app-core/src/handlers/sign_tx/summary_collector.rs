@@ -18,8 +18,8 @@
 use alloc::collections::BTreeMap;
 
 use mintlayer_messages::{
-    AccountCommand, AccountSpending, AdditionalOrderInfo, AdditionalUtxoInfo, Amount,
-    OrderAccountCommand, OutputValue, TxInputWithAdditionalInfo, TxOutput, H256,
+    AccountCommand, AccountSpending, AdditionalOrderInfo, AdditionalUtxoInfo, Amount, H256,
+    OrderAccountCommand, OutputValue, TxInputWithAdditionalInfo, TxOutput,
 };
 
 use crate::StatusWord;
@@ -239,7 +239,7 @@ impl TxSummaryCollector {
                         )?;
                     }
                     AccountCommand::ConcludeOrder(_) | AccountCommand::FillOrder(_, _, _) => {
-                        return Err(StatusWord::OrdersV0NotSupported)
+                        return Err(StatusWord::OrdersV0NotSupported);
                     }
                     AccountCommand::UnmintTokens(_) => {
                         self.tx_type = merge_tx_type(self.tx_type, TxType::UnmintTokens);
@@ -372,7 +372,7 @@ mod tests {
     use mintlayer_messages::{AdditionalOrderInfo, AdditionalUtxoInfo, TxInputWithAdditionalInfo};
     use test_utils::prelude::*;
 
-    use crate::{mlcp, StatusWord};
+    use crate::{StatusWord, mlcp};
 
     use super::*;
 

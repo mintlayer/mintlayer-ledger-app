@@ -152,8 +152,6 @@ fn as_displayable_chars(bytes: &[u8]) -> Option<&'_ str> {
 
 #[cfg(test)]
 mod tests {
-    use alloc::borrow::ToOwned as _;
-
     use test_utils::prelude::*;
 
     use super::*;
@@ -165,7 +163,7 @@ mod tests {
             let data = "qwe123".as_bytes();
             let expected_res = "qwe123";
 
-            let res = make_displayable_str(data).to_owned();
+            let res = make_displayable_str(data);
             assert_eq!(res, expected_res);
 
             let res = format!("{}", make_displayable(data));
@@ -177,7 +175,7 @@ mod tests {
             let data = "qwe\t123".as_bytes();
             let expected_res = "0x71776509313233";
 
-            let res = make_displayable_str(data).to_owned();
+            let res = make_displayable_str(data);
             assert_eq!(res, expected_res);
 
             let res = format!("{}", make_displayable(data));
@@ -189,7 +187,7 @@ mod tests {
             let data = "今日は".as_bytes();
             let expected_res = "0xe4bb8ae697a5e381af";
 
-            let res = make_displayable_str(data).to_owned();
+            let res = make_displayable_str(data);
             assert_eq!(res, expected_res);
 
             let res = format!("{}", make_displayable(data));
@@ -201,7 +199,7 @@ mod tests {
             let data = [0xAA, 0xBB, 0xCC];
             let expected_res = "0xaabbcc";
 
-            let res = make_displayable_str(&data).to_owned();
+            let res = make_displayable_str(&data);
             assert_eq!(res, expected_res);
 
             let res = format!("{}", make_displayable(&data));
