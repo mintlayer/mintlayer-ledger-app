@@ -23,5 +23,10 @@ on:
 
 jobs:
   guidelines_enforcer:
+    # TODO: this is disabled because the app is still not in the ledger app database,
+    # so the "Check app_load_params" step fails.
+    # Once it's there, this must be re-enabled.
+    # See https://github.com/mintlayer/mintlayer-ledger-app/issues/20.
+    if: false
     name: Call Ledger guidelines_enforcer
     uses: LedgerHQ/ledger-app-workflows/.github/workflows/reusable_guidelines_enforcer.yml@v1
