@@ -21,6 +21,12 @@ for model in "${MODELS[@]}"; do
         TARGET="$model"
     fi
 
+    # Clean the build directory. Note that most of the time this is redundant, but after
+    # the app version has been bumped this is actually needed, otherwise the old version
+    # may be picked up from the existing artifacts of the sdk's build script.
+    echo "*** Cleaning the build directory for $model ***"
+    cargo clean --target "$TARGET"
+
     echo "*** Building the app for $model ***"
     cargo ledger build "$TARGET"
 
