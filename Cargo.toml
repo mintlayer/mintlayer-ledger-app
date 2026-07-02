@@ -15,7 +15,6 @@ bech32 = { version = "0.11", default-features = false }
 chrono = { version = "0.4", default-features = false }
 const-hex = { version = "1.19", default-features = false }
 derive_more = { version = "2.1", default-features = false }
-image = "0.25"
 itertools = { version = "0.15", default-features = false }
 ledger_device_sdk = "1.35"
 ledger_secure_sdk_sys = "1.16"
@@ -51,9 +50,6 @@ package = "mintlayer-core-primitives"
 ledger_device_sdk.workspace = true
 
 mintlayer-app-core.workspace = true
-
-[build-dependencies]
-image.workspace = true
 
 [[bin]]
 # Note: we only have this section to disable tests, but Cargo insists that "name" should also
