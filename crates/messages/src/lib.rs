@@ -585,6 +585,8 @@ pub enum StatusWord {
     FillOrderSigRequested = 0xB015,
     #[display("Transaction has zero inputs")]
     TxWithZeroInputs = 0xB016,
+    #[display("Transaction has multiple reviewable inputs")]
+    TxWithMultipleReviewableInputs = 0xB017,
 
     // Ecc Errors
     #[display("ECC Carry")]

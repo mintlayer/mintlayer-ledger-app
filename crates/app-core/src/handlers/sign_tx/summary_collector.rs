@@ -80,17 +80,26 @@ impl TxSummaryCollector {
         }
     }
 
-    // TODO:
-    // 1) currently consensus only forbids multiple account commands (AccountCommand or OrderAccountCommand) per tx,
-    //    but the number of account spendings is unlimited and they can co-exist with an account command;
-    // 2) probably the app shouldn't try being smart and assume any number of account commands is possible, asking
-    //    the user to approve them as they arrive, same as it's done for outputs;
-    // 3) if the app does try to be smart, then it should fail when multiple commands are encountered, instead of
-    //    silently overwriting `input_command`.
+    // TODO: currently consensus only forbids multiple account commands (AccountCommand or OrderAccountCommand)
+    // per tx, but the number of account spendings is unlimited and they can co-exist with an account command.
+    // This is an unlikely situation and core wallets will never create a tx like this, but still it'd be better
+    // if the app assumed that any number of input commands is possible, asking the user to approve them as they
+    // arrive, same as it's done for outputs;
     // See https://github.com/mintlayer/mintlayer-ledger-app/issues/14.
     // Also see the TODO near `TxProcessingContext::show_spinner`.
     pub fn input_command(&self) -> Option<&InputCommand> {
         self.input_command.as_ref()
+    }
+
+    fn set_input_command(&mut self, cmd: InputCommand) -> Result<(), StatusWord> {
+        // Since we can currently review only one input command, reject txs that have more than
+        // one of those, to avoid blind signing.
+        if self.input_command.is_some() {
+            return Err(StatusWord::TxWithMultipleReviewableInputs);
+        }
+
+        self.input_command = Some(cmd);
+        Ok(())
     }
 
     pub fn tx_type(&self) -> Option<TxType> {
@@ -220,16 +229,15 @@ impl TxSummaryCollector {
                 }
             },
             TxInputWithAdditionalInfo::Account(acc) => {
-                self.input_command = Some(InputCommand::AccountSpending(acc.spending.clone()));
                 match acc.spending {
                     AccountSpending::DelegationBalance(_, amount) => {
                         self.tx_type = merge_tx_type(self.tx_type, TxType::DelegationWithdrawal);
                         self.increase_input_totals(CoinOrTokenId::Coin, amount)?;
                     }
                 }
+                self.set_input_command(InputCommand::AccountSpending(acc.spending.clone()))?;
             }
             TxInputWithAdditionalInfo::AccountCommand(_, cmd) => {
-                self.input_command = Some(InputCommand::AccountCommand(cmd.clone()));
                 match cmd {
                     AccountCommand::MintTokens(token_id, amount) => {
                         self.tx_type = merge_tx_type(self.tx_type, TxType::MintTokens);
@@ -257,12 +265,10 @@ impl TxSummaryCollector {
                         self.tx_type = merge_tx_type(self.tx_type, TxType::ChangeTokenMetadataUri);
                     }
                 }
+
+                self.set_input_command(InputCommand::AccountCommand(cmd.clone()))?;
             }
             TxInputWithAdditionalInfo::OrderAccountCommand(cmd, additional_info) => {
-                self.input_command = Some(InputCommand::OrderCommand(
-                    cmd.clone(),
-                    additional_info.clone(),
-                ));
                 match cmd {
                     OrderAccountCommand::FillOrder(_, fill_amount) => {
                         let (fill_coin_or_token_id, asked_amount) =
@@ -298,6 +304,11 @@ impl TxSummaryCollector {
                         self.tx_type = merge_tx_type(self.tx_type, TxType::FreezeOrder);
                     }
                 }
+
+                self.set_input_command(InputCommand::OrderCommand(
+                    cmd.clone(),
+                    additional_info.clone(),
+                ))?;
             }
         };
 
@@ -1062,5 +1073,53 @@ mod tests {
                 .unwrap_err(),
             StatusWord::TxNumericOperationFail
         );
+    }
+
+    #[test_item]
+    fn test_tx_with_multiple_reviewable_inputs() {
+        let inp1 = {
+            let order_id = mlcp::Id::new(mlcp::H256::zero());
+            let additional_info = AdditionalOrderInfo {
+                initially_asked: mlcp::OutputValue::Coin(mlcp::Amount::from_atoms(100)),
+                initially_given: mlcp::OutputValue::Coin(mlcp::Amount::from_atoms(200)),
+                ask_balance: mlcp::Amount::from_atoms(0),
+                give_balance: mlcp::Amount::from_atoms(0),
+            };
+            TxInputWithAdditionalInfo::OrderAccountCommand(
+                mlcp::OrderAccountCommand::FreezeOrder(order_id),
+                additional_info,
+            )
+        };
+        let inp2 = {
+            let token_id = mlcp::Id::new(mlcp::H256::zero());
+            TxInputWithAdditionalInfo::AccountCommand(
+                mlcp::AccountNonce(11),
+                mlcp::AccountCommand::ChangeTokenMetadataUri(token_id, alloc::vec::Vec::new()),
+            )
+        };
+        let inp3 = {
+            let delegation_balance = mlcp::Amount::from_atoms(111);
+            let acc = mlcp::AccountOutPoint {
+                nonce: mlcp::AccountNonce(0),
+                spending: mlcp::AccountSpending::DelegationBalance(
+                    mlcp::Id::new(mlcp::H256::zero()),
+                    delegation_balance,
+                ),
+            };
+            TxInputWithAdditionalInfo::Account(acc)
+        };
+        let inputs = [inp1, inp2, inp3];
+
+        for (inp1_idx, inp1) in inputs.iter().enumerate() {
+            for inp2 in &inputs[inp1_idx + 1..] {
+                let mut collector = TxSummaryCollector::new();
+
+                collector.process_input(inp1).unwrap();
+                assert!(collector.input_command().is_some());
+
+                let err = collector.process_input(inp2).unwrap_err();
+                assert_eq!(err, StatusWord::TxWithMultipleReviewableInputs);
+            }
+        }
     }
 }
