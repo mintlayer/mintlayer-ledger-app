@@ -18,9 +18,9 @@
 #![no_std]
 // See the comment in `crates/test-utils/src/lib.rs` for the meaning of these attributes.
 #![cfg_attr(test, no_main)]
-#![feature(custom_test_frameworks)]
-#![test_runner(ledger_device_sdk::testing::sdk_test_runner)]
-#![reexport_test_harness_main = "test_main"]
+#![cfg_attr(test, feature(custom_test_frameworks))]
+#![cfg_attr(test, test_runner(ledger_device_sdk::testing::sdk_test_runner))]
+#![cfg_attr(test, reexport_test_harness_main = "test_main")]
 
 #[cfg(test)]
 test_utils::impl_panic_handler!();
