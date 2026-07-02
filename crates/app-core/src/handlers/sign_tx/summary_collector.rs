@@ -117,24 +117,24 @@ impl TxSummaryCollector {
     pub fn fees_iter(
         &self,
     ) -> impl Iterator<Item = Result<(&CoinOrTokenId, u128), StatusWord>> + '_ {
-        // TODO: if an asset is only present in total_outputs, this will not fail with TxFeeUnderflow,
-        // but it should.
-        // See https://github.com/mintlayer/mintlayer-ledger-app/issues/15.
-        self.total_inputs()
-            .iter()
-            .map(move |(coin_or_token, amount)| {
-                let out = *self
-                    .total_outputs()
-                    .get(coin_or_token)
-                    .unwrap_or(&Amount::ZERO);
+        // If an asset is present only in the outputs, the tx definitely has fee underflow,
+        // so we return a single-item iterator with the corresponding error.
+        for output_asset in self.total_outputs.keys() {
+            if !self.total_inputs.contains_key(output_asset) {
+                return itertools::Either::Left([Err(StatusWord::TxFeeUnderflow)].into_iter());
+            }
+        }
 
-                let fee = amount
-                    .into_atoms()
-                    .checked_sub(out.into_atoms())
-                    .ok_or(StatusWord::TxFeeUnderflow)?;
+        itertools::Either::Right(self.total_inputs.iter().map(move |(asset, amount)| {
+            let out = *self.total_outputs().get(asset).unwrap_or(&Amount::ZERO);
 
-                Ok((coin_or_token, fee))
-            })
+            let fee = amount
+                .into_atoms()
+                .checked_sub(out.into_atoms())
+                .ok_or(StatusWord::TxFeeUnderflow)?;
+
+            Ok((asset, fee))
+        }))
     }
 
     pub fn process_output(&mut self, out: &TxOutput) -> Result<(), StatusWord> {
@@ -276,16 +276,19 @@ impl TxSummaryCollector {
                         let (given_coin_or_token_id, given_amount) =
                             into_coin_or_token_id_and_amount(&additional_info.initially_given)?;
 
+                        // Add the fill amount as a "pseudo-output" (it goes into the order account).
                         self.increase_output_totals(fill_coin_or_token_id, *fill_amount)?;
 
-                        let atoms = given_amount
+                        let filled_atoms = given_amount
                             .into_atoms()
                             .checked_mul(fill_amount.into_atoms())
                             .ok_or(StatusWord::TxNumericOperationFail)?
                             .checked_div(asked_amount.into_atoms())
                             .ok_or(StatusWord::TxNumericOperationFail)?;
-                        let amount = Amount::from_atoms(atoms);
-                        self.increase_input_totals(given_coin_or_token_id, amount)?;
+                        let filled_amount = Amount::from_atoms(filled_atoms);
+                        // Add the filled amount as a "pseudo-input", so that actual transfer outputs
+                        // can consume it.
+                        self.increase_input_totals(given_coin_or_token_id, filled_amount)?;
 
                         self.tx_type = merge_tx_type(self.tx_type, TxType::FillOrder);
                     }
@@ -374,6 +377,8 @@ fn into_coin_or_token_id_and_amount(
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec::Vec;
+
     use mintlayer_messages::{AdditionalOrderInfo, AdditionalUtxoInfo, TxInputWithAdditionalInfo};
     use test_utils::prelude::*;
 
@@ -1121,5 +1126,47 @@ mod tests {
                 assert_eq!(err, StatusWord::TxWithMultipleReviewableInputs);
             }
         }
+    }
+
+    // Output has coins, but input tokens; `fees_iter` must fail with `TxFeeUnderflow`.
+    #[test_item]
+    fn test_asset_only_in_outputs() {
+        let mut collector = TxSummaryCollector::new();
+
+        let token_id = mlcp::Id::new(mlcp::H256::zero());
+        let token_amount = mlcp::Amount::from_atoms(222);
+        let inp_token = TxInputWithAdditionalInfo::Utxo(
+            make_utxo_outpoint(),
+            AdditionalUtxoInfo::Utxo(mlcp::TxOutput::Transfer(
+                mlcp::OutputValue::TokenV1(token_id, token_amount),
+                mlcp::Destination::AnyoneCanSpend,
+            )),
+        );
+        collector.process_input(&inp_token).unwrap();
+
+        let coin_amount = mlcp::Amount::from_atoms(111);
+        let out_coin = mlcp::TxOutput::Transfer(
+            mlcp::OutputValue::Coin(coin_amount),
+            mlcp::Destination::AnyoneCanSpend,
+        );
+        collector.process_output(&out_coin).unwrap();
+
+        assert_eq!(
+            collector
+                .total_inputs()
+                .get(&CoinOrTokenId::TokenId(token_id)),
+            Some(&token_amount)
+        );
+
+        assert_eq!(
+            collector.total_outputs().get(&CoinOrTokenId::Coin),
+            Some(&coin_amount)
+        );
+
+        let fees_err = collector
+            .fees_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap_err();
+        assert_eq!(fees_err, StatusWord::TxFeeUnderflow);
     }
 }
