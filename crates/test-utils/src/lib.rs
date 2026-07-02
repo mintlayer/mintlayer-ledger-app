@@ -25,7 +25,7 @@
 //!    2. "custom_test_frameworks" must be enabled to be able to specify the custom runner and use
 //!       the `#[test_case]` attribute (used internally by `testmacro::test_item`).
 //!
-//!       #![feature(custom_test_frameworks)]
+//!       #![cfg_attr(test, feature(custom_test_frameworks))]
 //!
 //!    3. Specify the custom test runner. All test cases collected by `#[test_case]` will be passed
 //!       to this function. In particular, `sdk_test_runner` will loop over the array of test cases
@@ -33,13 +33,13 @@
 //!       a) fix references stored inside the test case via pic_rs/pic;
 //!       b) invoke the closure associated with the test case.
 //!
-//!       #![test_runner(ledger_device_sdk::testing::sdk_test_runner)]
+//!       #![cfg_attr(test, test_runner(ledger_device_sdk::testing::sdk_test_runner))]
 //!
 //!
 //!    4. The following will put `fn test_main` at the test crate's root, which will call the runner
 //!       that we've specified above. The crate's `sample_main` will have to call `test_main`.
 //!
-//!       #![reexport_test_harness_main = "test_main"]
+//!       #![cfg_attr(test, reexport_test_harness_main = "test_main")]
 //! 3. Under `#[cfg(test)]` call:
 //!    1. test_utils::impl_panic_handler!();
 //!    2. test_utils::impl_main!();
