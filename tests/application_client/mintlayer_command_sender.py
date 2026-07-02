@@ -91,7 +91,7 @@ def split_message(message: bytes, max_size: int) -> List[bytes]:
     if len(message) == 0:
         return [[]]
 
-    return [message[x : x + max_size] for x in range(0, len(message), max_size)]
+    return [message[x: x + max_size] for x in range(0, len(message), max_size)]
 
 
 class MintlayerCommandSender:
@@ -196,20 +196,27 @@ class MintlayerCommandSender:
         # ---- INPUTS ----
         print("sending inputs", len(transaction.inputs))
 
+        def encode_input(inp):
+            return sign_tx_next_req_obj.encode({"ProcessInput": inp}).data
+        
+        def encode_input_comm(comm):
+            return sign_tx_next_req_obj.encode({"ProcessInputCommitment": comm}).data
+        
+        def encode_output(outp):
+            return sign_tx_next_req_obj.encode({"ProcessOutput": outp}).data
+
         for inp in transaction.inputs:
-            encoded_inp = sign_tx_next_req_obj.encode(inp).data
+            encoded_inp = encode_input(inp)
             self._send_chunked_sync(encoded_inp, "TxNext")
 
         # ---- INPUT COMMITMENTS ----
         print("sending input commitments")
 
         for comm in transaction.input_commitments[:-1]:
-            encoded_comm = sign_tx_next_req_obj.encode(comm).data
+            encoded_comm = encode_input_comm(comm)
             self._send_chunked_sync(encoded_comm, "TxNext")
 
-        encoded_comm = sign_tx_next_req_obj.encode(
-            transaction.input_commitments[-1]
-        ).data
+        encoded_comm = encode_input_comm(transaction.input_commitments[-1])
         chunks = split_message(encoded_comm, MAX_APDU_LEN)
 
         # all but last chunk sync
@@ -245,7 +252,7 @@ class MintlayerCommandSender:
         for idx, out in enumerate(transaction.outputs):
             print(f"sending output {idx}")
 
-            encoded_out = sign_tx_next_req_obj.encode(out).data
+            encoded_out = encode_output(out)
             chunks = split_message(encoded_out, MAX_APDU_LEN)
 
             # all but last chunk sync
@@ -267,7 +274,8 @@ class MintlayerCommandSender:
                 p2=P2.P2_LAST,
                 data=chunks[-1],
             ):
-                kind = "sign" if idx == len(transaction.outputs) - 1 else "output"
+                kind = "sign" if idx == len(
+                    transaction.outputs) - 1 else "output"
                 yield SignTxStep(kind=kind)
 
             response = self.get_async_response()
@@ -301,7 +309,8 @@ class MintlayerCommandSender:
         return response
 
     def get_all_signatures(self, transaction: Transaction) -> List[TxInputSignature]:
-        next_sig = sign_tx_next_req_obj.encode({"ReturnNextSignature": None}).data
+        next_sig = sign_tx_next_req_obj.encode(
+            {"ReturnNextSignature": None}).data
         sigs = []
         expected_sigs_count = len(transaction.expected_sig_indices())
 

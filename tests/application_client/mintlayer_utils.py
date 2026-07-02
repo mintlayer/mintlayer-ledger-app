@@ -62,19 +62,17 @@ class TxInputSignature:
 @dataclass
 class Transaction:
     coin: int
+    # A list of TxInputData objects.
     inputs: List[dict]
+    # A list of TxInputCommitmentData objects.
     input_commitments: List[dict]
+    # A list of TxOutputData objects.
     outputs: List[dict]
 
     def expected_sig_indices(self) -> set[TxInputSignatureIndices]:
         result = set()
         for input_idx, inp in enumerate(self.inputs):
-            input_data = inp.get("ProcessInput")
-            assert (
-                input_data is not None
-            ), f"Transaction input is not a ProcessInput request: {inp!r}"
-
-            for addr in input_data["addresses"]:
+            for addr in inp["addresses"]:
                 multisig_idx = addr["multisig_idx"]
                 result.add(
                     TxInputSignatureIndices(

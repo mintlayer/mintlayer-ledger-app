@@ -43,43 +43,41 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
         }
     }
     inp = {
-        "ProcessInput": {
-            "addresses": [
-                {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-            ],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([0] * 32)},
-                        "index": 1,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [
+            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
+             "multisig_idx": None}
+        ],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([0] * 32)},
+                    "index": 1,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {"ProcessInputCommitment": {"commitment": additional_info}}
+    inp_commitment = {"commitment": additional_info}
 
     output = {
-        "ProcessOutput": {
-            "output": {
-                "Transfer": [
-                    {"Coin": 10},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                            }
+        "output": {
+            "Transfer": [
+                {"Coin": 10},
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
                         }
-                    },
-                ],
-            }
+                    }
+                },
+            ],
         }
     }
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[
+            inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
@@ -98,42 +96,40 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
 
     h = 1 << 31
     inp = {
-        "ProcessInput": {
-            "addresses": [
-                {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-            ],
-            "input": {
-                "Account": {
-                    "nonce": 1,
-                    "spending": {"DelegationBalance": [[0] * 32, 11]},
-                }
-            },
-        }
+        "addresses": [
+            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
+                "multisig_idx": None}
+        ],
+        "input": {
+            "Account": {
+                "nonce": 1,
+                "spending": {"DelegationBalance": [[0] * 32, 11]},
+            }
+        },
     }
 
-    inp_commitment = {"ProcessInputCommitment": {"commitment": {"None": None}}}
+    inp_commitment = {"commitment": {"None": None}}
 
     output = {
-        "ProcessOutput": {
-            "output": {
-                "LockThenTransfer": [
-                    {"Coin": 10},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                            }
+        "output": {
+            "LockThenTransfer": [
+                {"Coin": 10},
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
                         }
-                    },
-                    {"UntilHeight": 10},
-                ],
-            }
+                    }
+                },
+                {"UntilHeight": 10},
+            ],
         }
     }
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[
+            inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
@@ -162,44 +158,42 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
         }
     }
     inp = {
-        "ProcessInput": {
-            "addresses": [
-                {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-            ],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([0] * 32)},
-                        "index": 1,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [
+            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
+                "multisig_idx": None}
+        ],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([0] * 32)},
+                    "index": 1,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {"ProcessInputCommitment": {"commitment": additional_info}}
+    inp_commitment = {"commitment": additional_info}
 
     output = {
-        "ProcessOutput": {
-            "output": {
-                "CreateDelegationId": [
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                            }
+        "output": {
+            "CreateDelegationId": [
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
                         }
-                    },
-                    [0] * 32,
-                ],
-            }
+                    }
+                },
+                [0] * 32,
+            ],
         }
     }
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[
+            inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
@@ -228,35 +222,33 @@ def test_sign_tx_delegate_staking(backend, scenario_navigator, device, navigator
         }
     }
     inp = {
-        "ProcessInput": {
-            "addresses": [
-                {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-            ],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([0] * 32)},
-                        "index": 1,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [
+            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
+                "multisig_idx": None}
+        ],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([0] * 32)},
+                    "index": 1,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {"ProcessInputCommitment": {"commitment": additional_info}}
+    inp_commitment = {"commitment": additional_info}
 
     output = {
-        "ProcessOutput": {
-            "output": {
-                "DelegateStaking": [5, [0] * 32],
-            }
+        "output": {
+            "DelegateStaking": [5, [0] * 32],
         }
     }
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[
+            inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
@@ -285,58 +277,56 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
         }
     }
     inp = {
-        "ProcessInput": {
-            "addresses": [
-                {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-            ],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([0] * 32)},
-                        "index": 1,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [
+            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
+                "multisig_idx": None}
+        ],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([0] * 32)},
+                    "index": 1,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {"ProcessInputCommitment": {"commitment": additional_info}}
+    inp_commitment = {"commitment": additional_info}
 
     output = {
-        "ProcessOutput": {
-            "output": {
-                "CreateStakePool": [
-                    [0] * 32,
-                    {
-                        "pledge": 40000,
-                        "staker": {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                                }
+        "output": {
+            "CreateStakePool": [
+                [0] * 32,
+                {
+                    "pledge": 40000,
+                    "staker": {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
                             }
-                        },
-                        "vrf_public_key": {
-                            "key": {"Schnorrkel": {"key": bytes([0] * 32)}}
-                        },
-                        "decommission_key": {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                                }
-                            }
-                        },
-                        "margin_ratio_per_thousand": 10,
-                        "cost_per_block": 5,
+                        }
                     },
-                ],
-            }
+                    "vrf_public_key": {
+                        "key": {"Schnorrkel": {"key": bytes([0] * 32)}}
+                    },
+                    "decommission_key": {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
+                            }
+                        }
+                    },
+                    "margin_ratio_per_thousand": 10,
+                    "cost_per_block": 5,
+                },
+            ],
         }
     }
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[
+            inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
@@ -364,50 +354,48 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
         }
     }
     inp = {
-        "ProcessInput": {
-            "addresses": [
-                {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-            ],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([0] * 32)},
-                        "index": 1,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [
+            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
+                "multisig_idx": None}
+        ],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([0] * 32)},
+                    "index": 1,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {"ProcessInputCommitment": {"commitment": additional_info}}
+    inp_commitment = {"commitment": additional_info}
 
     output = {
-        "ProcessOutput": {
-            "output": {
-                "IssueFungibleToken": {
-                    "V1": {
-                        "token_ticker": b"MYTKN",
-                        "number_of_decimals": 8,
-                        "metadata_uri": b"https://my.token.uri",
-                        "total_supply": {"Fixed": 1000000000},
-                        "authority": {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                                }
+        "output": {
+            "IssueFungibleToken": {
+                "V1": {
+                    "token_ticker": b"MYTKN",
+                    "number_of_decimals": 8,
+                    "metadata_uri": b"https://my.token.uri",
+                    "total_supply": {"Fixed": 1000000000},
+                    "authority": {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
                             }
-                        },
-                        "is_freezable": {"Yes": None},
-                    }
-                },
-            }
+                        }
+                    },
+                    "is_freezable": {"Yes": None},
+                }
+            },
         }
     }
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[
+            inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
@@ -435,68 +423,66 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
         }
     }
     inp = {
-        "ProcessInput": {
-            "addresses": [
-                {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-            ],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([0] * 32)},
-                        "index": 1,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [
+            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
+                "multisig_idx": None}
+        ],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([0] * 32)},
+                    "index": 1,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {"ProcessInputCommitment": {"commitment": additional_info}}
+    inp_commitment = {"commitment": additional_info}
 
     # This is the new output for issuing an NFT.
     # The structure is (TokenId, NftIssuance, Destination)
     output = {
-        "ProcessOutput": {
-            "output": {
-                "IssueNft": [
-                    bytes([0] * 32),
-                    {
-                        "V0": {
-                            "metadata": {
-                                "creator": {
-                                    "public_key": {
-                                        "key": {
-                                            "Secp256k1Schnorr": {
-                                                "pubkey_data": bytes([0] * 33)
-                                            }
+        "output": {
+            "IssueNft": [
+                bytes([0] * 32),
+                {
+                    "V0": {
+                        "metadata": {
+                            "creator": {
+                                "public_key": {
+                                    "key": {
+                                        "Secp256k1Schnorr": {
+                                            "pubkey_data": bytes([0] * 33)
                                         }
                                     }
-                                },
-                                "name": b"MyAwesomeNFT",
-                                "description": b"FirstNFT",
-                                "ticker": b"MNFT1",
-                                "icon_uri": b"https://my.nft/icon.png",
-                                "additional_metadata_uri": b"https://my.nft/meta.json",
-                                "media_uri": b"https://my.nft/media.jpg",
-                                "media_hash": bytes([0] * 32),
-                            }
+                                }
+                            },
+                            "name": b"MyAwesomeNFT",
+                            "description": b"FirstNFT",
+                            "ticker": b"MNFT1",
+                            "icon_uri": b"https://my.nft/icon.png",
+                            "additional_metadata_uri": b"https://my.nft/meta.json",
+                            "media_uri": b"https://my.nft/media.jpg",
+                            "media_hash": bytes([0] * 32),
                         }
-                    },
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                            }
+                    }
+                },
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
                         }
-                    },
-                ],
-            }
+                    }
+                },
+            ],
         }
     }
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[
+            inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
@@ -533,57 +519,51 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
         }
     }
     utxo_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([1] * 32)},
-                        "index": 0,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([1] * 32)},
+                    "index": 0,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {"ProcessInputCommitment": {"commitment": additional_info}}
+    inp_commitment = {"commitment": additional_info}
 
     account_nonce = 1
     token_id = bytes([0] * 32)
     account_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "AccountCommand": [
-                    account_nonce,
-                    {
-                        "MintTokens": [
-                            token_id,
-                            1000,  # Amount to mint
-                        ]
-                    },
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "AccountCommand": [
+                account_nonce,
+                {
+                    "MintTokens": [
+                        token_id,
+                        1000,  # Amount to mint
+                    ]
+                },
+            ]
+        },
     }
 
-    acc_inp_commitment = {"ProcessInputCommitment": {"commitment": {"None": None}}}
+    acc_inp_commitment = {"commitment": {"None": None}}
 
     mint_output = {
-        "ProcessOutput": {
-            "output": {
-                "Transfer": [
-                    {"TokenV1": [token_id, 1000]},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
+        "output": {
+            "Transfer": [
+                {"TokenV1": [token_id, 1000]},
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                         }
-                    },
-                ],
-            }
+                    }
+                },
+            ],
         }
     }
 
@@ -641,80 +621,71 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
         }
     }
     utxo_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([1] * 32)},
-                        "index": 0,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([1] * 32)},
+                    "index": 0,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {
-        "ProcessInputCommitment": {"commitment": additional_info},
-    }
+    inp_commitment = {"commitment": additional_info}
 
     utxo_input2 = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([1] * 32)},
-                        "index": 2,
-                    },
-                    additional_info2,
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([1] * 32)},
+                    "index": 2,
+                },
+                additional_info2,
+            ]
+        },
     }
 
-    inp_commitment2 = {"ProcessInputCommitment": {"commitment": additional_info2}}
+    inp_commitment2 = {"commitment": additional_info2}
 
     account_nonce = 1
     token_id = bytes([0] * 32)
     account_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "AccountCommand": [
-                    account_nonce,
-                    {
-                        "UnmintTokens": token_id,
-                    },
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "AccountCommand": [
+                account_nonce,
+                {
+                    "UnmintTokens": token_id,
+                },
+            ]
+        },
     }
 
-    acc_inp_commitment = {"ProcessInputCommitment": {"commitment": {"None": None}}}
+    acc_inp_commitment = {"commitment": {"None": None}}
 
     change_output = {
-        "ProcessOutput": {
-            "output": {
-                "Transfer": [
-                    {"Coin": 99},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
+        "output": {
+            "Transfer": [
+                {"Coin": 99},
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                         }
-                    },
-                ],
-            }
+                    }
+                },
+            ],
         }
     }
 
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input, utxo_input2],
-        input_commitments=[inp_commitment, acc_inp_commitment, inp_commitment2],
+        input_commitments=[inp_commitment,
+                           acc_inp_commitment, inp_commitment2],
         outputs=[change_output],
     )
 
@@ -753,54 +724,46 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
     }
 
     utxo_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([1] * 32)},
-                        "index": 0,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([1] * 32)},
+                    "index": 0,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {
-        "ProcessInputCommitment": {"commitment": additional_info},
-    }
+    inp_commitment = {"commitment": additional_info}
 
     account_nonce = 1
     token_id = bytes([0] * 32)
     account_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "AccountCommand": [
-                    account_nonce,
-                    {"FreezeToken": [token_id, {"No": None}]},
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "AccountCommand": [
+                account_nonce,
+                {"FreezeToken": [token_id, {"No": None}]},
+            ]
+        },
     }
 
-    acc_inp_commitment = {"ProcessInputCommitment": {"commitment": {"None": None}}}
+    acc_inp_commitment = {"commitment": {"None": None}}
 
     change_output = {
-        "ProcessOutput": {
-            "output": {
-                "Transfer": [
-                    {"Coin": 99},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
+        "output": {
+            "Transfer": [
+                {"Coin": 99},
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                         }
-                    },
-                ],
-            }
+                    }
+                },
+            ],
         }
     }
 
@@ -845,56 +808,48 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
         }
     }
     utxo_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([1] * 32)},
-                        "index": 0,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([1] * 32)},
+                    "index": 0,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {
-        "ProcessInputCommitment": {"commitment": additional_info},
-    }
+    inp_commitment = {"commitment": additional_info}
 
     account_nonce = 1
     token_id = bytes([0] * 32)
     account_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "AccountCommand": [
-                    account_nonce,
-                    {
-                        "UnfreezeToken": token_id,
-                    },
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "AccountCommand": [
+                account_nonce,
+                {
+                    "UnfreezeToken": token_id,
+                },
+            ]
+        },
     }
 
-    acc_inp_commitment = {"ProcessInputCommitment": {"commitment": {"None": None}}}
+    acc_inp_commitment = {"commitment": {"None": None}}
 
     change_output = {
-        "ProcessOutput": {
-            "output": {
-                "Transfer": [
-                    {"Coin": 99},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
+        "output": {
+            "Transfer": [
+                {"Coin": 99},
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                         }
-                    },
-                ],
-            }
+                    }
+                },
+            ],
         }
     }
 
@@ -939,67 +894,59 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
         }
     }
     utxo_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([1] * 32)},
-                        "index": 0,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([1] * 32)},
+                    "index": 0,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {
-        "ProcessInputCommitment": {"commitment": additional_info},
-    }
+    inp_commitment = {"commitment": additional_info}
 
     account_nonce = 1
     token_id = bytes([0] * 32)
     account_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "AccountCommand": [
-                    account_nonce,
-                    {
-                        "ChangeTokenAuthority": [
-                            token_id,
-                            {
-                                "PublicKey": {
-                                    "key": {
-                                        "Secp256k1Schnorr": {
-                                            "pubkey_data": bytes([2] * 33)
-                                        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "AccountCommand": [
+                account_nonce,
+                {
+                    "ChangeTokenAuthority": [
+                        token_id,
+                        {
+                            "PublicKey": {
+                                "key": {
+                                    "Secp256k1Schnorr": {
+                                        "pubkey_data": bytes([2] * 33)
                                     }
                                 }
-                            },
-                        ]
-                    },
-                ]
-            },
-        }
+                            }
+                        },
+                    ]
+                },
+            ]
+        },
     }
 
-    acc_inp_commitment = {"ProcessInputCommitment": {"commitment": {"None": None}}}
+    acc_inp_commitment = {"commitment": {"None": None}}
 
     change_output = {
-        "ProcessOutput": {
-            "output": {
-                "Transfer": [
-                    {"Coin": 99},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
+        "output": {
+            "Transfer": [
+                {"Coin": 99},
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                         }
-                    },
-                ],
-            }
+                    }
+                },
+            ],
         }
     }
 
@@ -1046,59 +993,51 @@ def test_sign_tx_change_token_metadata_uri(
         }
     }
     utxo_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([1] * 32)},
-                        "index": 0,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([1] * 32)},
+                    "index": 0,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {
-        "ProcessInputCommitment": {"commitment": additional_info},
-    }
+    inp_commitment = {"commitment": additional_info}
 
     account_nonce = 1
     token_id = bytes([0] * 32)
     account_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "AccountCommand": [
-                    account_nonce,
-                    {
-                        "ChangeTokenMetadataUri": [
-                            token_id,
-                            "uri.com".encode(),
-                        ]
-                    },
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "AccountCommand": [
+                account_nonce,
+                {
+                    "ChangeTokenMetadataUri": [
+                        token_id,
+                        "uri.com".encode(),
+                    ]
+                },
+            ]
+        },
     }
 
-    acc_inp_commitment = {"ProcessInputCommitment": {"commitment": {"None": None}}}
+    acc_inp_commitment = {"commitment": {"None": None}}
 
     change_output = {
-        "ProcessOutput": {
-            "output": {
-                "Transfer": [
-                    {"Coin": 99},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
+        "output": {
+            "Transfer": [
+                {"Coin": 99},
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                         }
-                    },
-                ],
-            }
+                    }
+                },
+            ],
         }
     }
 
@@ -1144,23 +1083,19 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
         }
     }
     utxo_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([1] * 32)},
-                        "index": 0,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([1] * 32)},
+                    "index": 0,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {
-        "ProcessInputCommitment": {"commitment": additional_info},
-    }
+    inp_commitment = {"commitment": additional_info}
 
     fill_amount = 10
     fill_ask = 100
@@ -1174,69 +1109,61 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     }
     order_id = bytes([0] * 32)
     account_input = {
-        "ProcessInput": {
-            "addresses": [],  # FillOrder input must not be signed
-            "input": {
-                "OrderAccountCommand": [
-                    {
-                        "FillOrder": [
-                            order_id,
-                            fill_amount,
-                        ]
-                    },
-                    additional_order_info,
-                ]
-            },
-        }
+        "addresses": [],  # FillOrder input must not be signed
+        "input": {
+            "OrderAccountCommand": [
+                {
+                    "FillOrder": [
+                        order_id,
+                        fill_amount,
+                    ]
+                },
+                additional_order_info,
+            ]
+        },
     }
 
     fill_order_inp_commitment = {
-        "ProcessInputCommitment": {
-            "commitment": {
-                "FillOrderAccountCommand": [
-                    additional_order_info["initially_asked"],
-                    additional_order_info["initially_given"],
-                ]
-            },
-        }
+        "commitment": {
+            "FillOrderAccountCommand": [
+                additional_order_info["initially_asked"],
+                additional_order_info["initially_given"],
+            ]
+        },
     }
 
     change_output = {
-        "ProcessOutput": {
-            "output": {
-                "Transfer": [
-                    {"Coin": 100 - 1 - fill_amount},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
+        "output": {
+            "Transfer": [
+                {"Coin": 100 - 1 - fill_amount},
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                         }
-                    },
-                ],
-            }
+                    }
+                },
+            ],
         }
     }
 
     fill_output = {
-        "ProcessOutput": {
-            "output": {
-                "Transfer": [
-                    {
-                        "TokenV1": [
-                            bytes([0] * 32),
-                            fill_amount * fill_give // fill_ask,
-                        ]
-                    },
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
+        "output": {
+            "Transfer": [
+                {
+                    "TokenV1": [
+                        bytes([0] * 32),
+                        fill_amount * fill_give // fill_ask,
+                    ]
+                },
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                         }
-                    },
-                ],
-            }
+                    }
+                },
+            ],
         }
     }
 
@@ -1281,23 +1208,19 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
         }
     }
     utxo_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([1] * 32)},
-                        "index": 0,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([1] * 32)},
+                    "index": 0,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {
-        "ProcessInputCommitment": {"commitment": additional_info},
-    }
+    inp_commitment = {"commitment": additional_info}
 
     initial_ask = 100
     initial_give = 1000
@@ -1313,63 +1236,55 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     }
     order_id = bytes([1] * 32)
     account_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "OrderAccountCommand": [
-                    {
-                        "ConcludeOrder": order_id,
-                    },
-                    additional_order_info,
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "OrderAccountCommand": [
+                {
+                    "ConcludeOrder": order_id,
+                },
+                additional_order_info,
+            ]
+        },
     }
 
     conclude_order_inp_commitment = {
-        "ProcessInputCommitment": {
-            "commitment": {
-                "ConcludeOrderAccountCommand": [
-                    additional_order_info["initially_asked"],
-                    additional_order_info["initially_given"],
-                    additional_order_info["ask_balance"],
-                    additional_order_info["give_balance"],
-                ]
-            },
-        }
+        "commitment": {
+            "ConcludeOrderAccountCommand": [
+                additional_order_info["initially_asked"],
+                additional_order_info["initially_given"],
+                additional_order_info["ask_balance"],
+                additional_order_info["give_balance"],
+            ]
+        },
     }
 
     change_output = {
-        "ProcessOutput": {
-            "output": {
-                "Transfer": [
-                    {"Coin": 100 - 1 + ask_balance},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
+        "output": {
+            "Transfer": [
+                {"Coin": 100 - 1 + ask_balance},
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                         }
-                    },
-                ],
-            }
+                    }
+                },
+            ],
         }
     }
 
     conclude_output = {
-        "ProcessOutput": {
-            "output": {
-                "Transfer": [
-                    {"TokenV1": [token_id, give_balance]},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
+        "output": {
+            "Transfer": [
+                {"TokenV1": [token_id, give_balance]},
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                         }
-                    },
-                ],
-            }
+                    }
+                },
+            ],
         }
     }
 
@@ -1413,66 +1328,58 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
         }
     }
     utxo_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([1] * 32)},
-                        "index": 0,
-                    },
-                    additional_info,
-                ]
-            },
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([1] * 32)},
+                    "index": 0,
+                },
+                additional_info,
+            ]
+        },
+    }
+
+    inp_commitment = {"commitment": additional_info}
+
+    change_output = {
+        "output": {
+            "Transfer": [
+                {"Coin": 89},
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
+                        }
+                    }
+                },
+            ],
         }
     }
 
-    inp_commitment = {
-        "ProcessInputCommitment": {"commitment": additional_info},
-    }
-
-    change_output = {
-        "ProcessOutput": {
-            "output": {
-                "Transfer": [
-                    {"Coin": 89},
-                    {
+    htlc_output = {
+        "output": {
+            "Htlc": [
+                {"Coin": 10},
+                {
+                    "secret_hash": [0] * 20,
+                    "spend_key": {
                         "PublicKey": {
                             "key": {
                                 "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                             }
                         }
                     },
-                ],
-            }
-        }
-    }
-
-    htlc_output = {
-        "ProcessOutput": {
-            "output": {
-                "Htlc": [
-                    {"Coin": 10},
-                    {
-                        "secret_hash": [0] * 20,
-                        "spend_key": {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                                }
+                    "refund_timelock": {"UntilHeight": 100},
+                    "refund_key": {
+                        "PublicKey": {
+                            "key": {
+                                "Secp256k1Schnorr": {"pubkey_data": bytes([3] * 33)}
                             }
-                        },
-                        "refund_timelock": {"UntilHeight": 100},
-                        "refund_key": {
-                            "PublicKey": {
-                                "key": {
-                                    "Secp256k1Schnorr": {"pubkey_data": bytes([3] * 33)}
-                                }
-                            }
-                        },
+                        }
                     },
-                ],
-            }
+                },
+            ],
         }
     }
 
@@ -1518,39 +1425,33 @@ def test_sign_tx_without_outputs(backend, scenario_navigator, device, navigator)
     }
 
     utxo_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([1] * 32)},
-                        "index": 0,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([1] * 32)},
+                    "index": 0,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {
-        "ProcessInputCommitment": {"commitment": additional_info},
-    }
+    inp_commitment = {"commitment": additional_info}
 
     account_nonce = 1
     token_id = bytes([0] * 32)
     account_input = {
-        "ProcessInput": {
-            "addresses": [{"path": bip44_path, "multisig_idx": None}],
-            "input": {
-                "AccountCommand": [
-                    account_nonce,
-                    {"FreezeToken": [token_id, {"No": None}]},
-                ]
-            },
-        }
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "AccountCommand": [
+                account_nonce,
+                {"FreezeToken": [token_id, {"No": None}]},
+            ]
+        },
     }
 
-    acc_inp_commitment = {"ProcessInputCommitment": {"commitment": {"None": None}}}
+    acc_inp_commitment = {"commitment": {"None": None}}
 
     transaction = Transaction(
         coin=MAINNET,
@@ -1585,23 +1486,22 @@ def test_sign_tx_with_large_output(backend, scenario_navigator, device, navigato
         }
     }
     inp = {
-        "ProcessInput": {
-            "addresses": [
-                {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-            ],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([0] * 32)},
-                        "index": 1,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [
+            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
+                "multisig_idx": None}
+        ],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([0] * 32)},
+                    "index": 1,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {"ProcessInputCommitment": {"commitment": additional_info}}
+    inp_commitment = {"commitment": additional_info}
 
     # Make the output big
     metadata_uri = b"abcef" * 100
@@ -1609,50 +1509,49 @@ def test_sign_tx_with_large_output(backend, scenario_navigator, device, navigato
     # This is an output for issuing an NFT.
     # The structure is (TokenId, NftIssuance, Destination)
     output = {
-        "ProcessOutput": {
-            "output": {
-                "IssueNft": [
-                    bytes([0] * 32),
-                    {
-                        "V0": {
-                            "metadata": {
-                                "creator": {
-                                    "public_key": {
-                                        "key": {
-                                            "Secp256k1Schnorr": {
-                                                "pubkey_data": bytes([0] * 33)
-                                            }
+        "output": {
+            "IssueNft": [
+                bytes([0] * 32),
+                {
+                    "V0": {
+                        "metadata": {
+                            "creator": {
+                                "public_key": {
+                                    "key": {
+                                        "Secp256k1Schnorr": {
+                                            "pubkey_data": bytes([0] * 33)
                                         }
                                     }
-                                },
-                                "name": b"MyAwesomeNFT",
-                                "description": b"FirstNFT",
-                                "ticker": b"MNFT1",
-                                "icon_uri": b"https://my.nft/icon.png",
-                                "additional_metadata_uri": metadata_uri,
-                                "media_uri": b"https://my.nft/media.jpg",
-                                "media_hash": bytes([0] * 32),
-                            }
+                                }
+                            },
+                            "name": b"MyAwesomeNFT",
+                            "description": b"FirstNFT",
+                            "ticker": b"MNFT1",
+                            "icon_uri": b"https://my.nft/icon.png",
+                            "additional_metadata_uri": metadata_uri,
+                            "media_uri": b"https://my.nft/media.jpg",
+                            "media_hash": bytes([0] * 32),
                         }
-                    },
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                            }
+                    }
+                },
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
                         }
-                    },
-                ],
-            }
+                    }
+                },
+            ],
         }
     }
 
     # Sanity check
-    assert len(sign_tx_next_req_obj.encode(output).data) > 500
+    assert len(sign_tx_next_req_obj.encode({ "ProcessOutput": output }).data) > 500
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[
+            inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
@@ -1712,48 +1611,46 @@ def test_sign_tx_with_large_input_and_commitment(
         }
     }
     inp = {
-        "ProcessInput": {
-            "addresses": [
-                {"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}
-            ],
-            "input": {
-                "Utxo": [
-                    {
-                        "id": {"Transaction": bytes([0] * 32)},
-                        "index": 1,
-                    },
-                    additional_info,
-                ]
-            },
-        }
+        "addresses": [
+            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
+                "multisig_idx": None}
+        ],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([0] * 32)},
+                    "index": 1,
+                },
+                additional_info,
+            ]
+        },
     }
 
-    inp_commitment = {"ProcessInputCommitment": {"commitment": additional_info}}
+    inp_commitment = {"commitment": additional_info}
 
     output = {
-        "ProcessOutput": {
-            "output": {
-                "Transfer": [
-                    {"TokenV1": [token_id, 1]},
-                    {
-                        "PublicKey": {
-                            "key": {
-                                "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                            }
+        "output": {
+            "Transfer": [
+                {"TokenV1": [token_id, 1]},
+                {
+                    "PublicKey": {
+                        "key": {
+                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                         }
-                    },
-                ],
-            }
+                    }
+                },
+            ],
         }
     }
 
     # Sanity checks
-    assert len(sign_tx_next_req_obj.encode(inp).data) > 500
-    assert len(sign_tx_next_req_obj.encode(inp_commitment).data) > 500
+    assert len(sign_tx_next_req_obj.encode({ "ProcessInput": inp }).data) > 500
+    assert len(sign_tx_next_req_obj.encode({ "ProcessInputCommitment": inp_commitment }).data) > 500
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[
+            inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
