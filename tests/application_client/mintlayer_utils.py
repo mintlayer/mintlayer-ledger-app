@@ -1,4 +1,6 @@
+from coincurve import PublicKeyXOnly
 from dataclasses import dataclass
+from hashlib import blake2b
 from typing import List, Optional
 import scalecodec  # type: ignore
 
@@ -8,6 +10,12 @@ sign_tx_start_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_obje
 sign_tx_next_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
     "SignTxNextReq"
 )
+compact_u32_obj = scalecodec.base.RuntimeConfiguration(
+).create_scale_object("Compact<u32>")
+tx_input_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("TxInput")
+tx_input_commitment_obj = scalecodec.base.RuntimeConfiguration(
+).create_scale_object("SighashInputCommitment")
+tx_output_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("TxOutput")
 
 
 @dataclass
@@ -19,7 +27,8 @@ class TxInputSignatureResponse:
 
     @staticmethod
     def from_data(response: bytes):
-        decoded_response = decode_response_variant(response, "TxInputSignature")
+        decoded_response = decode_response_variant(
+            response, "TxInputSignature")
 
         signature = bytes.fromhex(decoded_response["signature"][2:])
         assert len(signature) == 64
@@ -69,18 +78,73 @@ class Transaction:
     # A list of TxOutputData objects.
     outputs: List[dict]
 
-    def expected_sig_indices(self) -> set[TxInputSignatureIndices]:
-        result = set()
+    # Extract key derivation path for each input_idx/multisig_idx combination
+    # and return it as a dict.
+    def addr_paths_by_indices(self) -> dict[TxInputSignatureIndices, list[int]]:
+        result = {}
         for input_idx, inp in enumerate(self.inputs):
             for addr in inp["addresses"]:
                 multisig_idx = addr["multisig_idx"]
-                result.add(
-                    TxInputSignatureIndices(
-                        input_idx=input_idx, multisig_idx=multisig_idx
-                    )
+                indices = TxInputSignatureIndices(
+                    input_idx=input_idx, multisig_idx=multisig_idx
                 )
 
+                result[indices] = addr["path"]
+
         return result
+
+    def expected_sig_indices(self) -> set[TxInputSignatureIndices]:
+        return set(self.addr_paths_by_indices())
+
+    def digest_for_signing(self) -> bytes:
+        encoded_inputs = b""
+        for inp_data in self.inputs:
+            inp_with_info = inp_data["input"]
+            if "Utxo" in inp_with_info:
+                inp = {"Utxo": inp_with_info["Utxo"][0]}
+            elif "Account" in inp_with_info:
+                inp = {"Account": inp_with_info["Account"]}
+            elif "AccountCommand" in inp_with_info:
+                inp = {"AccountCommand": inp_with_info["AccountCommand"]}
+            elif "OrderAccountCommand" in inp_with_info:
+                inp = {
+                    "OrderAccountCommand": inp_with_info["OrderAccountCommand"][0]}
+            else:
+                raise ValueError("Unexpected input")
+
+            encoded_inputs += tx_input_obj.encode(inp).data
+
+        encoded_input_commitments = b""
+        for inp_comm in self.input_commitments:
+            comm = inp_comm["commitment"]
+            encoded_input_commitments += tx_input_commitment_obj.encode(
+                comm).data
+
+        encoded_outputs = b""
+        for outp_data in self.outputs:
+            outp = outp_data["output"]
+            encoded_outputs += tx_output_obj.encode(outp).data
+
+        assert len(self.input_commitments) == len(self.inputs)
+
+        num_inputs_as_le_bytes = len(self.inputs).to_bytes(4, "little")
+        compact_encoded_num_outputs = compact_u32_obj.encode(
+            len(self.outputs)).data
+
+        preimage = (
+            b"\x01"                  # SigHashType::ALL
+            + b"\x01"                # version
+            + bytes(16)              # zero flags
+            + num_inputs_as_le_bytes
+            + encoded_inputs
+            + num_inputs_as_le_bytes
+            + encoded_input_commitments
+            + compact_encoded_num_outputs
+            + encoded_outputs
+        )
+
+        tx_hash = mintlayer_hash(mintlayer_hash(preimage))
+        return tx_hash
 
 
 def decode_response(response: bytes) -> dict:
@@ -101,3 +165,38 @@ def decode_response_variant(response: bytes, expected_variant: str) -> dict:
     ), f"Expecting a dict with a single key '{expected_variant}', but got: {decoded_response!r}"
 
     return decoded_response[expected_variant]
+
+
+def mintlayer_hash(data: bytes) -> bytes:
+    return blake2b(data, digest_size=64).digest()[:32]
+
+
+MESSAGE_MAGIC_PREFIX = b"===MINTLAYER MESSAGE BEGIN===\n"
+MESSAGE_MAGIC_SUFFIX = b"\n===MINTLAYER MESSAGE END==="
+
+
+def mintlayer_message_digest(message: bytes) -> bytes:
+    framed = MESSAGE_MAGIC_PREFIX + message + MESSAGE_MAGIC_SUFFIX
+    return mintlayer_hash(mintlayer_hash(framed))
+
+
+def xonly_pubkey(public_key: bytes) -> bytes:
+    if len(public_key) == 32:
+        return public_key
+    if len(public_key) == 33 and public_key[0] in (0x02, 0x03):
+        return public_key[1:33]
+    if len(public_key) == 65 and public_key[0] == 0x04:
+        return public_key[1:33]
+    raise ValueError(
+        "Expected x-only, compressed, or uncompressed secp256k1 public key")
+
+
+def verify_message_signature(msg: bytes, pubkey: bytes, sig: bytes) -> bool:
+    digest = mintlayer_message_digest(msg)
+    return PublicKeyXOnly(xonly_pubkey(pubkey)).verify(sig, digest)
+
+
+def verify_tx_signature(tx: Transaction, pubkey: bytes, sig: bytes) -> bool:
+    digest = tx.digest_for_signing()
+    return PublicKeyXOnly(xonly_pubkey(pubkey)).verify(sig, digest)
+

@@ -8,6 +8,9 @@ from ragger.backend.interface import RAPDU, BackendInterface
 from ragger.navigator import NavInsID
 from ragger.navigator.navigation_scenario import NavigationScenarioData, UseCase
 
+from .mintlayer_response_unpacker import (
+    unpack_get_public_key_response,
+)
 from .mintlayer_utils import (
     Transaction,
     TxInputSignatureResponse,
@@ -15,6 +18,7 @@ from .mintlayer_utils import (
     decode_response_variant,
     sign_tx_start_req_obj,
     sign_tx_next_req_obj,
+    verify_tx_signature,
 )
 
 MAX_APDU_LEN: int = 255
@@ -53,7 +57,7 @@ class SignMessageP1(IntEnum):
 
 
 class GetPublicKeyP1(IntEnum):
-    P1_START = 0x00
+    P1_DO_NOT_CONFIRM = 0x00
     # Parameter 1 for screen confirmation for GET_PUBLIC_KEY.
     P1_CONFIRM = 0x01
 
@@ -108,12 +112,24 @@ class MintlayerCommandSender:
         )
 
     def get_public_key(self, coin: int, path: str) -> RAPDU:
-        data = coin.to_bytes(1, "little") + pack_derivation_path(path)
+        data = coin.to_bytes(1, "little") + pack_derivation_path_from_str(path)
 
         return self.backend.exchange(
             cla=CLA,
             ins=InsType.GET_PUBLIC_KEY,
-            p1=GetPublicKeyP1.P1_START,
+            p1=GetPublicKeyP1.P1_DO_NOT_CONFIRM,
+            p2=P2.P2_LAST,
+            data=data,
+        )
+
+    def get_public_key_by_ints_path(self, coin: int, path: list[int]) -> RAPDU:
+        data = coin.to_bytes(1, "little") + \
+            pack_derivation_path_from_ints(path)
+
+        return self.backend.exchange(
+            cla=CLA,
+            ins=InsType.GET_PUBLIC_KEY,
+            p1=GetPublicKeyP1.P1_DO_NOT_CONFIRM,
             p2=P2.P2_LAST,
             data=data,
         )
@@ -122,7 +138,7 @@ class MintlayerCommandSender:
     def get_public_key_with_confirmation(
         self, coin: int, path: str
     ) -> Generator[None, None, None]:
-        data = coin.to_bytes(1, "little") + pack_derivation_path(path)
+        data = coin.to_bytes(1, "little") + pack_derivation_path_from_str(path)
 
         with self.backend.exchange_async(
             cla=CLA,
@@ -140,7 +156,7 @@ class MintlayerCommandSender:
         data = (
             coin.to_bytes(1, "little")
             + addr_type.to_bytes(1, "little")
-            + pack_derivation_path(path)
+            + pack_derivation_path_from_str(path)
         )
 
         response = self.backend.exchange(
@@ -198,10 +214,10 @@ class MintlayerCommandSender:
 
         def encode_input(inp):
             return sign_tx_next_req_obj.encode({"ProcessInput": inp}).data
-        
+
         def encode_input_comm(comm):
             return sign_tx_next_req_obj.encode({"ProcessInputCommitment": comm}).data
-        
+
         def encode_output(outp):
             return sign_tx_next_req_obj.encode({"ProcessOutput": outp}).data
 
@@ -340,23 +356,31 @@ def hardened_index(index: int) -> int:
     return index | 1 << 31
 
 
-def pack_derivation_path(derivation_path: str) -> bytes:
-    path_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("Bip32Path")
-
+def parse_derivation_path(derivation_path: str) -> list[int]:
     split = derivation_path.split("/")
 
     if split[0] != "m":
         raise ValueError("Error master expected")
 
-    path = []
+    result = []
     for value in split[1:]:
         if value == "":
             raise ValueError(f'Error missing value in split list "{split}"')
         if value.endswith("'"):
-            path.append(hardened_index(int(value[:-1])))
+            result.append(hardened_index(int(value[:-1])))
         else:
-            path.append(int(value))
+            result.append(int(value))
 
+    return result
+
+
+def pack_derivation_path_from_str(path: str) -> bytes:
+    parsed_path = parse_derivation_path(path)
+    return pack_derivation_path_from_ints(parsed_path)
+
+
+def pack_derivation_path_from_ints(path: list[int]) -> bytes:
+    path_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("Bip32Path")
     return path_obj.encode(path).data
 
 
@@ -371,6 +395,17 @@ def sign_tx_review(
     transaction = review_transaction.transaction
     has_command_input = review_transaction.has_command_input
     review_custom_screen_text = review_transaction.review_custom_screen_text
+
+    addr_paths_by_indices = transaction.addr_paths_by_indices()
+    pubkeys_by_indices = {}
+    for indices, addr_path in addr_paths_by_indices.items():
+        pubkey_rapdu = client.get_public_key_by_ints_path(
+            transaction.coin, addr_path)
+        _, pubkey, _, _ = unpack_get_public_key_response(pubkey_rapdu.data)
+
+        print(f"{indices}: {pubkey}")
+
+        pubkeys_by_indices[indices] = pubkey
 
     # The snapshot index (used to make its name) and the amount by which it should be increased
     # after each step. The increase should be large enough, so that snapshots from later steps
@@ -495,3 +530,10 @@ def sign_tx_review(
     assert (
         sig_indices == expected_sig_indices
     ), f"Sig indices don't match, expected: {expected_sig_indices}, actual: {sig_indices}"
+
+    addr_paths_by_indices = transaction.addr_paths_by_indices()
+
+    for sig in signatures:
+        pubkey = pubkeys_by_indices[sig.indices()]
+        sig_valid = verify_tx_signature(transaction, pubkey, sig.signature)
+        assert sig_valid, f"Signature verification failed for {sig.indices()}"

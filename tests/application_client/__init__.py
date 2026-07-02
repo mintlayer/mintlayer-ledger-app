@@ -398,6 +398,15 @@ def init_mintlayer_types():
                     ["Pong", "()"],
                 ],
             },
+            "TxInput": {
+                "type": "enum",
+                "type_mapping": [
+                    ["Utxo", "OutPoint"],
+                    ["Account", "AccountOutPoint"],
+                    ["AccountCommand", "(AccountNonce, AccountCommand)"],
+                    ["OrderAccountCommand", "OrderAccountCommand",],
+                ]
+            },
         }
     }
 
