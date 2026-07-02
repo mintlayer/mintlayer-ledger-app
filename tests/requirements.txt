@@ -1,0 +1,4 @@
+coincurve>=20.0.0
+pytest
+ragger[speculos,ledgerwallet]>=1.21.1
+scalecodec>=1.2.11

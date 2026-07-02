@@ -1,0 +1,14 @@
+[package]
+name = "test-utils"
+version.workspace = true
+edition = "2024"
+
+[dependencies]
+ledger_device_sdk = { workspace = true, features = ["unit_test"] }
+testmacro.workspace = true
+
+[lib]
+# Note: this crate doesn't have unit tests at the moment. If we ever need them, a custom runner
+# has to be set up the same way it's done in `mintlayer-app-core`. For now we just disable tests
+# completely to prevent Cargo from producing an uncompilable test binary.
+test = false

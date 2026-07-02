@@ -1,0 +1,20 @@
+[package]
+name = "mintlayer-messages"
+version.workspace = true
+edition = "2024"
+
+[dependencies]
+derive_more = { workspace = true, default-features = false, features = ["display"]}
+num_enum = { workspace = true, default-features = false }
+num-traits = { workspace = true, default-features = false }
+# Note: normally we would enable the "chain-error" feature of parity-scale-codec to make decode errors
+# more informative. But in the Ledger app we never examine or even print those errors, so enabling this
+# feature would only increase the size of the binary and make the app use more stack during decoding.
+parity-scale-codec = { workspace = true, default-features = false, features = ["derive"] }
+
+mintlayer-core-primitives.workspace = true
+
+[dev-dependencies]
+ledger_device_sdk.workspace = true
+
+test-utils.workspace = true
