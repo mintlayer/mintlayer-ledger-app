@@ -1,6 +1,7 @@
 from application_client.mintlayer_command_sender import MintlayerCommandSender
-from application_client.mintlayer_response_unpacker import \
-    unpack_get_app_and_version_response
+from application_client.mintlayer_response_unpacker import (
+    unpack_get_app_and_version_response,
+)
 
 
 # Test a specific APDU asking BOLOS (and not the app) the name and version of the current app
@@ -13,4 +14,4 @@ def test_get_app_and_version(backend, backend_name):
     app_name, version = unpack_get_app_and_version_response(response.data)
     print(app_name, version)
     assert app_name == "Mintlayer"
-    assert version == "0.1.0"
+    assert version == "1.0.0"

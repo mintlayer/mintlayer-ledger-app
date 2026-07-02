@@ -1,9 +1,16 @@
 #!/bin/bash
 
+# Run some extra checks.
+
 set -e
 set -o nounset
 
-# Run some extra checks (for now its mostly clippy).
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
+cd "$SCRIPT_DIR"
+
+echo "Running codecheck.py"
+python3 "tools/codecheck.py"
 
 # Notes about clippy:
 # 1. Ledger's guideline enforcer also runs it. But at the moment of writing this it doesn't check
@@ -14,10 +21,6 @@ set -o nounset
 #    is redundant, so we use one arbitrarily chosen model.
 # 3. Unlike in Mintlayer Core, we can't disable certain annoying and mostly useless checks (such as
 #    let-and-return), because the guideline enforcer will run them anyway.
-
-SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-
-cd "$SCRIPT_DIR"
 
 echo "Running cargo fmt"
 cargo fmt --check -- --config newline_style=Unix

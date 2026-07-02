@@ -1,4 +1,4 @@
-#  Copyright (c) 2022 RBB S.r.l
+#  Copyright (c) 2025-2026 RBB S.r.l
 #  opensource@mintlayer.org
 #  SPDX-License-Identifier: MIT
 #  Licensed under the MIT License;
@@ -28,11 +28,17 @@ def init_mintlayer_types():
             "Amount": "Compact<u128>",
             "H256": "[u8; 32]",
             "BlockHeight": "Compact<u64>",
+            "BlockTimestamp": "Compact<u64>",
             "OutputValue": {
                 "type": "enum",
                 "type_mapping": [
                     ["Coin", "Amount"],
-                    ["TokenV0", ""],  # deprecated
+                    # Note: need to have this variant to make sure TokenV1's index is 2.
+                    # pylint: disable=fixme
+                    # TODO: the protocol should probably not use types from mintlayer core
+                    # primitives.
+                    # See https://github.com/mintlayer/mintlayer-ledger-app/issues/18.
+                    ["DeprecatedTokenV0", ""],
                     ["TokenV1", "(TokenId, Amount)"],
                 ],
             },
@@ -43,20 +49,14 @@ def init_mintlayer_types():
                     ["multisig_idx", "Option<u32>"],
                 ],
             },
-            "InputMeta": {
-                "type": "struct",
-                "type_mapping": [
-                    ["addresses", "Vec<InputAddressPath>"],
-                ],
-            },
             "Destination": {
                 "type": "enum",
                 "type_mapping": [
                     ["AnyoneCanSpend", "()"],
-                    ["Address", "(PublicKeyHash)"],
+                    ["PublicKeyHash", "PublicKeyHash"],
                     ["PublicKey", "PublicKey"],
                     ["ScriptHash", "ScriptId"],
-                    ["ClassicMultiSig", "(PublicKeyHash)"],
+                    ["ClassicMultisig", "PublicKeyHash"],
                 ],
             },
             "PublicKeyHash": "[u8; 20]",
@@ -69,7 +69,7 @@ def init_mintlayer_types():
             "PublicKeyHolder": {
                 "type": "enum",
                 "type_mapping": [
-                    ["Secp256k1Schnorr", "(Secp256k1PublicKey)"],
+                    ["Secp256k1Schnorr", "Secp256k1PublicKey"],
                 ],
             },
             "Secp256k1PublicKey": {
@@ -144,12 +144,20 @@ def init_mintlayer_types():
                     ["V0", "NftIssuanceV0"],
                 ],
             },
+            "OrderData": {
+                "type": "struct",
+                "type_mapping": [
+                    ["conclude_key", "Destination"],
+                    ["ask", "OutputValue"],
+                    ["give", "OutputValue"],
+                ],
+            },
             "TxOutput": {
                 "type": "enum",
                 "type_mapping": [
                     ["Transfer", "(OutputValue, Destination)"],
                     ["LockThenTransfer", "(OutputValue, Destination, OutputTimeLock)"],
-                    ["Burn", "(OutputValue)"],
+                    ["Burn", "OutputValue"],
                     ["CreateStakePool", "(PoolId, StakePoolData)"],
                     ["ProduceBlockFromStake", "(Destination, PoolId)"],
                     ["CreateDelegationId", "(Destination, PoolId)"],
@@ -158,6 +166,7 @@ def init_mintlayer_types():
                     ["IssueNft", "(TokenId, NftIssuance, Destination)"],
                     ["DataDeposit", "Vec<u8>"],
                     ["Htlc", "(OutputValue, HashedTimelockContract)"],
+                    ["CreateOrder", "OrderData"],
                 ],
             },
             "HashedTimelockContract": {
@@ -172,10 +181,10 @@ def init_mintlayer_types():
             "OutputTimeLock": {
                 "type": "enum",
                 "type_mapping": [
-                    ["UntilHeight", "(BlockHeight)"],
-                    ["UntilTime", "(BlockTimestamp)"],
+                    ["UntilHeight", "BlockHeight"],
+                    ["UntilTime", "BlockTimestamp"],
                     ["ForBlockCount", "Compact<u64>"],
-                    ["ForSeconds", "Compat<u64>"],
+                    ["ForSeconds", "Compact<u64>"],
                 ],
             },
             "PoolId": "H256",
@@ -185,7 +194,7 @@ def init_mintlayer_types():
             "StakePoolData": {
                 "type": "struct",
                 "type_mapping": [
-                    ["value", "Amount"],
+                    ["pledge", "Amount"],
                     ["staker", "Destination"],
                     ["vrf_public_key", "VRFPublicKey"],
                     ["decommission_key", "Destination"],
@@ -202,7 +211,7 @@ def init_mintlayer_types():
             "VRFPublicKeyHolder": {
                 "type": "enum",
                 "type_mapping": [
-                    ["Schnorrkel", "(SchnorrkelPublicKey)"],
+                    ["Schnorrkel", "SchnorrkelPublicKey"],
                 ],
             },
             "SchnorrkelPublicKey": {
@@ -255,81 +264,29 @@ def init_mintlayer_types():
                     ["ConcludeOrder", "OrderId"],
                 ],
             },
-            "TxInput": {
-                "type": "enum",
-                "type_mapping": [
-                    ["Utxo", "OutPoint"],
-                    ["Account", "(AccountOutPoint)"],
-                    ["AccountCommand", "(AccountNonce, AccountCommand)"],
-                    ["OrderAccountCommand", "OrderAccountCommand"],
-                ],
-            },
             "TxInputWithAdditionalInfo": {
                 "type": "enum",
                 "type_mapping": [
                     ["Utxo", "(OutPoint, AdditionalUtxoInfo)"],
-                    ["Account", "(AccountOutPoint)"],
+                    ["Account", "AccountOutPoint"],
                     ["AccountCommand", "(AccountNonce, AccountCommand)"],
-                    ["OrderAccountCommand", "(OrderAccountCommand, AdditionalOrderInfo)"],
+                    [
+                        "OrderAccountCommand",
+                        "(OrderAccountCommand, AdditionalOrderInfo)",
+                    ],
                 ],
             },
             "AccountOutPoint": {
                 "type": "struct",
                 "type_mapping": [
                     ["nonce", "Compact<u64>"],
-                    ["account", "AccountSpending"],
+                    ["spending", "AccountSpending"],
                 ],
             },
             "AccountSpending": {
                 "type": "enum",
                 "type_mapping": [
-                    ["Delegation", "(H256, Amount)"],
-                ],
-            },
-            "TransactionV1": {
-                "type": "struct",
-                "type_mapping": [
-                    ["version", "u8"],  # has to be 1
-                    ["flags", "Compact<u128>"],
-                    ["inputs", "Vec<TxInput>"],
-                    ["outputs", "Vec<TxOutput>"],
-                ],
-            },
-            "InputWitness": {
-                "type": "enum",
-                "type_mapping": [
-                    ["NoSignature", "Option<Vec<u8>>"],
-                    ["Standard", "StandardInputSignature"],
-                ],
-            },
-            "TokenAdditionalInfo": {
-                "type": "struct",
-                "type_mapping": [
-                    ["num_decimals", "u8"],
-                    ["ticker", "Vec<u8>"],
-                ],
-            },
-            "PoolAdditionalInfo": {
-                "type": "struct",
-                "type_mapping": [
-                    ["staker_balance", "Amount"],
-                ],
-            },
-            "OrderAdditionalInfo": {
-                "type": "struct",
-                "type_mapping": [
-                    ["initially_asked", "OutputValue"],
-                    ["initially_given", "OutputValue"],
-                    ["ask_balance", "Amount"],
-                    ["give_balance", "Amount"],
-                ],
-            },
-            "InfoId": {
-                "type": "enum",
-                "type_mapping": [
-                    ["TokenId", "H256"],
-                    ["PoolId", "H256"],
-                    ["OrderId", "H256"],
+                    ["DelegationBalance", "(H256, Amount)"],
                 ],
             },
             "SighashInputCommitment": {
@@ -345,88 +302,40 @@ def init_mintlayer_types():
                     ],
                 ],
             },
-            "TxAdditionalInfo": {
+            "SignTxStartReq": {
                 "type": "struct",
                 "type_mapping": [
-                    ["token_info", "BTreeMap<H256, TokenAdditionalInfo>"],
-                    ["pool_info", "BTreeMap<H256, PoolAdditionalInfo>"],
-                    ["order_info", "BTreeMap<H256, OrderAdditionalInfo>"],
-                ],
-            },
-            "StandardInputSignature": {
-                "type": "struct",
-                "type_mapping": [
-                    ["sighash_type", "u8"],
-                    ["raw_signature", "Vec<u8>"],
-                ],
-            },
-            "SignedTransaction": {
-                "type": "struct",
-                "type_mapping": [
-                    ["transaction", "TransactionV1"],
-                    ["signatures", "Vec<InputWitness>"],
-                ],
-            },
-            "PartiallySignedTransaction": {
-                "type": "struct",
-                "type_mapping": [
-                    ["tx", "TransactionV1"],
-                    ["witnesses", "Vec<Option<InputWitness>>"],
-                    ["input_utxos", "Vec<Option<TxOutput>>"],
-                    ["destinations", "Vec<Option<Destination>>"],
-                    ["htlc_secrets", "Vec<Option<[u8; 32]>>"],
-                    ["additional_infos", "TxAdditionalInfo"],
-                ],
-            },
-            "SignedTransactionIntent": {
-                "type": "struct",
-                "type_mapping": [
-                    ["signed_message", "String"],
-                    ["signatures", "Vec<Vec<u8>>"],
-                ],
-            },
-            "AuthorizedPublicKeyHashSpend": {
-                "type": "struct",
-                "type_mapping": [
-                    ["public_key", "PublicKey"],
-                    ["signature", "Signature"],
-                ],
-            },
-            "TxMetadataVersionReq": {
-                "type": "enum",
-                "type_mapping": [
-                    ["V1", "TxMetadataV1Req"],
-                ],
-            },
-            "TxMetadataV1Req": {
-                "type": "struct",
-                "type_mapping": [
+                    ["coin", "u8"],
+                    ["version", "u8"],
                     ["num_inputs", "u32"],
                     ["num_outputs", "u32"],
                 ],
             },
-            "TxMetadataReq": {
-                "type": "struct",
-                "type_mapping": [
-                    ["coin", "u8"],
-                    ["version", "TxMetadataVersionReq"],
-                ],
-            },
-            "TxInputReq": {
+            "TxInputData": {
                 "type": "struct",
                 "type_mapping": [
                     ["addresses", "Vec<InputAddressPath>"],
-                    ["inp", "TxInputWithAdditionalInfo"],
+                    ["input", "TxInputWithAdditionalInfo"],
+                ],
+            },
+            "TxInputCommitmentData": {
+                "type": "struct",
+                "type_mapping": [
+                    ["commitment", "SighashInputCommitment"],
+                ],
+            },
+            "UtxoWithPoolData": {
+                "type": "struct",
+                "type_mapping": [
+                    ["utxo", "TxOutput"],
+                    ["staker_balance", "Amount"],
                 ],
             },
             "AdditionalUtxoInfo": {
                 "type": "enum",
                 "type_mapping": [
                     ["Utxo", "TxOutput"],
-                    [
-                        "PoolInfo",
-                        "(TxOutput, Amount)",
-                    ],
+                    ["UtxoWithPoolData", "UtxoWithPoolData"],
                 ],
             },
             "AdditionalOrderInfo": {
@@ -438,318 +347,69 @@ def init_mintlayer_types():
                     ["give_balance", "Amount"],
                 ],
             },
-            "TxOutputReq": {
+            "TxOutputData": {
                 "type": "struct",
                 "type_mapping": [
-                    ["out", "TxOutput"],
+                    ["output", "TxOutput"],
                 ],
             },
-            "SignTxReq": {
+            "SignTxNextReq": {
                 "type": "enum",
                 "type_mapping": [
-                    ["Input", "TxInputReq"],
-                    ["InputCommitment", "SighashInputCommitment"],
-                    ["Output", "TxOutputReq"],
-                    ["NextSignature", "()"],
+                    ["ProcessInput", "TxInputData"],
+                    ["ProcessInputCommitment", "TxInputCommitmentData"],
+                    ["ProcessOutput", "TxOutputData"],
+                    ["ReturnNextSignature", "()"],
                 ],
             },
-            "SignatureResponse": "[u8; 64]",
-            "MsgSignature": {
-                "type": "struct",
-                "type_mapping": [
-                    ["signature", "SignatureResponse"],
-                ],
-            },
+            "SignatureInResponse": "[u8; 64]",
             "TxInputSignatureResponse": {
                 "type": "struct",
                 "type_mapping": [
-                    ["signature", "SignatureResponse"],
+                    ["signature", "SignatureInResponse"],
                     ["input_idx", "u32"],
                     ["multisig_idx", "Option<u32>"],
                     ["has_next", "bool"],
                 ],
             },
-            "PublicKeyResponse": "[u8; 65]",
-            "ChainCodeResponse": "[u8; 32]",
-            "GetPublicKeyResponse": {
+            "UncompressedSecp256k1PublicKey": "[u8; 65]",
+            "ChainCode": "[u8; 32]",
+            "PublicKeyResponse": {
                 "type": "struct",
                 "type_mapping": [
-                    ["public_key", "PublicKeyResponse"],
-                    ["chain_code", "ChainCodeResponse"],
+                    ["public_key", "UncompressedSecp256k1PublicKey"],
+                    ["chain_code", "ChainCode"],
                 ],
             },
             "MsgSignatureResponse": {
                 "type": "struct",
                 "type_mapping": [
-                    ["signature", "SignatureResponse"],
+                    ["signature", "SignatureInResponse"],
                 ],
             },
             "Response": {
                 "type": "enum",
                 "type_mapping": [
                     ["ExpectingNextChunk", "()"],
-                    ["PublicKey", "GetPublicKeyResponse"],
+                    ["PublicKey", "PublicKeyResponse"],
                     ["TxSetup", "()"],
                     ["TxNext", "()"],
-                    ["TxSignature", "TxInputSignatureResponse"],
+                    ["TxInputSignature", "TxInputSignatureResponse"],
                     ["MessageSetup", "()"],
                     ["MessageSignature", "MsgSignatureResponse"],
                     ["Pong", "()"],
                 ],
             },
-            "SemVer": {
-                "type": "struct",
-                "type_mapping": [
-                    ["major", "u8"],
-                    ["minor", "u8"],
-                    ["patch", "u16"],
-                ],
-            },
-            "PeerAddressIp4": {
-                "type": "struct",
-                "type_mapping": [
-                    ["ip", "[u8; 4]"],
-                    ["port", "u16"],
-                ],
-            },
-            "PeerAddressIp6": {
-                "type": "struct",
-                "type_mapping": [
-                    ["ip", "[u8; 16]"],
-                    ["port", "u16"],
-                ],
-            },
-            "PeerAddress": {
+            "TxInput": {
                 "type": "enum",
                 "type_mapping": [
-                    ["Ip4", "PeerAddressIp4"],
-                    ["Ip6", "PeerAddressIp6"],
-                ],
-            },
-            "HandshakeHello": {
-                "type": "struct",
-                "type_mapping": [
-                    ["protocol", "u32"],
-                    ["network", "[u8; 4]"],
-                    ["services", "u64"],
-                    ["user_agent", "String"],
-                    ["version", "SemVer"],
-                    ["receiver_address", "Option<PeerAddress>"],
-                    ["current_time", "Compact<u64>"],
-                    ["handshake_nonce", "u64"],
-                ],
-            },
-            "HandshakeHelloAck": {
-                "type": "struct",
-                "type_mapping": [
-                    ["protocol", "u32"],
-                    ["network", "[u8; 4]"],
-                    ["services", "u64"],
-                    ["user_agent", "String"],
-                    ["version", "SemVer"],
-                    ["receiver_address", "Option<PeerAddress>"],
-                    ["current_time", "Compact<u64>"],
-                ],
-            },
-            "HandshakeMessage": {
-                "type": "enum",
-                "type_mapping": [
-                    ["Hello", "HandshakeHello"],
-                    ["HelloAck", "HandshakeHelloAck"],
-                ],
-            },
-            "PingMessage": {
-                "type": "struct",
-                "type_mapping": [
-                    ["nonce", "u64"],
-                ],
-            },
-            "BlockHeader": {
-                "type": "struct",
-                "type_mapping": [
-                    ["version", "u8"],
-                    ["prev_block_id", "H256"],
-                    ["tx_merkle_root", "H256"],
-                    ["witness_merkle_root", "H256"],
-                    ["timestamp", "Compact<u64>"],
-                    ["consensus_data", "ConsensusData"],
-                ],
-            },
-            "SignedBlockHeader": {
-                "type": "struct",
-                "type_mapping": [
-                    ["header", "BlockHeader"],
-                    ["signature", "BlockHeaderSignature"],
-                ],
-            },
-            "BlockHeaderSignature": {
-                "type": "enum",
-                "type_mapping": [
-                    ["None", "()"],
-                    ["HeaderSignature", "(BlockHeaderSignatureData)"],
-                ],
-            },
-            "BlockHeaderSignatureData": {
-                "type": "struct",
-                "type_mapping": [
-                    ["signature", "(Signature)"],
-                ],
-            },
-            "Signature": {
-                "type": "enum",
-                "type_mapping": [
-                    ["Secp256k1Schnorr", "[u8; 64]"],
-                ],
-            },
-            "ConsensusData": {
-                "type": "enum",
-                "type_mapping": [
-                    ["None", "()"],
-                    ["PoW", "PoWData"],
-                    ["PoS", "PoSData"],
-                ],
-            },
-            "PoWData": {
-                "type": "struct",
-                "type_mapping": [
-                    ["bits", "u32"],
-                    ["nonce", "u128"],
-                ],
-            },
-            "PoSData": {
-                "type": "struct",
-                "type_mapping": [
-                    ["kernel_inputs", "Vec<TxInput>"],
-                    ["kernel_witness", "Vec<InputWitness>"],
-                    ["stake_pool_id", "PoolId"],
-                    ["vrf_data", "VRFReturn"],
-                    ["compact_target", "u32"],
-                ],
-            },
-            "VRFReturn": {
-                "type": "enum",
-                "type_mapping": [
-                    ["Schnorrkel", "(SchnorrkelVRFReturn)"],
-                ],
-            },
-            "SchnorrkelVRFReturn": {
-                "type": "struct",
-                "type_mapping": [
-                    ["preout", "[u8; 32]"],
-                    ["proof", "[u8; 64]"],
-                ],
-            },
-            "BlockIdAtHeight": "H256",
-            "BlockBody": {
-                "type": "struct",
-                "type_mapping": [
-                    ["reward", "BlockReward"],
-                    ["transactions", "Vec<SignedTransaction>"],
-                ],
-            },
-            "BlockReward": {
-                "type": "struct",
-                "type_mapping": [
-                    ["reward_outputs", "Vec<TxOutput>"],
-                ],
-            },
-            "Block": {
-                "type": "enum",
-                "type_mapping": [
-                    ["V1", "(BlockV1)"],
-                ],
-            },
-            "BlockV1": {
-                "type": "struct",
-                "type_mapping": [
-                    ["header", "SignedBlockHeader"],
-                    ["body", "BlockBody"],
-                ],
-            },
-            "Id": "[u8; 32]",
-            "HeaderListRequest": "Vec<Id>",
-            "HeaderList": "Vec<SignedBlockHeader>",
-            "TransactionResponse": {
-                "type": "enum",
-                "type_mapping": [
-                    ["not_found", "Id"],
-                    ["found", "SignedTransaction"],
-                ],
-            },
-            "Message": {
-                "type": "enum",
-                "type_mapping": [
-                    ["handshake", "HandshakeMessage"],
-                    ["ping_request", "PingMessage"],
-                    ["ping_response", "PingMessage"],
-                    ["new_transaction", "Id"],
-                    ["header_list_request", "HeaderListRequest"],
-                    ["header_list", "HeaderList"],
-                    ["block_list_request", "Vec<Id>"],
-                    ["block_response", "()"],
-                    ["announce_addr_request", "PeerAddress"],
-                    ["addr_list_request", "()"],
-                    ["addr_list_response", "Vec<PeerAddress>"],
-                    ["transaction_request", "Id"],
-                    ["transaction_response", "TransactionResponse"],
-                ],
-            },
-            "GenerateBlockInputData": {
-                "type": "enum",
-                "type_mapping": [
-                    ["None", "()"],
-                    ["PoW", "PoWGenerateBlockInputData"],
-                    ["PoS", "PoSGenerateBlockInputData"],
-                ],
-            },
-            "PoSGenerateBlockInputData": {
-                "type": "struct",
-                "type_mapping": [
-                    ["stake_private_key", "PrivateKey"],
-                    ["vrf_private_key", "VRFPrivateKey"],
-                    ["pool_id", "PoolId"],
-                    ["kernel_inputs", "Vec<TxInput>"],
-                    ["kernel_input_utxo", "Vec<TxOutput>"],
-                ],
-            },
-            "Privatekey": {
-                "type": "struct",
-                "type_mapping": [
-                    ["key", "PrivateKeyHolder"],
-                ],
-            },
-            "PrivateKeyHolder": {
-                "type": "enum",
-                "type_mapping": [
-                    ["Secp256k1Schnorr", "(Secp256k1PrivateKey)"],
-                ],
-            },
-            "Secp256k1PrivateKey": {
-                "type": "struct",
-                "type_mapping": [
-                    ["data", "[u8; 32]"],
-                ],
-            },
-            "VRFPrivateKey": {
-                "type": "struct",
-                "type_mapping": [
-                    ["key", "VRFPrivateKeyHolder"],
-                ],
-            },
-            "VRFPrivateKeyHolder": {
-                "type": "enum",
-                "type_mapping": [
-                    ["Schnorrkel", "(SchnorrkelPrivateKey)"],
-                ],
-            },
-            "SchnorrkelPrivateKey": {
-                "type": "struct",
-                "type_mapping": [["key", "[u8; 64]"]],
-            },
-            "PoWGenerateBlockInputData": {
-                "type": "struct",
-                "type_mapping": [
-                    ["reward_destination", "Destination"],
+                    ["Utxo", "OutPoint"],
+                    ["Account", "AccountOutPoint"],
+                    ["AccountCommand", "(AccountNonce, AccountCommand)"],
+                    [
+                        "OrderAccountCommand",
+                        "OrderAccountCommand",
+                    ],
                 ],
             },
         }

@@ -17,7 +17,7 @@ jobs:
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v5
-    
+
       # Note: no need to install docker manually, because it's already installed, see
       # https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md
 

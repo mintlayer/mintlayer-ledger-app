@@ -1,6 +1,6 @@
 /*****************************************************************************
  *   Mintlayer Ledger App.
- *   (c) 2025 RBB S.r.l.
+ *   (c) 2025-2026 RBB S.r.l.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,28 +15,19 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use crate::app_ui::address::ui_display_pk;
-use crate::StatusWord;
-use mintlayer_messages::{
-    mlcp::CoinType, ChainCode, GetPublicKeyResponse, PublicKey, PublicKeyReq,
-};
-
 use ledger_device_sdk::ecc::{Secp256k1, SeedDerive};
 
-// Path should be at least [bip44, coin_type, account_index]
-const MIN_PATH_LEN: usize = 3;
+use mintlayer_messages::{
+    ChainCode, GetPubKeyReq, PublicKeyResponse, UncompressedSecp256k1PublicKey,
+};
+
+use crate::{StatusWord, app_ui::address::ui_display_pk, utils::check_derivation_path};
 
 pub fn handle_get_public_key(
-    req: PublicKeyReq,
+    req: GetPubKeyReq,
     display: bool,
-) -> Result<GetPublicKeyResponse, StatusWord> {
-    if req.path.as_ref().len() < MIN_PATH_LEN {
-        return Err(StatusWord::InvalidPath);
-    }
-    let coin_type: CoinType = req.coin_type.into();
-    if req.path.as_ref()[1] != coin_type.bip44_coin_type() {
-        return Err(StatusWord::InvalidPath);
-    }
+) -> Result<PublicKeyResponse, StatusWord> {
+    check_derivation_path(req.path.as_ref(), req.coin_type.into())?;
 
     let (k, cc) = Secp256k1::derive_from(req.path.as_ref());
     let pk = k.public_key().map_err(|_| StatusWord::KeyDeriveFail)?;
@@ -46,8 +37,8 @@ pub fn handle_get_public_key(
     if display && !ui_display_pk(&pk, req.coin_type.into())? {
         return Err(StatusWord::Deny);
     }
-    let response = GetPublicKeyResponse {
-        public_key: PublicKey(pk.pubkey),
+    let response = PublicKeyResponse {
+        public_key: UncompressedSecp256k1PublicKey(pk.pubkey),
         chain_code: ChainCode(code.value),
     };
 

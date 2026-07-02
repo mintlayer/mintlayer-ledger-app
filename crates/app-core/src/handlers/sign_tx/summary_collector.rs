@@ -1,6 +1,6 @@
 /*****************************************************************************
  *   Mintlayer Ledger App.
- *   (c) 2025 RBB S.r.l.
+ *   (c) 2025-2026 RBB S.r.l.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -17,18 +17,17 @@
 
 use alloc::collections::BTreeMap;
 
-use crate::StatusWord;
 use mintlayer_messages::{
-    mlcp::{
-        AccountCommand, AccountSpending, Amount, OrderAccountCommand, OutputValue, TxOutput, H256,
-    },
-    AdditionalOrderInfo, AdditionalUtxoInfo, TxInputWithAdditionalInfo,
+    AccountCommand, AccountSpending, AdditionalOrderInfo, AdditionalUtxoInfo, Amount,
+    OrderAccountCommand, OutputValue, TokenId, TxInputWithAdditionalInfo, TxOutput,
 };
+
+use crate::StatusWord;
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum CoinOrTokenId {
     Coin,
-    TokenId(H256),
+    TokenId(TokenId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,7 +36,7 @@ pub enum TxType {
     Burn,
     Htlc,
     CreateDelegation,
-    DelegationStake,
+    DelegateStaking,
     DelegationWithdrawal,
     CreateStakePool,
     DecommissionStakePool,
@@ -61,7 +60,7 @@ pub enum TxType {
 pub enum InputCommand {
     AccountSpending(AccountSpending),
     AccountCommand(AccountCommand),
-    OrderCommand(OrderAccountCommand),
+    OrderCommand(OrderAccountCommand, AdditionalOrderInfo),
 }
 
 pub struct TxSummaryCollector {
@@ -81,6 +80,15 @@ impl TxSummaryCollector {
         }
     }
 
+    // TODO:
+    // 1) currently consensus only forbids multiple account commands (AccountCommand or OrderAccountCommand) per tx,
+    //    but the number of account spendings is unlimited and they can co-exist with an account command;
+    // 2) probably the app shouldn't try being smart and assume any number of account commands is possible, asking
+    //    the user to approve them as they arrive, same as it's done for outputs;
+    // 3) if the app does try to be smart, then it should fail when multiple commands are encountered, instead of
+    //    silently overwriting `input_command`.
+    // See https://github.com/mintlayer/mintlayer-ledger-app/issues/14.
+    // Also see the TODO near `TxProcessingContext::show_spinner`.
     pub fn input_command(&self) -> Option<&InputCommand> {
         self.input_command.as_ref()
     }
@@ -100,6 +108,9 @@ impl TxSummaryCollector {
     pub fn fees_iter(
         &self,
     ) -> impl Iterator<Item = Result<(&CoinOrTokenId, u128), StatusWord>> + '_ {
+        // TODO: if an asset is only present in total_outputs, this will not fail with TxFeeUnderflow,
+        // but it should.
+        // See https://github.com/mintlayer/mintlayer-ledger-app/issues/15.
         self.total_inputs()
             .iter()
             .map(move |(coin_or_token, amount)| {
@@ -144,7 +155,7 @@ impl TxSummaryCollector {
             }
             TxOutput::ProduceBlockFromStake(_, _) => {}
             TxOutput::DelegateStaking(amount, _) => {
-                self.tx_type = merge_tx_type(self.tx_type, TxType::DelegationStake);
+                self.tx_type = merge_tx_type(self.tx_type, TxType::DelegateStaking);
                 self.increase_output_totals(CoinOrTokenId::Coin, *amount)?;
             }
             TxOutput::CreateDelegationId(_, _) => {
@@ -201,7 +212,7 @@ impl TxSummaryCollector {
                         }
                         TxOutput::IssueNft(nft_id, _, _) => {
                             self.increase_input_totals(
-                                CoinOrTokenId::TokenId(*nft_id.hash()),
+                                CoinOrTokenId::TokenId(*nft_id),
                                 Amount::from_atoms(1),
                             )?;
                         }
@@ -222,13 +233,10 @@ impl TxSummaryCollector {
                 match cmd {
                     AccountCommand::MintTokens(token_id, amount) => {
                         self.tx_type = merge_tx_type(self.tx_type, TxType::MintTokens);
-                        self.increase_input_totals(
-                            CoinOrTokenId::TokenId(*token_id.hash()),
-                            *amount,
-                        )?;
+                        self.increase_input_totals(CoinOrTokenId::TokenId(*token_id), *amount)?;
                     }
                     AccountCommand::ConcludeOrder(_) | AccountCommand::FillOrder(_, _, _) => {
-                        return Err(StatusWord::OrdersV0NotSupported)
+                        return Err(StatusWord::OrdersV0NotSupported);
                     }
                     AccountCommand::UnmintTokens(_) => {
                         self.tx_type = merge_tx_type(self.tx_type, TxType::UnmintTokens);
@@ -250,22 +258,17 @@ impl TxSummaryCollector {
                     }
                 }
             }
-            TxInputWithAdditionalInfo::OrderAccountCommand(
-                cmd,
-                AdditionalOrderInfo {
-                    initially_asked,
-                    initially_given,
-                    ask_balance,
-                    give_balance,
-                },
-            ) => {
-                self.input_command = Some(InputCommand::OrderCommand(cmd.clone()));
+            TxInputWithAdditionalInfo::OrderAccountCommand(cmd, additional_info) => {
+                self.input_command = Some(InputCommand::OrderCommand(
+                    cmd.clone(),
+                    additional_info.clone(),
+                ));
                 match cmd {
                     OrderAccountCommand::FillOrder(_, fill_amount) => {
                         let (fill_coin_or_token_id, asked_amount) =
-                            into_coin_or_token_id_and_amount(initially_asked)?;
+                            into_coin_or_token_id_and_amount(&additional_info.initially_asked)?;
                         let (given_coin_or_token_id, given_amount) =
-                            into_coin_or_token_id_and_amount(initially_given)?;
+                            into_coin_or_token_id_and_amount(&additional_info.initially_given)?;
 
                         self.increase_output_totals(fill_coin_or_token_id, *fill_amount)?;
 
@@ -282,12 +285,12 @@ impl TxSummaryCollector {
                     }
                     OrderAccountCommand::ConcludeOrder(_) => {
                         let (coin_or_token_id, _) =
-                            into_coin_or_token_id_and_amount(initially_asked)?;
-                        self.increase_input_totals(coin_or_token_id, *ask_balance)?;
+                            into_coin_or_token_id_and_amount(&additional_info.initially_asked)?;
+                        self.increase_input_totals(coin_or_token_id, additional_info.ask_balance)?;
 
                         let (coin_or_token_id, _) =
-                            into_coin_or_token_id_and_amount(initially_given)?;
-                        self.increase_input_totals(coin_or_token_id, *give_balance)?;
+                            into_coin_or_token_id_and_amount(&additional_info.initially_given)?;
+                        self.increase_input_totals(coin_or_token_id, additional_info.give_balance)?;
 
                         self.tx_type = merge_tx_type(self.tx_type, TxType::ConcludeOrder);
                     }
@@ -336,6 +339,10 @@ impl TxSummaryCollector {
     }
 }
 
+// TODO: this logic makes the tx type depend on the outputs order:
+// if the outputs are Burn and Transfer, the tx type will be Burn, but if it's Transfer, Burn,
+// then the tx type will be ComplexTransaction.
+// See https://github.com/mintlayer/mintlayer-ledger-app/issues/21.
 fn merge_tx_type(tx_type: Option<TxType>, new_type: TxType) -> Option<TxType> {
     match tx_type {
         None => Some(new_type),
@@ -350,20 +357,16 @@ fn into_coin_or_token_id_and_amount(
 ) -> Result<(CoinOrTokenId, Amount), StatusWord> {
     match value {
         OutputValue::Coin(amount) => Ok((CoinOrTokenId::Coin, *amount)),
-        OutputValue::TokenV1(token_id, amount) => {
-            Ok((CoinOrTokenId::TokenId(*token_id.hash()), *amount))
-        }
+        OutputValue::TokenV1(token_id, amount) => Ok((CoinOrTokenId::TokenId(*token_id), *amount)),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::testing::prelude::*;
-    use crate::StatusWord;
+    use mintlayer_messages::{AdditionalOrderInfo, AdditionalUtxoInfo, TxInputWithAdditionalInfo};
+    use test_utils::prelude::*;
 
-    use mintlayer_messages::{
-        mlcp, AdditionalOrderInfo, AdditionalUtxoInfo, TxInputWithAdditionalInfo,
-    };
+    use crate::{StatusWord, mlcp};
 
     use super::*;
 
@@ -373,6 +376,16 @@ mod tests {
             0,
         )
     }
+
+    // TODO: these tests can be improved:
+    // 1) Each test should better check everything (total inputs, total outputs, fees, tx type etc),
+    //    even if it's only dealing with one aspect of the summary collector (e.g. tx outputs).
+    // 2) More tests for fee calculation would be nice:
+    //    a) non-trivial successful case;
+    //    b) cases dealing with more than once currency (both successful and not), in particular
+    //       the case where one currency is only present in the total outputs but not total inputs.
+    // 3) Maybe something else.
+    // See https://github.com/mintlayer/mintlayer-ledger-app/issues/15.
 
     #[test_item]
     fn test_new_and_getters() {
@@ -404,7 +417,7 @@ mod tests {
         let token_id = mlcp::Id::new(mlcp::H256::zero());
         let token_amount = mlcp::Amount::from_atoms(200);
         let out_token = mlcp::TxOutput::Transfer(
-            mlcp::OutputValue::TokenV1(token_id.clone(), token_amount),
+            mlcp::OutputValue::TokenV1(token_id, token_amount),
             mlcp::Destination::AnyoneCanSpend,
         );
         collector.process_output(&out_token).unwrap();
@@ -412,7 +425,7 @@ mod tests {
         assert_eq!(
             collector
                 .total_outputs()
-                .get(&CoinOrTokenId::TokenId(*token_id.hash())),
+                .get(&CoinOrTokenId::TokenId(token_id)),
             Some(&token_amount)
         );
     }
@@ -507,7 +520,7 @@ mod tests {
         let out =
             mlcp::TxOutput::DelegateStaking(delegate_amount, mlcp::Id::new(mlcp::H256::zero()));
         collector.process_output(&out).unwrap();
-        assert_eq!(collector.tx_type(), Some(TxType::DelegationStake));
+        assert_eq!(collector.tx_type(), Some(TxType::DelegateStaking));
         assert_eq!(
             collector.total_outputs().get(&CoinOrTokenId::Coin),
             Some(&delegate_amount)
@@ -699,7 +712,7 @@ mod tests {
         let inp = TxInputWithAdditionalInfo::Utxo(
             make_utxo_outpoint(),
             AdditionalUtxoInfo::Utxo(mlcp::TxOutput::IssueNft(
-                nft_id.clone(),
+                nft_id,
                 nft_issuance,
                 mlcp::Destination::AnyoneCanSpend,
             )),
@@ -708,7 +721,7 @@ mod tests {
         assert_eq!(
             collector
                 .total_inputs()
-                .get(&CoinOrTokenId::TokenId(*nft_id.hash())),
+                .get(&CoinOrTokenId::TokenId(nft_id)),
             Some(&mlcp::Amount::from_atoms(1))
         );
     }
@@ -768,14 +781,14 @@ mod tests {
         let mint_amount = mlcp::Amount::from_atoms(1000);
         let inp = TxInputWithAdditionalInfo::AccountCommand(
             mlcp::AccountNonce(1),
-            mlcp::AccountCommand::MintTokens(token_id.clone(), mint_amount),
+            mlcp::AccountCommand::MintTokens(token_id, mint_amount),
         );
         collector.process_input(&inp).unwrap();
         assert_eq!(collector.tx_type(), Some(TxType::MintTokens));
         assert_eq!(
             collector
                 .total_inputs()
-                .get(&CoinOrTokenId::TokenId(*token_id.hash())),
+                .get(&CoinOrTokenId::TokenId(token_id)),
             Some(&mint_amount)
         );
         assert!(matches!(
@@ -896,7 +909,8 @@ mod tests {
         assert!(matches!(
             collector.input_command(),
             Some(InputCommand::OrderCommand(
-                mlcp::OrderAccountCommand::FillOrder(_, _)
+                mlcp::OrderAccountCommand::FillOrder(_, _),
+                AdditionalOrderInfo { .. }
             ))
         ));
     }
@@ -910,10 +924,7 @@ mod tests {
         let token_id = mlcp::Id::new(mlcp::H256::zero());
         let additional_info = AdditionalOrderInfo {
             initially_asked: mlcp::OutputValue::Coin(mlcp::Amount::from_atoms(100)),
-            initially_given: mlcp::OutputValue::TokenV1(
-                token_id.clone(),
-                mlcp::Amount::from_atoms(200),
-            ),
+            initially_given: mlcp::OutputValue::TokenV1(token_id, mlcp::Amount::from_atoms(200)),
             ask_balance,
             give_balance,
         };
@@ -931,7 +942,7 @@ mod tests {
         assert_eq!(
             collector
                 .total_inputs()
-                .get(&CoinOrTokenId::TokenId(*token_id.hash())),
+                .get(&CoinOrTokenId::TokenId(token_id)),
             Some(&give_balance)
         );
     }

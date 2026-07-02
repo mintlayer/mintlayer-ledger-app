@@ -1,6 +1,6 @@
 /*****************************************************************************
  *   Mintlayer Ledger App.
- *   (c) 2025 RBB S.r.l.
+ *   (c) 2025-2026 RBB S.r.l.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -17,29 +17,23 @@
 
 use alloc::string::String;
 
-use ledger_device_sdk::{
-    ecc::ECPublicKey,
-    hash::{blake2::Blake2b_512, HashInit},
-    include_gif,
-    nbgl::NbglGlyph,
-};
+use ledger_device_sdk::{ecc::ECPublicKey, include_gif, nbgl::NbglGlyph};
 
-use crate::StatusWord;
-use mintlayer_messages::{
-    encode,
-    mlcp::{CoinType, Destination, PublicKeyHash, Secp256k1PublicKey},
-};
+use mintlayer_core_primitives::PUBLIC_KEY_HASH_SIZE;
+use mintlayer_messages::{Destination, PublicKeyHash, Secp256k1PublicKey, encode, encode_to};
+
+use crate::{StatusWord, hasher::Hasher, mlcp, utils::cut_array};
 
 pub fn bech32m_encode(hrp: &str, data: &[u8]) -> Result<String, StatusWord> {
-    let parsed_hrp = bech32::Hrp::parse(hrp).map_err(|_| StatusWord::TxAddressFail)?;
+    let parsed_hrp = bech32::Hrp::parse(hrp).map_err(|_| StatusWord::AddressEncodingFail)?;
 
     let encoded = bech32::encode::<bech32::Bech32m>(parsed_hrp, data)
-        .map_err(|_| StatusWord::TxAddressFail)?;
+        .map_err(|_| StatusWord::AddressEncodingFail)?;
 
     Ok(encoded)
 }
 
-pub fn to_address(destination: &Destination, coin: CoinType) -> Result<String, StatusWord> {
+pub fn to_address(destination: &Destination, coin: mlcp::CoinType) -> Result<String, StatusWord> {
     let hrp = coin.address_prefix(destination.into());
     bech32m_encode(hrp, &encode(destination))
 }
@@ -48,13 +42,13 @@ pub fn to_address(destination: &Destination, coin: CoinType) -> Result<String, S
 pub const fn load_glyph() -> NbglGlyph<'static> {
     #[cfg(target_os = "apex_p")]
     const MINTLAYER: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("../../glyphs/mintlayer_48x48.png", NBGL));
+        NbglGlyph::from_include(include_gif!("../../media/glyphs/mintlayer_48x48.png", NBGL));
     #[cfg(any(target_os = "stax", target_os = "flex"))]
     const MINTLAYER: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("../../glyphs/mintlayer_64x64.gif", NBGL));
+        NbglGlyph::from_include(include_gif!("../../media/glyphs/mintlayer_64x64.gif", NBGL));
     #[cfg(any(target_os = "nanosplus", target_os = "nanox"))]
     const MINTLAYER: NbglGlyph =
-        NbglGlyph::from_include(include_gif!("../../icons/mintlayer_14x14.gif", NBGL));
+        NbglGlyph::from_include(include_gif!("../../media/icons/mintlayer_14x14.gif", NBGL));
 
     MINTLAYER
 }
@@ -85,22 +79,12 @@ pub fn compress_public_key<const T: char>(
 }
 
 pub fn to_public_key_hash(pk: &Secp256k1PublicKey) -> Result<PublicKeyHash, StatusWord> {
-    let mut blake2b256 = Blake2b_512::new();
-    let mut public_key_hash: [u8; 64] = [0u8; 64];
+    let mut hasher = Hasher::new();
 
-    blake2b256
-        .update(&[0])
-        .map_err(|_| StatusWord::TxHashFail)?;
-    blake2b256
-        .update(&pk.0)
-        .map_err(|_| StatusWord::TxHashFail)?;
+    encode_to(mlcp::PublicKey::Secp256k1Schnorr(*pk), &mut hasher);
 
-    blake2b256
-        .finalize(&mut public_key_hash)
-        .map_err(|_| StatusWord::TxHashFail)?;
-
-    let mut pkh = [0u8; 20];
-    pkh.copy_from_slice(&public_key_hash[0..20]);
+    let full_hash = hasher.finalize()?;
+    let pkh: [u8; PUBLIC_KEY_HASH_SIZE] = cut_array(full_hash.as_fixed_bytes());
 
     Ok(PublicKeyHash(pkh))
 }

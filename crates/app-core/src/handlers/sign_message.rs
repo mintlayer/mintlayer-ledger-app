@@ -1,6 +1,6 @@
 /*****************************************************************************
  *   Mintlayer Ledger App.
- *   (c) 2025 RBB S.r.l.
+ *   (c) 2025-2026 RBB S.r.l.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,27 +15,29 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use crate::{
-    app_ui::sign::ui_display_message, errors::cx_err_to_status, handlers::utils::mintlayer_hash,
-    DataContext, StatusWord,
-};
-use mintlayer_messages::{
-    mlcp::CoinType, AddrType, Bip32Path, MsgSignatureResponse, SignMessageReq, SignatureResponse,
-};
-
 use alloc::vec::Vec;
+
 use ledger_device_sdk::ecc::{ECPrivateKey, Secp256k1, SeedDerive};
 use ledger_secure_sdk_sys::*;
 
+use mintlayer_messages::{
+    AddrType, Bip32Path, MsgSignatureResponse, SignMessageStartReq, Signature,
+};
+
+use crate::{
+    DataContext, StatusWord, app_ui::sign::ui_display_message, errors::cx_err_to_status,
+    hasher::Hasher, mlcp, utils::check_derivation_path,
+};
+
 pub struct SignMessageContext {
     path: Bip32Path,
-    coin: CoinType,
+    coin: mlcp::CoinType,
     addr_type: AddrType,
     review_finished: bool,
 }
 
 impl SignMessageContext {
-    pub fn new(req: SignMessageReq) -> Self {
+    pub fn new(req: SignMessageStartReq) -> Self {
         Self {
             path: req.path,
             coin: req.coin.into(),
@@ -49,10 +51,17 @@ impl SignMessageContext {
     }
 }
 
-pub fn setup_sign_message(req: SignMessageReq) -> DataContext {
-    DataContext::SignMessageContext(SignMessageContext::new(req))
+pub fn setup_sign_message(req: SignMessageStartReq) -> Result<DataContext, StatusWord> {
+    check_derivation_path(req.path.as_ref(), req.coin.into())?;
+
+    Ok(DataContext::SignMessageContext(SignMessageContext::new(
+        req,
+    )))
 }
 
+// TODO: implement stateful message signing, where the message is received and displayed for review
+// in portions, to allow signing messages of arbitrary sizes.
+// See https://github.com/mintlayer/mintlayer-ledger-app/issues/13.
 pub fn handle_sign_message(
     message: &[u8],
     ctx: &mut SignMessageContext,
@@ -62,7 +71,7 @@ pub fn handle_sign_message(
         .public_key()
         .map_err(|_| StatusWord::KeyDeriveFail)?;
 
-    // Display review. If user approves sign it.
+    // Display review. If user approves, sign it.
     // Otherwise, return a "deny" status word.
     if ui_display_message(message, &public_key, ctx.coin, ctx.addr_type)? {
         ctx.review_finished = true;
@@ -88,13 +97,13 @@ fn compute_signature<const N: usize>(
         .copied()
         .collect::<Vec<_>>();
 
-    let message_hash = mintlayer_hash(&message)?;
-    let message_hash2 = mintlayer_hash(message_hash.as_bytes())?;
+    let message_hash = Hasher::hash(&message)?;
+    let message_hash2 = Hasher::hash(message_hash.as_bytes())?;
 
     let sig = schnorr_sign(private_key, message_hash2.as_bytes())?;
 
     let response = MsgSignatureResponse {
-        signature: SignatureResponse(sig),
+        signature: Signature(sig),
     };
 
     Ok(response)

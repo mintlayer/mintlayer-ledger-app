@@ -1,6 +1,6 @@
 /*****************************************************************************
  *   Mintlayer Ledger App.
- *   (c) 2025 RBB S.r.l.
+ *   (c) 2025-2026 RBB S.r.l.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,28 +15,10 @@
  *  limitations under the License.
  *****************************************************************************/
 
-use alloc::string::String;
-use alloc::{format, string::ToString};
+use alloc::{format, string::String, string::ToString};
+use chrono::{TimeZone, Utc};
 use core::fmt::Write;
 
-use crate::{
-    app_ui::utils::{
-        bech32m_encode, compress_public_key, load_glyph, to_address, to_public_key_hash,
-    },
-    handlers::sign_tx::{CoinOrTokenId, InputCommand, TxParsingOutputsContext, TxType},
-    StatusWord,
-};
-use mintlayer_messages::{
-    encode,
-    mlcp::{
-        AccountCommand, AccountSpending, Amount, CoinType, Destination, IsTokenFreezable,
-        IsTokenUnfreezable, NftIssuance, OrderAccountCommand, OutputTimeLock, OutputValue,
-        PublicKey, TokenIssuance, TokenTotalSupply, TxOutput, VrfPublicKey, H256,
-    },
-    AddrType,
-};
-
-use chrono::{TimeZone, Utc};
 use ledger_device_sdk::{
     ecc::ECPublicKey,
     nbgl::{
@@ -45,7 +27,24 @@ use ledger_device_sdk::{
     },
 };
 
-struct FormatedOutput {
+use mintlayer_messages::{
+    AccountCommand, AccountSpending, AddrType, Amount, DelegationId, Destination, H256,
+    IsTokenFreezable, IsTokenUnfreezable, NftIssuance, OrderAccountCommand, OrderId,
+    OutputTimeLock, OutputValue, PoolId, PublicKey, TokenId, TokenIssuance, TokenTotalSupply,
+    TxOutput, VrfPublicKey, encode,
+};
+
+use crate::{
+    StatusWord,
+    app_ui::utils::{
+        bech32m_encode, compress_public_key, load_glyph, to_address, to_public_key_hash,
+    },
+    handlers::sign_tx::{CoinOrTokenId, InputCommand, TxSummaryCollector, TxType},
+    mlcp,
+    utils::{make_displayable, make_displayable_str, output_value_with_amount},
+};
+
+struct FormattedOutput {
     name: &'static str,
     value: String,
 }
@@ -65,7 +64,7 @@ pub fn ui_start_streaming_review(review: &NbglStreamingReview) -> bool {
 pub fn ui_streaming_review_show_input(
     review: &NbglStreamingReview,
     input: &InputCommand,
-    coin: CoinType,
+    coin: mlcp::CoinType,
 ) -> Result<bool, StatusWord> {
     let input = format_input(input, coin)?;
 
@@ -85,7 +84,7 @@ pub fn ui_streaming_review_show_input(
 pub fn ui_streaming_review_show_output(
     review: &NbglStreamingReview,
     output: &TxOutput,
-    coin: CoinType,
+    coin: mlcp::CoinType,
 ) -> Result<bool, StatusWord> {
     let output = format_output(output, coin)?;
 
@@ -104,10 +103,10 @@ pub fn ui_streaming_review_show_output(
 
 pub fn ui_approve_streaming_review(
     review: &NbglStreamingReview,
-    ctx: &TxParsingOutputsContext,
+    tx_summary: &TxSummaryCollector,
+    coin: mlcp::CoinType,
 ) -> Result<bool, StatusWord> {
-    let coin = ctx.coin();
-    let fees = ctx.summary().fees_iter().try_fold(
+    let fees = tx_summary.fees_iter().try_fold(
         String::new(),
         |mut acc, res| -> Result<_, StatusWord> {
             let (coin_or_token, fee) = res?;
@@ -115,9 +114,8 @@ pub fn ui_approve_streaming_review(
             match coin_or_token {
                 CoinOrTokenId::Coin => writeln!(
                     acc,
-                    "{} {}",
-                    format_amount(Amount::from_atoms(fee), coin),
-                    coin.coin_ticker()
+                    "{}",
+                    format_coin_amount_with_name(Amount::from_atoms(fee), coin),
                 )
                 .map_err(|_| StatusWord::TxDisplayFail)?,
 
@@ -125,10 +123,10 @@ pub fn ui_approve_streaming_review(
                     if fee != 0 {
                         writeln!(
                             acc,
-                            "{fee} {}",
-                            id_to_address(token_id, coin.token_id_address_prefix())?
+                            "{}",
+                            format_token_amount_with_name(token_id, Amount::from_atoms(fee), coin)?,
                         )
-                        .map_err(|_| StatusWord::TxDisplayFail)?
+                        .map_err(|_| StatusWord::TxDisplayFail)?;
                     }
                 }
             };
@@ -147,7 +145,7 @@ pub fn ui_approve_streaming_review(
         NbglStreamingReviewStatus::Next | NbglStreamingReviewStatus::Skipped => {}
     };
 
-    let title = transaction_title(&ctx.summary().tx_type());
+    let title = transaction_title(&tx_summary.tx_type());
     Ok(review.finish(title))
 }
 
@@ -158,8 +156,8 @@ fn transaction_title(tx_type: &Option<TxType>) -> &'static str {
         Some(TxType::Burn) => "Sign burn transaction",
         Some(TxType::Htlc) => "Sign create HTLC transaction",
         Some(TxType::CreateDelegation) => "Sign create delegation transaction",
-        Some(TxType::DelegationStake) => "Sign stake delegation transaction",
-        Some(TxType::DelegationWithdrawal) => "Sign withdrawal delegation transaction",
+        Some(TxType::DelegateStaking) => "Sign delegate staking transaction",
+        Some(TxType::DelegationWithdrawal) => "Sign delegation withdrawal transaction",
         Some(TxType::CreateStakePool) => "Sign create stake pool transaction",
         Some(TxType::DecommissionStakePool) => "Sign decommission stake pool transaction",
         Some(TxType::CreateNft) => "Sign create NFT transaction",
@@ -186,17 +184,20 @@ fn transaction_title(tx_type: &Option<TxType>) -> &'static str {
 ///
 /// # Arguments
 ///
-/// * `message` - A byte slice (`&[u8]`) containing the message to be signed.
+/// * `message`    - The message to be signed.
+/// * `public_key` - The public key corresponding to the private key that will be used for signing.
+/// * `coin_type`  - The coin type (mainnet, testnet etc).
+/// * `addr_type`  - The address type (pk or pkh); this determines how `public_key` will be displayed.
 ///
 /// # Returns
 ///
 /// * `Ok(true)` if the user approves the signing.
 /// * `Ok(false)` if the user rejects.
-/// * `Err(AppSW)` on error.
+/// * `Err(StatusWord)` on error.
 pub fn ui_display_message<const T: char>(
     message: &[u8],
     public_key: &ECPublicKey<65, T>,
-    coin_type: CoinType,
+    coin_type: mlcp::CoinType,
     addr_type: AddrType,
 ) -> Result<bool, StatusWord> {
     let pk = compress_public_key(public_key)?;
@@ -207,10 +208,7 @@ pub fn ui_display_message<const T: char>(
     };
     let addr = to_address(&dest, coin_type)?;
 
-    let message_str = match core::str::from_utf8(message) {
-        Ok(s) if s.bytes().all(|b| (0x20..=0x7E).contains(&b)) => s.to_string(),
-        Ok(_) | Err(_) => format!("0x{}", hex::encode(message)),
-    };
+    let message_str = make_displayable_str(message);
 
     let msg_fields = [
         Field {
@@ -219,7 +217,7 @@ pub fn ui_display_message<const T: char>(
         },
         Field {
             name: "Message",
-            value: message_str.as_str(),
+            value: &message_str,
         },
     ];
 
@@ -228,9 +226,13 @@ pub fn ui_display_message<const T: char>(
     // Create the NBGL review flow with titles appropriate for message signing.
     let review: NbglReview = NbglReview::new()
         .titles(
-            "Review message",   // Initial title
-            "Cannot be undone", // Warning on the second screen
-            "Sign message",     // Final confirmation prompt
+            // Title
+            "Review message",
+            // Subtitle; if non-empty, this will be shown on the second screen on nano devices
+            // and below the title on the first screen on touch devices.
+            "",
+            // Final confirmation prompt
+            "Sign message",
         )
         .tx_type(TransactionType::Message)
         .glyph(&MINTLAYER);
@@ -239,7 +241,7 @@ pub fn ui_display_message<const T: char>(
     Ok(review.show(&msg_fields))
 }
 
-fn vrf_to_address(key: &VrfPublicKey, coin: CoinType) -> Result<String, StatusWord> {
+fn vrf_to_address(key: &VrfPublicKey, coin: mlcp::CoinType) -> Result<String, StatusWord> {
     bech32m_encode(coin.vrf_public_key_address_prefix(), &encode(key))
 }
 
@@ -247,7 +249,24 @@ fn id_to_address(id: &H256, hrp: &str) -> Result<String, StatusWord> {
     bech32m_encode(hrp, &id.0)
 }
 
-fn format_amount(amount: Amount, coin: CoinType) -> String {
+fn token_id_to_address(id: &TokenId, coin: mlcp::CoinType) -> Result<String, StatusWord> {
+    id_to_address(id.hash(), coin.token_id_address_prefix())
+}
+
+fn pool_id_to_address(id: &PoolId, coin: mlcp::CoinType) -> Result<String, StatusWord> {
+    id_to_address(id.hash(), coin.pool_id_address_prefix())
+}
+
+fn delegation_id_to_address(id: &DelegationId, coin: mlcp::CoinType) -> Result<String, StatusWord> {
+    id_to_address(id.hash(), coin.delegation_id_address_prefix())
+}
+
+fn order_id_to_address(id: &OrderId, coin: mlcp::CoinType) -> Result<String, StatusWord> {
+    id_to_address(id.hash(), coin.order_id_address_prefix())
+}
+
+/// Format a coin amount as a decimal string.
+fn format_coin_amount(amount: Amount, coin: mlcp::CoinType) -> String {
     let decimals = coin.coin_decimals() as usize;
     let mantissa = amount.into_atoms();
 
@@ -259,18 +278,35 @@ fn format_amount(amount: Amount, coin: CoinType) -> String {
     buffer
 }
 
-fn format_atoms(amount: Amount) -> String {
-    amount.into_atoms().to_string()
+/// Same as format_coin_amount, but also append the coin ticker to the amount.
+fn format_coin_amount_with_name(amount: Amount, coin: mlcp::CoinType) -> String {
+    let mut amount = format_coin_amount(amount, coin);
+    amount.push(' ');
+    amount.push_str(coin.coin_ticker());
+    amount
 }
 
-fn format_value(value: &OutputValue, coin: CoinType) -> Result<String, StatusWord> {
+fn format_token_amount_with_name(
+    token_id: &TokenId,
+    amount: Amount,
+    coin: mlcp::CoinType,
+) -> Result<String, StatusWord> {
+    let atoms = amount.into_atoms();
+    let id_str = id_to_address(token_id.hash(), coin.token_id_address_prefix())?;
+
+    Ok(format!("{atoms} atoms of {id_str}"))
+}
+
+fn format_atoms(amount: Amount) -> String {
+    format!("{} atoms", amount.into_atoms())
+}
+
+fn format_value(value: &OutputValue, coin: mlcp::CoinType) -> Result<String, StatusWord> {
     match value {
-        OutputValue::Coin(amount) => Ok(format!("Coins: {}", format_amount(*amount, coin))),
-        OutputValue::TokenV1(token_id, amount) => Ok(format!(
-            "Token: {} {}",
-            id_to_address(token_id.hash(), coin.token_id_address_prefix())?,
-            format_atoms(*amount)
-        )),
+        OutputValue::Coin(amount) => Ok(format_coin_amount_with_name(*amount, coin)),
+        OutputValue::TokenV1(token_id, amount) => {
+            format_token_amount_with_name(token_id, *amount, coin)
+        }
     }
 }
 
@@ -289,22 +325,30 @@ fn format_timestamp(seconds_u64: u64) -> Result<String, StatusWord> {
 fn format_lock(lock: &OutputTimeLock) -> Result<String, StatusWord> {
     let s = match lock {
         OutputTimeLock::UntilHeight(h) => format!("Lock until block height {}", h.0),
-        OutputTimeLock::UntilTime(t) => format!("Lock until {}", format_timestamp(t.0 .0)?),
+        OutputTimeLock::UntilTime(t) => format!("Lock until {}", format_timestamp(t.0.0)?),
         OutputTimeLock::ForBlockCount(b) => format!("Lock for {} blocks", b.0),
         OutputTimeLock::ForSeconds(s) => format!("Lock for {} seconds", s.0),
     };
     Ok(s)
 }
 
-/// Formats a transaction output into a FormatedOutput.
+/// Formats a transaction output into a FormattedOutput.
 ///
 /// # Arguments
 /// * `output` - A reference to the `TxOutput` enum variant to format.
-/// * `coin` - The coin information, used for formatting amounts.
+/// * `coin` - The coin type (mainnet, testnet etc).
 ///
 /// # Returns
-/// A FormatedOutput containing the title and value of the output.
-fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormatedOutput, StatusWord> {
+/// A FormattedOutput containing the title and value of the output.
+fn format_output(output: &TxOutput, coin: mlcp::CoinType) -> Result<FormattedOutput, StatusWord> {
+    // Note: on nanox and nanosp the screen space is very limited. Moreover, if the name part of
+    // a field doesn't fit into one line, it will be shrunk instead of being wrapped to the next
+    // line, which will make it incomprehensible.
+    // The limit is about 11-12 characters (e.g. "Chg token auth" is already too long and becomes
+    // "Chg to...th").
+    // So, choose names carefully and always check the screen snapshots after they're regenerated.
+    // Same for inputs.
+
     let (name, value) = match output {
         TxOutput::Transfer(value, destination) => (
             "Transfer",
@@ -333,10 +377,22 @@ fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormatedOutput, St
 
         TxOutput::CreateStakePool(pool_id, data) => {
             let address_short = format!(
-                "Pool ID: {}\nStaker key: {}\nDecommission key: {}\nVRF public key: {}\nMargin ratio per thousand: {}\nCost per block: {}\nPledge{}\n",
-                id_to_address(pool_id.hash(), coin.pool_id_address_prefix())?, to_address(&data.staker, coin)?, to_address(&data.decommission_key, coin)?, vrf_to_address(&data.vrf_public_key, coin)?, data.margin_ratio_per_thousand.0, format_amount(data.cost_per_block, coin),
-                format_amount(data.pledge, coin));
-            ("Create staking pool", address_short)
+                "Pool ID: {}\nStaker key: {}\nDecommission key: {}\nVRF public key: {}\nMargin ratio per thousand: {}\nCost per block: {}\nPledge: {}\n",
+                pool_id_to_address(pool_id, coin)?,
+                to_address(&data.staker, coin)?,
+                to_address(&data.decommission_key, coin)?,
+                vrf_to_address(&data.vrf_public_key, coin)?,
+                data.margin_ratio_per_thousand.0,
+                format_coin_amount_with_name(data.cost_per_block, coin),
+                format_coin_amount_with_name(data.pledge, coin)
+            );
+
+            let name = if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
+                "Create pool"
+            } else {
+                "Create staking pool"
+            };
+            (name, address_short)
         }
 
         TxOutput::ProduceBlockFromStake(destination, _pool_id) => {
@@ -355,7 +411,7 @@ fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormatedOutput, St
             let address_short = format!(
                 "Address: {}\nPoolId: {}",
                 to_address(destination, coin)?,
-                id_to_address(pool_id.hash(), coin.pool_id_address_prefix())?
+                pool_id_to_address(pool_id, coin)?
             );
 
             let name = if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
@@ -378,7 +434,7 @@ fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormatedOutput, St
                 name,
                 format!(
                     "\n{}\n{}",
-                    id_to_address(delegation_id.hash(), coin.delegation_id_address_prefix())?,
+                    delegation_id_to_address(delegation_id, coin)?,
                     format_value(&OutputValue::Coin(*amount), coin)?,
                 ),
             )
@@ -386,14 +442,19 @@ fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormatedOutput, St
         TxOutput::IssueFungibleToken(x) => {
             let TokenIssuance::V1(data) = x;
 
-            let ticker = String::from_utf8_lossy(data.token_ticker.as_ref());
-            let metadata_uri = String::from_utf8_lossy(data.metadata_uri.as_ref());
+            // Note: currently the consensus rules require that a token ticker can only be
+            // ascii alphanumeric, so we could just reject non-ascii tickers here.
+            // We use `make_displayable` here for simplicity and consistency.
+            let ticker = make_displayable(&data.token_ticker);
+            // Note: a metadata URI is allowed to have non-ascii chars, so `make_displayable`
+            // is not redundant here.
+            let metadata_uri = make_displayable(&data.metadata_uri);
 
             let total_supply_str = match data.total_supply {
                 TokenTotalSupply::Unlimited => "UNLIMITED".to_string(),
                 TokenTotalSupply::Lockable => "LOCKABLE".to_string(),
                 TokenTotalSupply::Fixed(amount) => {
-                    let formatted_amount = format_amount(amount, coin);
+                    let formatted_amount = format_atoms(amount);
                     format!("FIXED {}", formatted_amount)
                 }
             };
@@ -404,7 +465,12 @@ fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormatedOutput, St
 
             let address_short = format!(
                 "Ticker: {}\nAuthority: {}\nMetadata URI: {}\nTotal token supply: {}\nNumber of decimals: {}\nIs freezable: {}",
-                ticker, to_address(&data.authority, coin)?, metadata_uri, total_supply_str, data.number_of_decimals, is_freezable
+                ticker,
+                to_address(&data.authority, coin)?,
+                metadata_uri,
+                total_supply_str,
+                data.number_of_decimals,
+                is_freezable
             );
             let name = if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
                 "Issue token"
@@ -417,31 +483,42 @@ fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormatedOutput, St
 
         TxOutput::IssueNft(_nft_id, data, destination) => {
             let NftIssuance::V0(data) = data;
+            // Note:
+            // 1. Consensus rules require that name, description and ticker are ascii alphanumeric.
+            //    But same as in the IssueFungibleToken case, we use `make_displayable` for consistency
+            //    and simplicity.
+            // 2. The URIs are allowed to have non-ascii chars, so `make_displayable` is not redundant
+            //    for them.
+            // 3. There is no point in reviewing the NFT id - consensus rules require that the id is
+            //    calculated from transaction inputs and if the host cheats or malfunctions, the
+            //    transaction will become invalid (note that the id is only present in the output due
+            //    to historical reasons and e.g. IssueFungibleToken doesn't contain the token id).
             let address_short = format!(
-                "Name: {}\nCreator: {}\nTicker: {}\nAddress: {}\nIcon URI: {}\nAdditional metadata URI: {}\nMedia URI: {}",
-                String::from_utf8_lossy(data.name.as_ref()),
-                data.creator.clone().map(|creator| to_address(&Destination::PublicKey(creator), coin)).transpose()?.unwrap_or_default(),
-                String::from_utf8_lossy(data.ticker.as_ref()),
+                "Name: {}\nDescription: {}\nCreator: {}\nTicker: {}\nAddress: {}\nIcon URI: {}\nAdditional metadata URI: {}\nMedia URI: {}, Media hash: {}",
+                make_displayable(&data.name),
+                make_displayable(&data.description),
+                data.creator
+                    .clone()
+                    .map(|creator| to_address(&Destination::PublicKey(creator), coin))
+                    .transpose()?
+                    .unwrap_or_default(),
+                make_displayable(&data.ticker),
                 to_address(destination, coin)?,
-                String::from_utf8_lossy(data.icon_uri.as_ref()),
-                String::from_utf8_lossy(data.additional_metadata_uri.as_ref()),
-                String::from_utf8_lossy(data.media_uri.as_ref())
+                make_displayable(&data.icon_uri),
+                make_displayable(&data.additional_metadata_uri),
+                make_displayable(&data.media_uri),
+                make_displayable(&data.media_hash),
             );
-            let name = if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                "Issue NFT"
-            } else {
-                "Issue NFT token"
-            };
 
-            (name, address_short)
+            ("Issue NFT", address_short)
         }
 
-        TxOutput::DataDeposit(data) => ("Data deposit", hex::encode(data)),
+        TxOutput::DataDeposit(data) => ("Data deposit", const_hex::encode(data)),
 
         TxOutput::Htlc(value, data) => {
             let address_short = format!(
-                "Secret hash: {}\nSpend key: {}\nRefund key: {}\nRefund time lock: {}\n{}",
-                hex::encode(data.secret_hash.0),
+                "Secret hash: {:x}\nSpend key: {}\nRefund key: {}\nRefund time lock: {}\n{}",
+                const_hex::display(data.secret_hash.0),
                 to_address(&data.spend_key, coin)?,
                 to_address(&data.refund_key, coin)?,
                 format_lock(&data.refund_timelock)?,
@@ -463,20 +540,20 @@ fn format_output(output: &TxOutput, coin: CoinType) -> Result<FormatedOutput, St
         }
     };
 
-    Ok(FormatedOutput { name, value })
+    Ok(FormattedOutput { name, value })
 }
 
-fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, StatusWord> {
+fn format_input(input: &InputCommand, coin: mlcp::CoinType) -> Result<FormattedOutput, StatusWord> {
     let (name, value) = match input {
         InputCommand::AccountSpending(cmd) => match cmd {
             AccountSpending::DelegationBalance(delegation_id, amount) => {
                 let address_short = format!(
                     "Delegation ID: {}\nAmount: {}",
-                    id_to_address(delegation_id.hash(), coin.delegation_id_address_prefix())?,
-                    format_amount(*amount, coin)
+                    delegation_id_to_address(delegation_id, coin)?,
+                    format_coin_amount_with_name(*amount, coin)
                 );
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                    ("Del Wdrwl", address_short)
+                    ("Deleg wdrwl", address_short)
                 } else {
                     ("Delegation withdrawal", address_short)
                 }
@@ -486,25 +563,19 @@ fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, 
             AccountCommand::MintTokens(token_id, amount) => {
                 let address_short = format!(
                     "Token ID: {}\nAmount: {}",
-                    id_to_address(token_id.hash(), coin.token_id_address_prefix())?,
-                    format_amount(*amount, coin)
+                    token_id_to_address(token_id, coin)?,
+                    format_atoms(*amount)
                 );
                 ("Mint tokens", address_short)
             }
             AccountCommand::UnmintTokens(token_id) => {
-                let address_short = format!(
-                    "Token ID: {}",
-                    id_to_address(token_id.hash(), coin.token_id_address_prefix())?,
-                );
+                let address_short = format!("Token ID: {}", token_id_to_address(token_id, coin)?,);
                 ("Unmint tokens", address_short)
             }
             AccountCommand::LockTokenSupply(token_id) => {
-                let address_short = format!(
-                    "Token ID: {}",
-                    id_to_address(token_id.hash(), coin.token_id_address_prefix())?
-                );
+                let address_short = format!("Token ID: {}", token_id_to_address(token_id, coin)?);
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                    ("Lock token", address_short)
+                    ("Lock supply", address_short)
                 } else {
                     ("Lock token supply", address_short)
                 }
@@ -512,7 +583,7 @@ fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, 
             AccountCommand::FreezeToken(token_id, is_unfreezable) => {
                 let address_short = format!(
                     "Token ID: {}\nIs unfreezable: {}",
-                    id_to_address(token_id.hash(), coin.token_id_address_prefix())?,
+                    token_id_to_address(token_id, coin)?,
                     if *is_unfreezable == IsTokenUnfreezable::Yes {
                         "Yes"
                     } else {
@@ -522,10 +593,7 @@ fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, 
                 ("Freeze token", address_short)
             }
             AccountCommand::UnfreezeToken(token_id) => {
-                let address_short = format!(
-                    "Token ID: {}",
-                    id_to_address(token_id.hash(), coin.token_id_address_prefix())?,
-                );
+                let address_short = format!("Token ID: {}", token_id_to_address(token_id, coin)?,);
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
                     ("Unfrz token", address_short)
                 } else {
@@ -535,11 +603,11 @@ fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, 
             AccountCommand::ChangeTokenAuthority(token_id, new_authority) => {
                 let address_short = format!(
                     "Token ID: {}\nNew authority: {}",
-                    id_to_address(token_id.hash(), coin.token_id_address_prefix())?,
+                    token_id_to_address(token_id, coin)?,
                     to_address(new_authority, coin)?
                 );
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                    ("Chg token auth", address_short)
+                    ("Chg tkn auth", address_short)
                 } else {
                     ("Change token authority", address_short)
                 }
@@ -547,40 +615,36 @@ fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, 
             AccountCommand::ChangeTokenMetadataUri(token_id, new_metadata_uri) => {
                 let address_short = format!(
                     "Token ID: {}\nNew metadata URI: {}",
-                    id_to_address(token_id.hash(), coin.token_id_address_prefix())?,
-                    String::from_utf8_lossy(new_metadata_uri)
+                    token_id_to_address(token_id, coin)?,
+                    make_displayable(new_metadata_uri)
                 );
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                    ("Chg token meta", address_short)
+                    ("Chg tkn meta", address_short)
                 } else {
                     ("Change token metadata URI", address_short)
                 }
             }
             AccountCommand::ConcludeOrder(_) | AccountCommand::FillOrder(_, _, _) => {
-                return Err(StatusWord::OrdersV0NotSupported)
+                return Err(StatusWord::OrdersV0NotSupported);
             }
         },
-        InputCommand::OrderCommand(cmd) => match cmd {
+        InputCommand::OrderCommand(cmd, additional_info) => match cmd {
             OrderAccountCommand::FillOrder(order_id, fill_amount) => {
+                let fill_value =
+                    output_value_with_amount(&additional_info.initially_asked, *fill_amount);
                 let address_short = format!(
                     "Order ID: {}\nFill amount: {}",
-                    id_to_address(order_id.hash(), coin.order_id_address_prefix())?,
-                    format_amount(*fill_amount, coin),
+                    order_id_to_address(order_id, coin)?,
+                    format_value(&fill_value, coin)?,
                 );
                 ("Fill order", address_short)
             }
             OrderAccountCommand::FreezeOrder(order_id) => {
-                let address_short = format!(
-                    "Order ID: {}",
-                    id_to_address(order_id.hash(), coin.order_id_address_prefix())?
-                );
+                let address_short = format!("Order ID: {}", order_id_to_address(order_id, coin)?);
                 ("Freeze order", address_short)
             }
             OrderAccountCommand::ConcludeOrder(order_id) => {
-                let address_short = format!(
-                    "Order ID: {}",
-                    id_to_address(order_id.hash(), coin.order_id_address_prefix())?
-                );
+                let address_short = format!("Order ID: {}", order_id_to_address(order_id, coin)?);
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
                     ("Conclude ord", address_short)
                 } else {
@@ -590,5 +654,5 @@ fn format_input(input: &InputCommand, coin: CoinType) -> Result<FormatedOutput, 
         },
     };
 
-    Ok(FormatedOutput { name, value })
+    Ok(FormattedOutput { name, value })
 }
