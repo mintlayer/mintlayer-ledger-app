@@ -95,7 +95,7 @@ def split_message(message: bytes, max_size: int) -> List[bytes]:
     if len(message) == 0:
         return [[]]
 
-    return [message[x: x + max_size] for x in range(0, len(message), max_size)]
+    return [message[x : x + max_size] for x in range(0, len(message), max_size)]
 
 
 class MintlayerCommandSender:
@@ -123,8 +123,7 @@ class MintlayerCommandSender:
         )
 
     def get_public_key_by_ints_path(self, coin: int, path: list[int]) -> RAPDU:
-        data = coin.to_bytes(1, "little") + \
-            pack_derivation_path_from_ints(path)
+        data = coin.to_bytes(1, "little") + pack_derivation_path_from_ints(path)
 
         return self.backend.exchange(
             cla=CLA,
@@ -290,8 +289,7 @@ class MintlayerCommandSender:
                 p2=P2.P2_LAST,
                 data=chunks[-1],
             ):
-                kind = "sign" if idx == len(
-                    transaction.outputs) - 1 else "output"
+                kind = "sign" if idx == len(transaction.outputs) - 1 else "output"
                 yield SignTxStep(kind=kind)
 
             response = self.get_async_response()
@@ -325,8 +323,7 @@ class MintlayerCommandSender:
         return response
 
     def get_all_signatures(self, transaction: Transaction) -> List[TxInputSignature]:
-        next_sig = sign_tx_next_req_obj.encode(
-            {"ReturnNextSignature": None}).data
+        next_sig = sign_tx_next_req_obj.encode({"ReturnNextSignature": None}).data
         sigs = []
         expected_sigs_count = len(transaction.expected_sig_indices())
 
@@ -399,8 +396,7 @@ def sign_tx_review(
     addr_paths_by_indices = transaction.addr_paths_by_indices()
     pubkeys_by_indices = {}
     for indices, addr_path in addr_paths_by_indices.items():
-        pubkey_rapdu = client.get_public_key_by_ints_path(
-            transaction.coin, addr_path)
+        pubkey_rapdu = client.get_public_key_by_ints_path(transaction.coin, addr_path)
         _, pubkey, _, _ = unpack_get_public_key_response(pubkey_rapdu.data)
 
         print(f"{indices}: {pubkey}")

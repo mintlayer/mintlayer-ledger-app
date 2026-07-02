@@ -404,8 +404,11 @@ def init_mintlayer_types():
                     ["Utxo", "OutPoint"],
                     ["Account", "AccountOutPoint"],
                     ["AccountCommand", "(AccountNonce, AccountCommand)"],
-                    ["OrderAccountCommand", "OrderAccountCommand",],
-                ]
+                    [
+                        "OrderAccountCommand",
+                        "OrderAccountCommand",
+                    ],
+                ],
             },
         }
     }

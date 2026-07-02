@@ -43,10 +43,7 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
         }
     }
     inp = {
-        "addresses": [
-            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
-             "multisig_idx": None}
-        ],
+        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -66,9 +63,7 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
                 {"Coin": 10},
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
                     }
                 },
             ],
@@ -76,8 +71,7 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
     }
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[
-            inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
@@ -96,10 +90,7 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
 
     h = 1 << 31
     inp = {
-        "addresses": [
-            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
-                "multisig_idx": None}
-        ],
+        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
         "input": {
             "Account": {
                 "nonce": 1,
@@ -116,9 +107,7 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
                 {"Coin": 10},
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
                     }
                 },
                 {"UntilHeight": 10},
@@ -128,8 +117,7 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[
-            inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
@@ -158,10 +146,7 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
         }
     }
     inp = {
-        "addresses": [
-            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
-                "multisig_idx": None}
-        ],
+        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -180,9 +165,7 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
             "CreateDelegationId": [
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
                     }
                 },
                 [0] * 32,
@@ -192,8 +175,7 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[
-            inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
@@ -222,10 +204,7 @@ def test_sign_tx_delegate_staking(backend, scenario_navigator, device, navigator
         }
     }
     inp = {
-        "addresses": [
-            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
-                "multisig_idx": None}
-        ],
+        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -247,8 +226,7 @@ def test_sign_tx_delegate_staking(backend, scenario_navigator, device, navigator
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[
-            inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
@@ -277,10 +255,7 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
         }
     }
     inp = {
-        "addresses": [
-            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
-                "multisig_idx": None}
-        ],
+        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -307,9 +282,7 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
                             }
                         }
                     },
-                    "vrf_public_key": {
-                        "key": {"Schnorrkel": {"key": bytes([0] * 32)}}
-                    },
+                    "vrf_public_key": {"key": {"Schnorrkel": {"key": bytes([0] * 32)}}},
                     "decommission_key": {
                         "PublicKey": {
                             "key": {
@@ -325,8 +298,7 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
     }
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[
-            inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
@@ -354,10 +326,7 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
         }
     }
     inp = {
-        "addresses": [
-            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
-                "multisig_idx": None}
-        ],
+        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -394,8 +363,7 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[
-            inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
@@ -423,10 +391,7 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
         }
     }
     inp = {
-        "addresses": [
-            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
-                "multisig_idx": None}
-        ],
+        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -470,9 +435,7 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
                 },
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
                     }
                 },
             ],
@@ -481,8 +444,7 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[
-            inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
@@ -558,9 +520,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
                 {"TokenV1": [token_id, 1000]},
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
                     }
                 },
             ],
@@ -672,9 +632,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
                 {"Coin": 99},
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
                     }
                 },
             ],
@@ -684,8 +642,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     transaction = Transaction(
         coin=MAINNET,
         inputs=[utxo_input, account_input, utxo_input2],
-        input_commitments=[inp_commitment,
-                           acc_inp_commitment, inp_commitment2],
+        input_commitments=[inp_commitment, acc_inp_commitment, inp_commitment2],
         outputs=[change_output],
     )
 
@@ -758,9 +715,7 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
                 {"Coin": 99},
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
                     }
                 },
             ],
@@ -844,9 +799,7 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
                 {"Coin": 99},
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
                     }
                 },
             ],
@@ -921,9 +874,7 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
                         {
                             "PublicKey": {
                                 "key": {
-                                    "Secp256k1Schnorr": {
-                                        "pubkey_data": bytes([2] * 33)
-                                    }
+                                    "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
                                 }
                             }
                         },
@@ -941,9 +892,7 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
                 {"Coin": 99},
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
                     }
                 },
             ],
@@ -1032,9 +981,7 @@ def test_sign_tx_change_token_metadata_uri(
                 {"Coin": 99},
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
                     }
                 },
             ],
@@ -1138,9 +1085,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
                 {"Coin": 100 - 1 - fill_amount},
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
                     }
                 },
             ],
@@ -1158,9 +1103,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
                 },
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
                     }
                 },
             ],
@@ -1264,9 +1207,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
                 {"Coin": 100 - 1 + ask_balance},
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
                     }
                 },
             ],
@@ -1279,9 +1220,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
                 {"TokenV1": [token_id, give_balance]},
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
                     }
                 },
             ],
@@ -1348,9 +1287,7 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
                 {"Coin": 89},
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
                     }
                 },
             ],
@@ -1486,10 +1423,7 @@ def test_sign_tx_with_large_output(backend, scenario_navigator, device, navigato
         }
     }
     inp = {
-        "addresses": [
-            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
-                "multisig_idx": None}
-        ],
+        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -1536,9 +1470,7 @@ def test_sign_tx_with_large_output(backend, scenario_navigator, device, navigato
                 },
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
                     }
                 },
             ],
@@ -1546,12 +1478,11 @@ def test_sign_tx_with_large_output(backend, scenario_navigator, device, navigato
     }
 
     # Sanity check
-    assert len(sign_tx_next_req_obj.encode({ "ProcessOutput": output }).data) > 500
+    assert len(sign_tx_next_req_obj.encode({"ProcessOutput": output}).data) > 500
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[
-            inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(
@@ -1611,10 +1542,7 @@ def test_sign_tx_with_large_input_and_commitment(
         }
     }
     inp = {
-        "addresses": [
-            {"path": [44 + h, 19788 + h, 0 + h, 0, 0],
-                "multisig_idx": None}
-        ],
+        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -1634,9 +1562,7 @@ def test_sign_tx_with_large_input_and_commitment(
                 {"TokenV1": [token_id, 1]},
                 {
                     "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}
-                        }
+                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
                     }
                 },
             ],
@@ -1644,13 +1570,17 @@ def test_sign_tx_with_large_input_and_commitment(
     }
 
     # Sanity checks
-    assert len(sign_tx_next_req_obj.encode({ "ProcessInput": inp }).data) > 500
-    assert len(sign_tx_next_req_obj.encode({ "ProcessInputCommitment": inp_commitment }).data) > 500
+    assert len(sign_tx_next_req_obj.encode({"ProcessInput": inp}).data) > 500
+    assert (
+        len(
+            sign_tx_next_req_obj.encode({"ProcessInputCommitment": inp_commitment}).data
+        )
+        > 500
+    )
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[
-            inp_commitment], outputs=[output]
+        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
     )
 
     review_tx = ReviewTransaction(

@@ -10,11 +10,13 @@ sign_tx_start_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_obje
 sign_tx_next_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
     "SignTxNextReq"
 )
-compact_u32_obj = scalecodec.base.RuntimeConfiguration(
-).create_scale_object("Compact<u32>")
+compact_u32_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
+    "Compact<u32>"
+)
 tx_input_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("TxInput")
-tx_input_commitment_obj = scalecodec.base.RuntimeConfiguration(
-).create_scale_object("SighashInputCommitment")
+tx_input_commitment_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(
+    "SighashInputCommitment"
+)
 tx_output_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("TxOutput")
 
 
@@ -27,8 +29,7 @@ class TxInputSignatureResponse:
 
     @staticmethod
     def from_data(response: bytes):
-        decoded_response = decode_response_variant(
-            response, "TxInputSignature")
+        decoded_response = decode_response_variant(response, "TxInputSignature")
 
         signature = bytes.fromhex(decoded_response["signature"][2:])
         assert len(signature) == 64
@@ -107,8 +108,7 @@ class Transaction:
             elif "AccountCommand" in inp_with_info:
                 inp = {"AccountCommand": inp_with_info["AccountCommand"]}
             elif "OrderAccountCommand" in inp_with_info:
-                inp = {
-                    "OrderAccountCommand": inp_with_info["OrderAccountCommand"][0]}
+                inp = {"OrderAccountCommand": inp_with_info["OrderAccountCommand"][0]}
             else:
                 raise ValueError("Unexpected input")
 
@@ -117,8 +117,7 @@ class Transaction:
         encoded_input_commitments = b""
         for inp_comm in self.input_commitments:
             comm = inp_comm["commitment"]
-            encoded_input_commitments += tx_input_commitment_obj.encode(
-                comm).data
+            encoded_input_commitments += tx_input_commitment_obj.encode(comm).data
 
         encoded_outputs = b""
         for outp_data in self.outputs:
@@ -128,13 +127,12 @@ class Transaction:
         assert len(self.input_commitments) == len(self.inputs)
 
         num_inputs_as_le_bytes = len(self.inputs).to_bytes(4, "little")
-        compact_encoded_num_outputs = compact_u32_obj.encode(
-            len(self.outputs)).data
+        compact_encoded_num_outputs = compact_u32_obj.encode(len(self.outputs)).data
 
         preimage = (
-            b"\x01"                  # SigHashType::ALL
-            + b"\x01"                # version
-            + bytes(16)              # zero flags
+            b"\x01"  # SigHashType::ALL
+            + b"\x01"  # version
+            + bytes(16)  # zero flags
             + num_inputs_as_le_bytes
             + encoded_inputs
             + num_inputs_as_le_bytes
@@ -188,7 +186,8 @@ def xonly_pubkey(public_key: bytes) -> bytes:
     if len(public_key) == 65 and public_key[0] == 0x04:
         return public_key[1:33]
     raise ValueError(
-        "Expected x-only, compressed, or uncompressed secp256k1 public key")
+        "Expected x-only, compressed, or uncompressed secp256k1 public key"
+    )
 
 
 def verify_message_signature(msg: bytes, pubkey: bytes, sig: bytes) -> bool:
@@ -199,4 +198,3 @@ def verify_message_signature(msg: bytes, pubkey: bytes, sig: bytes) -> bool:
 def verify_tx_signature(tx: Transaction, pubkey: bytes, sig: bytes) -> bool:
     digest = tx.digest_for_signing()
     return PublicKeyXOnly(xonly_pubkey(pubkey)).verify(sig, digest)
-
