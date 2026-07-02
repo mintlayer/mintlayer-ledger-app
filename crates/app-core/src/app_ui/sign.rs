@@ -303,12 +303,10 @@ fn format_atoms(amount: Amount) -> String {
 
 fn format_value(value: &OutputValue, coin: mlcp::CoinType) -> Result<String, StatusWord> {
     match value {
-        OutputValue::Coin(amount) => Ok(format!("Coins: {}", format_coin_amount(*amount, coin))),
-        OutputValue::TokenV1(token_id, amount) => Ok(format!(
-            "Token: {} {}",
-            token_id_to_address(token_id, coin)?,
-            amount.into_atoms()
-        )),
+        OutputValue::Coin(amount) => Ok(format_coin_amount_with_name(*amount, coin)),
+        OutputValue::TokenV1(token_id, amount) => {
+            format_token_amount_with_name(token_id, *amount, coin)
+        }
     }
 }
 

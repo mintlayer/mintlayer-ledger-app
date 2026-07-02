@@ -339,6 +339,10 @@ impl TxSummaryCollector {
     }
 }
 
+// TODO: this logic makes the tx type depend on the outputs order:
+// if the outputs are Burn and Transfer, the tx type will be Burn, but if it's Transfer, Burn,
+// then the tx type will be ComplexTransaction.
+// See https://github.com/mintlayer/mintlayer-ledger-app/issues/21.
 fn merge_tx_type(tx_type: Option<TxType>, new_type: TxType) -> Option<TxType> {
     match tx_type {
         None => Some(new_type),

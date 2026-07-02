@@ -1,7 +1,8 @@
-from coincurve import PublicKeyXOnly
 from dataclasses import dataclass
 from hashlib import blake2b
 from typing import List, Optional
+
+from coincurve import PublicKeyXOnly
 import scalecodec  # type: ignore
 
 sign_tx_start_req_obj = scalecodec.base.RuntimeConfiguration().create_scale_object(

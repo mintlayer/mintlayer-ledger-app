@@ -93,7 +93,7 @@ class Errors(IntEnum):
 
 def split_message(message: bytes, max_size: int) -> List[bytes]:
     if len(message) == 0:
-        return [[]]
+        return [b""]
 
     return [message[x : x + max_size] for x in range(0, len(message), max_size)]
 
@@ -188,6 +188,7 @@ class MintlayerCommandSender:
         ):
             yield
 
+    # pylint: disable-next=too-many-locals
     def sign_tx(self, transaction: Transaction) -> Generator[SignTxStep, None, None]:
         # ---- Start req ----
         start_req = sign_tx_start_req_obj.encode(
@@ -381,7 +382,7 @@ def pack_derivation_path_from_ints(path: list[int]) -> bytes:
     return path_obj.encode(path).data
 
 
-# pylint: disable-next=too-many-locals,too-many-branches
+# pylint: disable-next=too-many-locals,too-many-branches,too-many-statements
 def sign_tx_review(
     client,
     device,
@@ -398,8 +399,6 @@ def sign_tx_review(
     for indices, addr_path in addr_paths_by_indices.items():
         pubkey_rapdu = client.get_public_key_by_ints_path(transaction.coin, addr_path)
         _, pubkey, _, _ = unpack_get_public_key_response(pubkey_rapdu.data)
-
-        print(f"{indices}: {pubkey}")
 
         pubkeys_by_indices[indices] = pubkey
 
