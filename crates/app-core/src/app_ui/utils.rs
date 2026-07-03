@@ -91,7 +91,7 @@ pub fn compress_public_key<const T: char>(
 pub fn to_public_key_hash(pk: &Secp256k1PublicKey) -> Result<PublicKeyHash, StatusWord> {
     let mut hasher = Hasher::new();
 
-    encode_to(mlcp::PublicKey::Secp256k1Schnorr(*pk), &mut hasher);
+    encode_to(&mlcp::PublicKey::Secp256k1Schnorr(*pk), &mut hasher);
 
     let full_hash = hasher.finalize()?;
     let pkh: [u8; PUBLIC_KEY_HASH_SIZE] = cut_array(full_hash.as_fixed_bytes());

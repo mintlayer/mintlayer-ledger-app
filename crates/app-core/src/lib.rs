@@ -261,7 +261,7 @@ pub fn mintlayer_main() {
             Ok(ReceiveInstructionResult::Instruction(raw)) => raw,
             Ok(ReceiveInstructionResult::ExpectingNextChunk) => {
                 // Signal host that we received the chunk and are waiting for more
-                comm.append(&encode(Response::ExpectingNextChunk));
+                comm.append(&encode(&Response::ExpectingNextChunk));
                 comm.reply(Reply(StatusWord::Ok as u16));
                 continue; // Waiting for more chunks, loop around
             }
@@ -285,7 +285,7 @@ pub fn mintlayer_main() {
 
         let status = match handle_command(command, &mut app_ctx) {
             Ok(response) => {
-                comm.append(&encode(response));
+                comm.append(&encode(&response));
                 comm.reply_ok();
                 StatusWord::Ok
             }

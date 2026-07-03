@@ -19,7 +19,7 @@ use alloc::vec::Vec;
 
 use test_utils::prelude::*;
 
-use super::*;
+use crate::Apdu;
 
 #[test_item]
 fn test_apdu_chunking() {

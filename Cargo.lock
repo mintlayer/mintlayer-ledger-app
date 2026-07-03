@@ -506,6 +506,7 @@ dependencies = [
  "num-traits",
  "num_enum",
  "parity-scale-codec",
+ "strum",
  "test-utils",
 ]
 
