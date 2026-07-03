@@ -130,7 +130,7 @@ pub struct GetPubKeyReq {
 
 #[derive(Debug, Encode, Decode, PartialEq, Eq)]
 pub struct SignMessageStartReq {
-    pub coin: CoinType,
+    pub coin_type: CoinType,
     pub addr_type: AddrType,
     pub path: Bip32Path,
 }
@@ -144,7 +144,7 @@ pub enum TransactionVersion {
 
 #[derive(Debug, Encode, Decode, PartialEq, Eq)]
 pub struct SignTxStartReq {
-    pub coin: CoinType,
+    pub coin_type: CoinType,
     pub version: TransactionVersion,
     pub num_inputs: u32,
     pub num_outputs: u32,

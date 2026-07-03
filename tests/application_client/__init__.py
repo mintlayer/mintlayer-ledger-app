@@ -305,7 +305,7 @@ def init_mintlayer_types():
             "SignTxStartReq": {
                 "type": "struct",
                 "type_mapping": [
-                    ["coin", "u8"],
+                    ["coin_type", "u8"],
                     ["version", "u8"],
                     ["num_inputs", "u32"],
                     ["num_outputs", "u32"],

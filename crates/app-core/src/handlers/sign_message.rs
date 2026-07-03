@@ -31,7 +31,7 @@ use crate::{
 
 pub struct SignMessageContext {
     path: Bip32Path,
-    coin: mlcp::CoinType,
+    coin_type: mlcp::CoinType,
     addr_type: AddrType,
     review_finished: bool,
 }
@@ -40,7 +40,7 @@ impl SignMessageContext {
     pub fn new(req: SignMessageStartReq) -> Self {
         Self {
             path: req.path,
-            coin: req.coin.into(),
+            coin_type: req.coin_type.into(),
             addr_type: req.addr_type,
             review_finished: false,
         }
@@ -52,7 +52,7 @@ impl SignMessageContext {
 }
 
 pub fn setup_sign_message(req: SignMessageStartReq) -> Result<DataContext, StatusWord> {
-    check_derivation_path(req.path.as_ref(), req.coin.into())?;
+    check_derivation_path(req.path.as_ref(), req.coin_type.into())?;
 
     Ok(DataContext::SignMessageContext(SignMessageContext::new(
         req,
@@ -73,7 +73,7 @@ pub fn handle_sign_message(
 
     // Display review. If user approves, sign it.
     // Otherwise, return a "deny" status word.
-    if ui_display_message(message, &public_key, ctx.coin, ctx.addr_type)? {
+    if ui_display_message(message, &public_key, ctx.coin_type, ctx.addr_type)? {
         ctx.review_finished = true;
         Ok(compute_signature(&private_key, message)?)
     } else {

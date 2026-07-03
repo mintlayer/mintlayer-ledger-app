@@ -111,8 +111,8 @@ class MintlayerCommandSender:
             data=b"",
         )
 
-    def get_public_key(self, coin: int, path: str) -> RAPDU:
-        data = coin.to_bytes(1, "little") + pack_derivation_path_from_str(path)
+    def get_public_key(self, coin_type: int, path: str) -> RAPDU:
+        data = coin_type.to_bytes(1, "little") + pack_derivation_path_from_str(path)
 
         return self.backend.exchange(
             cla=CLA,
@@ -122,8 +122,8 @@ class MintlayerCommandSender:
             data=data,
         )
 
-    def get_public_key_by_ints_path(self, coin: int, path: list[int]) -> RAPDU:
-        data = coin.to_bytes(1, "little") + pack_derivation_path_from_ints(path)
+    def get_public_key_by_ints_path(self, coin_type: int, path: list[int]) -> RAPDU:
+        data = coin_type.to_bytes(1, "little") + pack_derivation_path_from_ints(path)
 
         return self.backend.exchange(
             cla=CLA,
@@ -135,9 +135,9 @@ class MintlayerCommandSender:
 
     @contextmanager
     def get_public_key_with_confirmation(
-        self, coin: int, path: str
+        self, coin_type: int, path: str
     ) -> Generator[None, None, None]:
-        data = coin.to_bytes(1, "little") + pack_derivation_path_from_str(path)
+        data = coin_type.to_bytes(1, "little") + pack_derivation_path_from_str(path)
 
         with self.backend.exchange_async(
             cla=CLA,
@@ -150,10 +150,10 @@ class MintlayerCommandSender:
 
     @contextmanager
     def sign_message(
-        self, coin: int, addr_type: int, path: str, message: bytes
+        self, coin_type: int, addr_type: int, path: str, message: bytes
     ) -> Generator[None, None, None]:
         data = (
-            coin.to_bytes(1, "little")
+            coin_type.to_bytes(1, "little")
             + addr_type.to_bytes(1, "little")
             + pack_derivation_path_from_str(path)
         )
@@ -193,7 +193,7 @@ class MintlayerCommandSender:
         # ---- Start req ----
         start_req = sign_tx_start_req_obj.encode(
             {
-                "coin": transaction.coin,
+                "coin_type": transaction.coin_type,
                 "version": 0,
                 "num_inputs": len(transaction.inputs),
                 "num_outputs": len(transaction.outputs),
@@ -397,7 +397,9 @@ def sign_tx_review(
     addr_paths_by_indices = transaction.addr_paths_by_indices()
     pubkeys_by_indices = {}
     for indices, addr_path in addr_paths_by_indices.items():
-        pubkey_rapdu = client.get_public_key_by_ints_path(transaction.coin, addr_path)
+        pubkey_rapdu = client.get_public_key_by_ints_path(
+            transaction.coin_type, addr_path
+        )
         _, pubkey, _, _ = unpack_get_public_key_response(pubkey_rapdu.data)
 
         pubkeys_by_indices[indices] = pubkey

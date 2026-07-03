@@ -61,9 +61,9 @@ impl SigTarget {
     fn new(
         addr: InputAddressPath,
         input_idx: Index,
-        coin: mlcp::CoinType,
+        coin_type: mlcp::CoinType,
     ) -> Result<Self, StatusWord> {
-        let path = check_derivation_path_for_tx_signing(addr.path.as_ref(), coin)?;
+        let path = check_derivation_path_for_tx_signing(addr.path.as_ref(), coin_type)?;
 
         Ok(Self {
             path,
@@ -74,7 +74,7 @@ impl SigTarget {
 }
 
 pub struct TxMetadata {
-    coin: mlcp::CoinType,
+    coin_type: mlcp::CoinType,
     num_inputs: Index,
     num_outputs: Index,
 }
@@ -169,7 +169,7 @@ impl TxInputCommitmentsProcessingContext {
             }
 
             if let Some(command) = self.summary.input_command()
-                && !ui_streaming_review_show_input(review, command, self.metadata.coin)?
+                && !ui_streaming_review_show_input(review, command, self.metadata.coin_type)?
             {
                 return Err(StatusWord::Deny);
             }
@@ -217,8 +217,8 @@ pub struct TxOutputsProcessingContext {
 }
 
 impl TxOutputsProcessingContext {
-    pub fn coin(&self) -> mlcp::CoinType {
-        self.metadata.coin
+    pub fn coin_type(&self) -> mlcp::CoinType {
+        self.metadata.coin_type
     }
 
     pub fn summary(&self) -> &TxSummaryCollector {
@@ -253,7 +253,7 @@ fn switch_to_signing(
     sig_targets: Vec<SigTarget>,
     spinner: NbglSpinner,
 ) -> Result<TxProcessingContext, StatusWord> {
-    if ui_approve_streaming_review(review, &summary, metadata.coin)? {
+    if ui_approve_streaming_review(review, &summary, metadata.coin_type)? {
         // Finalize the tx hash for signing
         let first_hash = tx_hasher.finalize()?;
         let tx_hash = Hasher::hash(first_hash.as_bytes())?;
@@ -290,7 +290,7 @@ impl TxSigningContext {
             .get(self.num_sigs_produced as usize)
             .ok_or(StatusWord::WrongContext)?;
 
-        let path = sig_target.path.to_full_path(self.metadata.coin);
+        let path = sig_target.path.to_full_path(self.metadata.coin_type);
         let private_key = Secp256k1::derive_from_path(&path);
         let sig = schnorr_sign(&private_key, self.tx_hash.as_bytes())?;
 
@@ -329,7 +329,7 @@ pub enum TxProcessingContext {
 impl TxProcessingContext {
     pub fn new(
         SignTxStartReq {
-            coin,
+            coin_type,
             version,
             num_inputs,
             num_outputs,
@@ -357,7 +357,7 @@ impl TxProcessingContext {
                 Ok(Self::ProcessingInputs(Box::new(
                     TxInputsProcessingContext {
                         metadata: TxMetadata {
-                            coin: coin.into(),
+                            coin_type: coin_type.into(),
                             num_inputs,
                             num_outputs,
                         },
@@ -433,7 +433,7 @@ fn handle_input(
     let sig_targets = input_data
         .addresses
         .into_iter()
-        .map(|a| SigTarget::new(a, num_inputs_parsed, ctx.metadata.coin))
+        .map(|a| SigTarget::new(a, num_inputs_parsed, ctx.metadata.coin_type))
         .collect::<Result<Vec<_>, StatusWord>>()?;
     ctx.sig_targets.extend(sig_targets);
 
@@ -472,7 +472,7 @@ fn handle_output(
     mut ctx: Box<TxOutputsProcessingContext>,
     review: &NbglStreamingReview,
 ) -> Result<TxProcessingContext, StatusWord> {
-    if ui_streaming_review_show_output(review, &output_data.output, ctx.metadata.coin)? {
+    if ui_streaming_review_show_output(review, &output_data.output, ctx.metadata.coin_type)? {
         ctx.summary.process_output(&output_data.output)?;
         encode_to(&output_data.output, &mut ctx.tx_hasher);
         ctx.advance_next_output_state(review)

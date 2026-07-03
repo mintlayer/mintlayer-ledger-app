@@ -166,8 +166,8 @@ Because transactions can be larger than available APDU buffers and RAM, the pars
 
 | Type  | Name          | Description                                               |
 | ----- | ------------- | --------------------------------------------------------- |
-| `u8`  | `coin`        | `0` = Mainnet, `1` = Testnet, `2` = Regtest, `3` = Signet |
-| `u8`  | `version`     | Transaction version (0 = V1)                            |
+| `u8`  | `coin_type`   | `0` = Mainnet, `1` = Testnet, `2` = Regtest, `3` = Signet |
+| `u8`  | `version`     | Transaction version (0 = V1)                              |
 | `u32` | `num_inputs`  | Total number of inputs in the transaction                 |
 | `u32` | `num_outputs` | Total number of outputs in the transaction                |
 
@@ -222,7 +222,7 @@ Signs a generic message using a BIP-32 derived key.
 
 | Type        | Name        | Description                                   |
 | ----------- | ----------- | --------------------------------------------- |
-| `u8` (Enum) | `coin`      | Coin type (Mainnet, Testnet, Regtest, Signet) |
+| `u8` (Enum) | `coin_type` | Coin type (Mainnet, Testnet, Regtest, Signet) |
 | `u8` (Enum) | `addr_type` | `0` = PublicKey, `1` = PublicKeyHash          |
 | `Vec<u32>`  | `path`      | The BIP32 derivation path to use for signing  |
 

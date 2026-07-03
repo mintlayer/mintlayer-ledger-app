@@ -24,7 +24,7 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
     path: str = "m/44'/19788'/0'/0/0"
 
     # First we need to get the public key of the device in order to build the transaction
-    rapdu = client.get_public_key(coin=MAINNET, path=path)
+    rapdu = client.get_public_key(coin_type=MAINNET, path=path)
     _, public_key, _, _ = unpack_get_public_key_response(rapdu.data)
 
     print("pk", len(public_key))
@@ -71,7 +71,10 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
     }
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -117,7 +120,10 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -175,7 +181,10 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -226,7 +235,10 @@ def test_sign_tx_delegate_staking(backend, scenario_navigator, device, navigator
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -298,7 +310,10 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
     }
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -363,7 +378,10 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -444,7 +462,10 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -528,7 +549,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
     }
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[mint_output],
@@ -640,7 +661,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     }
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input, utxo_input2],
         input_commitments=[inp_commitment, acc_inp_commitment, inp_commitment2],
         outputs=[change_output],
@@ -723,7 +744,7 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
     }
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[change_output],
@@ -807,7 +828,7 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
     }
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[change_output],
@@ -900,7 +921,7 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
     }
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[change_output],
@@ -989,7 +1010,7 @@ def test_sign_tx_change_token_metadata_uri(
     }
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[change_output],
@@ -1111,7 +1132,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     }
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitments=[inp_commitment, fill_order_inp_commitment],
         outputs=[change_output, fill_output],
@@ -1228,7 +1249,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     }
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitments=[inp_commitment, conclude_order_inp_commitment],
         outputs=[change_output, conclude_output],
@@ -1321,7 +1342,7 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
     }
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input],
         input_commitments=[inp_commitment],
         outputs=[htlc_output, change_output],
@@ -1391,7 +1412,7 @@ def test_sign_tx_without_outputs(backend, scenario_navigator, device, navigator)
     acc_inp_commitment = {"commitment": {"None": None}}
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[],
@@ -1482,7 +1503,10 @@ def test_sign_tx_with_large_output(backend, scenario_navigator, device, navigato
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -1580,7 +1604,10 @@ def test_sign_tx_with_large_input_and_commitment(
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(

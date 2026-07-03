@@ -1804,7 +1804,7 @@ fn sample_get_pub_key_req() -> GetPubKeyReq {
 
 fn sample_sign_message_start_req() -> SignMessageStartReq {
     SignMessageStartReq {
-        coin: CoinType::Mainnet,
+        coin_type: CoinType::Mainnet,
         addr_type: AddrType::PublicKey,
         path: sample_bip32_path(),
     }
@@ -1812,7 +1812,7 @@ fn sample_sign_message_start_req() -> SignMessageStartReq {
 
 fn sample_sign_tx_start_req() -> SignTxStartReq {
     SignTxStartReq {
-        coin: CoinType::Mainnet,
+        coin_type: CoinType::Mainnet,
         version: TransactionVersion::V1,
         num_inputs: 12,
         num_outputs: 23,

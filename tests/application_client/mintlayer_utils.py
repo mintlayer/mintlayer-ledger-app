@@ -72,7 +72,7 @@ class TxInputSignature:
 
 @dataclass
 class Transaction:
-    coin: int
+    coin_type: int
     # A list of TxInputData objects.
     inputs: List[dict]
     # A list of TxInputCommitmentData objects.

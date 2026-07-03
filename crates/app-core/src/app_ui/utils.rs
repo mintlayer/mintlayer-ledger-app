@@ -33,8 +33,11 @@ pub fn bech32m_encode(hrp: &str, data: &[u8]) -> Result<String, StatusWord> {
     Ok(encoded)
 }
 
-pub fn to_address(destination: &Destination, coin: mlcp::CoinType) -> Result<String, StatusWord> {
-    let hrp = coin.address_prefix(destination.into());
+pub fn to_address(
+    destination: &Destination,
+    coin_type: mlcp::CoinType,
+) -> Result<String, StatusWord> {
+    let hrp = coin_type.address_prefix(destination.into());
     bech32m_encode(hrp, &encode(destination))
 }
 
