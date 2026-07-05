@@ -21,7 +21,7 @@ def test_get_public_key_no_confirm(backend):
         "m/44'/19788'/2147483647/0/0/0/0/0/0/0",
     ]:
         client = MintlayerCommandSender(backend)
-        response = client.get_public_key(coin_type=MAINNET, path=path).data
+        response = client.get_public_key_by_str_path(coin_type=MAINNET, path=path).data
         _, public_key, _, _ = unpack_get_public_key_response(response)
 
         ref_public_key, _ = calculate_public_key_and_chaincode(
@@ -39,7 +39,7 @@ def test_get_public_key_no_confirm_testnet(backend):
         "m/44'/1'/2147483647/0/0/0/0/0/0/0",
     ]:
         client = MintlayerCommandSender(backend)
-        response = client.get_public_key(coin_type=TESTNET, path=path).data
+        response = client.get_public_key_by_str_path(coin_type=TESTNET, path=path).data
         _, public_key, _, _ = unpack_get_public_key_response(response)
 
         ref_public_key, _ = calculate_public_key_and_chaincode(

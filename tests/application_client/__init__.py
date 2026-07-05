@@ -351,6 +351,7 @@ def init_mintlayer_types():
                 "type": "struct",
                 "type_mapping": [
                     ["output", "TxOutput"],
+                    ["change_path", "Option<Bip32Path>"],
                 ],
             },
             "SignTxNextReq": {

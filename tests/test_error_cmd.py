@@ -154,7 +154,8 @@ def test_sign_tx_invalid_context(backend, scenario_navigator, device, navigator)
                                     }
                                 },
                             ],
-                        }
+                        },
+                        "change_path": None,
                     }
                 }
             ).data,

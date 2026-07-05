@@ -8,14 +8,12 @@ from ragger.backend.interface import RAPDU, BackendInterface
 from ragger.navigator import NavInsID
 from ragger.navigator.navigation_scenario import NavigationScenarioData, UseCase
 
-from .mintlayer_response_unpacker import (
-    unpack_get_public_key_response,
-)
 from .mintlayer_utils import (
     Transaction,
     TxInputSignatureResponse,
     TxInputSignature,
     decode_response_variant,
+    mintlayer_hash,
     sign_tx_start_req_obj,
     sign_tx_next_req_obj,
     verify_tx_signature,
@@ -111,7 +109,7 @@ class MintlayerCommandSender:
             data=b"",
         )
 
-    def get_public_key(self, coin_type: int, path: str) -> RAPDU:
+    def get_public_key_by_str_path(self, coin_type: int, path: str) -> RAPDU:
         data = coin_type.to_bytes(1, "little") + pack_derivation_path_from_str(path)
 
         return self.backend.exchange(
@@ -382,6 +380,60 @@ def pack_derivation_path_from_ints(path: list[int]) -> bytes:
     return path_obj.encode(path).data
 
 
+def _compress_public_key(uncompressed_public_key: bytes) -> bytes:
+    assert len(uncompressed_public_key) == 65
+    assert uncompressed_public_key[0] == 0x04
+
+    prefix = 0x02 if uncompressed_public_key[64] % 2 == 0 else 0x03
+    return bytes([prefix]) + uncompressed_public_key[1:33]
+
+
+def _public_key_destination(public_key: bytes) -> dict:
+    compressed_public_key = _compress_public_key(public_key)
+    return {
+        "PublicKey": {
+            "key": {
+                "Secp256k1Schnorr": {
+                    "pubkey_data": compressed_public_key,
+                }
+            }
+        }
+    }
+
+
+def _public_key_hash_destination(public_key: bytes) -> dict:
+    compressed_public_key = _compress_public_key(public_key)
+    encoded_public_key = bytes([0]) + compressed_public_key
+    return {"PublicKeyHash": mintlayer_hash(encoded_public_key)[:20]}
+
+
+def fetch_public_key(
+    client: MintlayerCommandSender, coin_type: int, path: list[int]
+) -> bytes:
+    rapdu = client.get_public_key_by_ints_path(coin_type, path)
+    msg = decode_response_variant(rapdu.data, "PublicKey")
+
+    public_key = bytes.fromhex(msg["public_key"][2:])
+    assert len(public_key) == 65
+
+    chain_code = bytes.fromhex(msg["chain_code"][2:])
+    assert len(chain_code) == 32
+
+    return public_key
+
+
+def fetch_public_key_as_pk_destination(
+    client: MintlayerCommandSender, coin_type: int, path: list[int]
+) -> dict:
+    return _public_key_destination(fetch_public_key(client, coin_type, path))
+
+
+def fetch_public_key_as_pkh_destination(
+    client: MintlayerCommandSender, coin_type: int, path: list[int]
+) -> dict:
+    return _public_key_hash_destination(fetch_public_key(client, coin_type, path))
+
+
 # pylint: disable-next=too-many-locals,too-many-branches,too-many-statements
 def sign_tx_review(
     client,
@@ -397,12 +449,9 @@ def sign_tx_review(
     addr_paths_by_indices = transaction.addr_paths_by_indices()
     pubkeys_by_indices = {}
     for indices, addr_path in addr_paths_by_indices.items():
-        pubkey_rapdu = client.get_public_key_by_ints_path(
-            transaction.coin_type, addr_path
+        pubkeys_by_indices[indices] = fetch_public_key(
+            client, transaction.coin_type, addr_path
         )
-        _, pubkey, _, _ = unpack_get_public_key_response(pubkey_rapdu.data)
-
-        pubkeys_by_indices[indices] = pubkey
 
     # The snapshot index (used to make its name) and the amount by which it should be increased
     # after each step. The increase should be large enough, so that snapshots from later steps

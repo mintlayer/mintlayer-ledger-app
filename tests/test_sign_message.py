@@ -93,6 +93,6 @@ def test_sign_message_refused(backend, scenario_navigator):
 
 
 def get_pub_key(client: MintlayerCommandSender, coin_type: int, path: str) -> bytes:
-    rapdu = client.get_public_key(coin_type, path)
+    rapdu = client.get_public_key_by_str_path(coin_type, path)
     _, pubkey, _, _ = unpack_get_public_key_response(rapdu.data)
     return pubkey
