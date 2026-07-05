@@ -6,12 +6,8 @@ from application_client.mintlayer_command_sender import (
     sign_tx_review,
     ReviewTransaction,
 )
-from application_client.mintlayer_response_unpacker import (
-    unpack_get_public_key_response,
-)
 from application_client.mintlayer_utils import (
     Transaction,
-    parse_derivation_path,
     sign_tx_next_req_obj,
 )
 
@@ -38,30 +34,19 @@ def _transfer_output(amount, destination, change_path):
 def test_sign_tx_transfer_no_change(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    # The path used for this entire test
-    path: str = "m/44'/19788'/0'/0/0"
-
-    # First we need to get the public key of the device in order to build the transaction
-    rapdu = client.get_public_key(MAINNET, parse_derivation_path(path))
-    _, public_key, _, _ = unpack_get_public_key_response(rapdu.data)
-
-    print("pk", len(public_key))
 
     h = 1 << 31
+    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
     additional_info = {
         "Utxo": {
             "Transfer": [
                 {"Coin": 10},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -120,15 +105,7 @@ def _sign_tx_transfer_with_change_output(
         "Utxo": {
             "Transfer": [
                 {"Coin": 10},
-                {
-                    "PublicKey": {
-                        "key": {
-                            "Secp256k1Schnorr": {
-                                "pubkey_data": bytes([0] * 33),
-                            }
-                        }
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -278,21 +255,18 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
     h = 1 << 31
+    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
     additional_info = {
         "Utxo": {
             "Transfer": [
                 {"Coin": 10},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -340,21 +314,18 @@ def test_sign_tx_delegate_staking(backend, scenario_navigator, device, navigator
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
     h = 1 << 31
+    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
     additional_info = {
         "Utxo": {
             "Transfer": [
                 {"Coin": 10},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -395,21 +366,18 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
     h = 1 << 31
+    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
     additional_info = {
         "Utxo": {
             "Transfer": [
                 {"Coin": 40001},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -471,20 +439,17 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
     h = 1 << 31
+    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
     additional_info = {
         "Utxo": {
             "Transfer": [
                 {"Coin": 10},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -540,20 +505,17 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
     h = 1 << 31
+    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
     additional_info = {
         "Utxo": {
             "Transfer": [
                 {"Coin": 2000},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -638,11 +600,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -728,11 +686,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -740,11 +694,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
         "Utxo": {
             "Transfer": [
                 {"TokenV1": [bytes([0] * 32), 1000]},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -833,11 +783,7 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -910,11 +856,7 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -988,11 +930,7 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -1077,11 +1015,7 @@ def test_sign_tx_change_token_metadata_uri(
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -1159,11 +1093,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -1275,11 +1205,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -1386,11 +1312,7 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -1474,11 +1396,7 @@ def test_sign_tx_without_outputs(backend, scenario_navigator, device, navigator)
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -1532,20 +1450,17 @@ def test_sign_tx_with_large_output(backend, scenario_navigator, device, navigato
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
     h = 1 << 31
+    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
     additional_info = {
         "Utxo": {
             "Transfer": [
                 {"Coin": 2000},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -1626,6 +1541,7 @@ def test_sign_tx_with_large_input_and_commitment(
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
     h = 1 << 31
+    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
 
     # Make the additional info big
     metadata_uri = b"abcef" * 100
@@ -1659,16 +1575,12 @@ def test_sign_tx_with_large_input_and_commitment(
                         }
                     }
                 },
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
