@@ -109,19 +109,8 @@ class MintlayerCommandSender:
             data=b"",
         )
 
-    def get_public_key_by_str_path(self, coin_type: int, path: str) -> RAPDU:
-        data = coin_type.to_bytes(1, "little") + pack_derivation_path_from_str(path)
-
-        return self.backend.exchange(
-            cla=CLA,
-            ins=InsType.GET_PUBLIC_KEY,
-            p1=GetPublicKeyP1.P1_DO_NOT_CONFIRM,
-            p2=P2.P2_LAST,
-            data=data,
-        )
-
-    def get_public_key_by_ints_path(self, coin_type: int, path: list[int]) -> RAPDU:
-        data = coin_type.to_bytes(1, "little") + pack_derivation_path_from_ints(path)
+    def get_public_key(self, coin_type: int, path: list[int]) -> RAPDU:
+        data = coin_type.to_bytes(1, "little") + pack_derivation_path(path)
 
         return self.backend.exchange(
             cla=CLA,
@@ -133,9 +122,9 @@ class MintlayerCommandSender:
 
     @contextmanager
     def get_public_key_with_confirmation(
-        self, coin_type: int, path: str
+        self, coin_type: int, path: list[int]
     ) -> Generator[None, None, None]:
-        data = coin_type.to_bytes(1, "little") + pack_derivation_path_from_str(path)
+        data = coin_type.to_bytes(1, "little") + pack_derivation_path(path)
 
         with self.backend.exchange_async(
             cla=CLA,
@@ -148,12 +137,12 @@ class MintlayerCommandSender:
 
     @contextmanager
     def sign_message(
-        self, coin_type: int, addr_type: int, path: str, message: bytes
+        self, coin_type: int, addr_type: int, path: list[int], message: bytes
     ) -> Generator[None, None, None]:
         data = (
             coin_type.to_bytes(1, "little")
             + addr_type.to_bytes(1, "little")
-            + pack_derivation_path_from_str(path)
+            + pack_derivation_path(path)
         )
 
         response = self.backend.exchange(
@@ -348,34 +337,7 @@ class MintlayerCommandSender:
         return sigs
 
 
-def hardened_index(index: int) -> int:
-    return index | 1 << 31
-
-
-def parse_derivation_path(derivation_path: str) -> list[int]:
-    split = derivation_path.split("/")
-
-    if split[0] != "m":
-        raise ValueError("Error master expected")
-
-    result = []
-    for value in split[1:]:
-        if value == "":
-            raise ValueError(f'Error missing value in split list "{split}"')
-        if value.endswith("'"):
-            result.append(hardened_index(int(value[:-1])))
-        else:
-            result.append(int(value))
-
-    return result
-
-
-def pack_derivation_path_from_str(path: str) -> bytes:
-    parsed_path = parse_derivation_path(path)
-    return pack_derivation_path_from_ints(parsed_path)
-
-
-def pack_derivation_path_from_ints(path: list[int]) -> bytes:
+def pack_derivation_path(path: list[int]) -> bytes:
     path_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("Bip32Path")
     return path_obj.encode(path).data
 
@@ -410,7 +372,7 @@ def _public_key_hash_destination(public_key: bytes) -> dict:
 def fetch_public_key(
     client: MintlayerCommandSender, coin_type: int, path: list[int]
 ) -> bytes:
-    rapdu = client.get_public_key_by_ints_path(coin_type, path)
+    rapdu = client.get_public_key(coin_type, path)
     msg = decode_response_variant(rapdu.data, "PublicKey")
 
     public_key = bytes.fromhex(msg["public_key"][2:])

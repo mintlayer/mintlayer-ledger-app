@@ -11,6 +11,7 @@ from application_client.mintlayer_response_unpacker import (
 )
 from application_client.mintlayer_utils import (
     Transaction,
+    parse_derivation_path,
     sign_tx_next_req_obj,
 )
 
@@ -41,7 +42,7 @@ def test_sign_tx_transfer_no_change(backend, scenario_navigator, device, navigat
     path: str = "m/44'/19788'/0'/0/0"
 
     # First we need to get the public key of the device in order to build the transaction
-    rapdu = client.get_public_key_by_str_path(coin_type=MAINNET, path=path)
+    rapdu = client.get_public_key(MAINNET, parse_derivation_path(path))
     _, public_key, _, _ = unpack_get_public_key_response(rapdu.data)
 
     print("pk", len(public_key))

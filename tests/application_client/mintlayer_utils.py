@@ -170,6 +170,28 @@ def mintlayer_hash(data: bytes) -> bytes:
     return blake2b(data, digest_size=64).digest()[:32]
 
 
+def hardened_index(index: int) -> int:
+    return index | 1 << 31
+
+
+def parse_derivation_path(derivation_path: str) -> list[int]:
+    split = derivation_path.split("/")
+
+    if split[0] != "m":
+        raise ValueError("Error master expected")
+
+    result = []
+    for value in split[1:]:
+        if value == "":
+            raise ValueError(f'Error missing value in split list "{split}"')
+        if value.endswith("'"):
+            result.append(hardened_index(int(value[:-1])))
+        else:
+            result.append(int(value))
+
+    return result
+
+
 MESSAGE_MAGIC_PREFIX = b"===MINTLAYER MESSAGE BEGIN===\n"
 MESSAGE_MAGIC_SUFFIX = b"\n===MINTLAYER MESSAGE END==="
 

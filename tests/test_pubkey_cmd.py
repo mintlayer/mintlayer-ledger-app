@@ -7,6 +7,7 @@ from application_client.mintlayer_command_sender import Errors, MintlayerCommand
 from application_client.mintlayer_response_unpacker import (
     unpack_get_public_key_response,
 )
+from application_client.mintlayer_utils import parse_derivation_path
 
 MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
@@ -21,7 +22,7 @@ def test_get_public_key_no_confirm(backend):
         "m/44'/19788'/2147483647/0/0/0/0/0/0/0",
     ]:
         client = MintlayerCommandSender(backend)
-        response = client.get_public_key_by_str_path(coin_type=MAINNET, path=path).data
+        response = client.get_public_key(MAINNET, parse_derivation_path(path)).data
         _, public_key, _, _ = unpack_get_public_key_response(response)
 
         ref_public_key, _ = calculate_public_key_and_chaincode(
@@ -39,7 +40,7 @@ def test_get_public_key_no_confirm_testnet(backend):
         "m/44'/1'/2147483647/0/0/0/0/0/0/0",
     ]:
         client = MintlayerCommandSender(backend)
-        response = client.get_public_key_by_str_path(coin_type=TESTNET, path=path).data
+        response = client.get_public_key(TESTNET, parse_derivation_path(path)).data
         _, public_key, _, _ = unpack_get_public_key_response(response)
 
         ref_public_key, _ = calculate_public_key_and_chaincode(
@@ -53,7 +54,9 @@ def test_get_public_key_confirm_accepted(backend, scenario_navigator):
     client = MintlayerCommandSender(backend)
     path = "m/44'/19788'/0'/0/0"
 
-    with client.get_public_key_with_confirmation(coin_type=MAINNET, path=path):
+    with client.get_public_key_with_confirmation(
+        MAINNET, parse_derivation_path(path)
+    ):
         scenario_navigator.address_review_approve()
 
     response = client.get_async_response().data
@@ -71,7 +74,9 @@ def test_get_public_key_confirm_refused(backend, scenario_navigator):
     path = "m/44'/19788'/0'/0/0"
 
     with pytest.raises(ExceptionRAPDU) as e:
-        with client.get_public_key_with_confirmation(coin_type=MAINNET, path=path):
+        with client.get_public_key_with_confirmation(
+            MAINNET, parse_derivation_path(path)
+        ):
             scenario_navigator.address_review_reject()
 
     # Assert that we have received a refusal

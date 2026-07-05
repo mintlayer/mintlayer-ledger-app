@@ -8,6 +8,7 @@ from application_client.mintlayer_response_unpacker import (
     unpack_get_public_key_response,
 )
 from application_client.mintlayer_utils import (
+    parse_derivation_path,
     verify_message_signature,
 )
 
@@ -22,7 +23,10 @@ def test_sign_message(backend, scenario_navigator):
     pubkey = get_pub_key(client, coin_type=coin_type, path=path)
 
     with client.sign_message(
-        coin_type=coin_type, addr_type=0, path=path, message=message
+        coin_type=coin_type,
+        addr_type=0,
+        path=parse_derivation_path(path),
+        message=message,
     ):
         scenario_navigator.review_approve()
 
@@ -42,7 +46,10 @@ def test_sign_large_message(backend, scenario_navigator):
     pubkey = get_pub_key(client, coin_type=coin_type, path=path)
 
     with client.sign_message(
-        coin_type=coin_type, addr_type=0, path=path, message=message
+        coin_type=coin_type,
+        addr_type=0,
+        path=parse_derivation_path(path),
+        message=message,
     ):
         scenario_navigator.review_approve()
 
@@ -62,7 +69,10 @@ def test_sign_message_pkh(backend, scenario_navigator):
     pubkey = get_pub_key(client, coin_type=coin_type, path=path)
 
     with client.sign_message(
-        coin_type=coin_type, addr_type=1, path=path, message=message
+        coin_type=coin_type,
+        addr_type=1,
+        path=parse_derivation_path(path),
+        message=message,
     ):
         scenario_navigator.review_approve()
 
@@ -83,7 +93,10 @@ def test_sign_message_refused(backend, scenario_navigator):
 
     with pytest.raises(ExceptionRAPDU) as e:
         with client.sign_message(
-            coin_type=coin_type, addr_type=0, path=path, message=message
+            coin_type=coin_type,
+            addr_type=0,
+            path=parse_derivation_path(path),
+            message=message,
         ):
             scenario_navigator.review_reject()
 
@@ -93,6 +106,6 @@ def test_sign_message_refused(backend, scenario_navigator):
 
 
 def get_pub_key(client: MintlayerCommandSender, coin_type: int, path: str) -> bytes:
-    rapdu = client.get_public_key_by_str_path(coin_type, path)
+    rapdu = client.get_public_key(coin_type, parse_derivation_path(path))
     _, pubkey, _, _ = unpack_get_public_key_response(rapdu.data)
     return pubkey
