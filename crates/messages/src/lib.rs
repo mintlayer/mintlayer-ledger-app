@@ -191,25 +191,20 @@ pub struct TxInputCommitmentData {
     pub commitment: SighashInputCommitment,
 }
 
-// TODO:
-// 1) In order to be able to detect change outputs, there should be a way of specifying the destination
-//    via a derivation path.
-//    Note: the contents of Destination::PublicKeyHash and Destination::PublicKey should probably be
-//    enums of the form `enum PublicKeyHash { Own(derivation path), Foreign(actual hash) }`.
-// 2) Possible ways of handling change outputs (simplified version of what the cardano app seems to do):
-//  * a) require that all derivation paths (in inputs and in outputs) belong to the same account,
-//       fail if they don't;
-//    b) if an output is a simple Transfer to a change address in the account, omit it from review;
-//       if it's something more complicated, don't omit it from review, but mark is as change output.
-//  * Same as above, but only track (without failing) whether all inputs are signed with keys from the
-//    same account; if so and an output is a simple Transfer to a change address in that same account,
-//    omit the output from review. If the output references a change address but multiple accounts
-//    are referenced by inputs, or if the output is not a simple Transfer, then don't omit it,
-//    but mark it as change.
+// TODO: currently change outputs are always shown during review. Though they are marked as change,
+// it's still redundant to show them in most cases.
+// One possible way of handling change outputs could be: track whether all inputs are signed with
+// keys from the same account; if so and a change output is to an address in that same account, omit
+// the output from review.
 // See https://github.com/mintlayer/mintlayer-ledger-app/issues/17.
 #[derive(Debug, Encode, Decode, PartialEq, Eq)]
 pub struct TxOutputData {
     pub output: TxOutput,
+
+    /// This field specifies that this output is a change output. If set, `output` must be a simple
+    /// `Transfer` with a `PublicKey` or `PublicKeyHash` destination corresponding to the specified
+    /// derivation path, which must be of the form  "m/44'/coin_type'/account_idx'/1/change_idx".
+    pub change_path: Option<Bip32Path>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
@@ -587,6 +582,12 @@ pub enum StatusWord {
     TxWithZeroInputs = 0xB016,
     #[display("Transaction has multiple reviewable inputs")]
     TxWithMultipleReviewableInputs = 0xB017,
+    #[display("Wrong change output type")]
+    WrongChangeOutputType = 0xB018,
+    #[display("Wrong change output destination")]
+    WrongChangeOutputDestination = 0xB019,
+    #[display("Mismatched change output destination")]
+    MismatchedChangeOutputDestination = 0xB020,
 
     // Ecc Errors
     #[display("ECC Carry")]

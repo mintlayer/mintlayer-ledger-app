@@ -17,12 +17,11 @@
 
 use alloc::string::String;
 
-use ledger_device_sdk::{ecc::ECPublicKey, include_gif, nbgl::NbglGlyph};
+use ledger_device_sdk::{include_gif, nbgl::NbglGlyph};
 
-use mintlayer_core_primitives::PUBLIC_KEY_HASH_SIZE;
-use mintlayer_messages::{Destination, PublicKeyHash, Secp256k1PublicKey, encode, encode_to};
+use mintlayer_messages::{Destination, encode};
 
-use crate::{StatusWord, hasher::Hasher, mlcp, utils::cut_array};
+use crate::{StatusWord, mlcp};
 
 pub fn bech32m_encode(hrp: &str, data: &[u8]) -> Result<String, StatusWord> {
     let parsed_hrp = bech32::Hrp::parse(hrp).map_err(|_| StatusWord::AddressEncodingFail)?;
@@ -64,40 +63,4 @@ pub const fn load_glyph() -> NbglGlyph<'static> {
         NbglGlyph::from_include(include_gif!("../../media/icons/mintlayer_14x14.gif", NBGL));
 
     GLYPH
-}
-
-pub fn compress_public_key<const T: char>(
-    public_key: &ECPublicKey<65, T>,
-) -> Result<Secp256k1PublicKey, StatusWord> {
-    let uncompressed_key = &public_key.pubkey;
-    if uncompressed_key[0] != 0x04 {
-        return Err(StatusWord::InvalidUncompressedPublicKey);
-    }
-
-    let mut compressed_key = [0u8; 33];
-
-    let y_coordinate = &uncompressed_key[33..65];
-    let prefix = if y_coordinate[31].is_multiple_of(2) {
-        0x02
-    } else {
-        0x03
-    };
-
-    compressed_key[0] = prefix;
-
-    let x_coordinate = &uncompressed_key[1..33];
-    compressed_key[1..].copy_from_slice(x_coordinate);
-
-    Ok(Secp256k1PublicKey(compressed_key))
-}
-
-pub fn to_public_key_hash(pk: &Secp256k1PublicKey) -> Result<PublicKeyHash, StatusWord> {
-    let mut hasher = Hasher::new();
-
-    encode_to(&mlcp::PublicKey::Secp256k1Schnorr(*pk), &mut hasher);
-
-    let full_hash = hasher.finalize()?;
-    let pkh: [u8; PUBLIC_KEY_HASH_SIZE] = cut_array(full_hash.as_fixed_bytes());
-
-    Ok(PublicKeyHash(pkh))
 }

@@ -36,12 +36,13 @@ use mintlayer_messages::{
 
 use crate::{
     StatusWord,
-    app_ui::utils::{
-        bech32m_encode, compress_public_key, load_glyph, to_address, to_public_key_hash,
-    },
+    app_ui::utils::{bech32m_encode, load_glyph, to_address},
     handlers::sign_tx::{CoinOrTokenId, InputCommand, TxSummaryCollector, TxType},
     mlcp,
-    utils::{make_displayable, make_displayable_str, output_value_with_amount},
+    utils::{
+        compress_public_key, make_displayable, make_displayable_str, output_value_with_amount,
+        to_public_key_hash,
+    },
 };
 
 struct FormattedOutput {
@@ -85,8 +86,9 @@ pub fn ui_streaming_review_show_output(
     review: &NbglStreamingReview,
     output: &TxOutput,
     coin_type: mlcp::CoinType,
+    is_change: bool,
 ) -> Result<bool, StatusWord> {
-    let output = format_output(output, coin_type)?;
+    let output = format_output(output, coin_type, is_change)?;
 
     let fields = [Field {
         name: output.name,
@@ -344,12 +346,14 @@ fn format_lock(lock: &OutputTimeLock) -> Result<String, StatusWord> {
 /// # Arguments
 /// * `output`    - A reference to the `TxOutput` enum variant to format.
 /// * `coin_type` - The coin type (mainnet, testnet etc).
+/// * `is_change` - Whether the output is a change one. Only applicable to `Transfer` outputs.
 ///
 /// # Returns
 /// A FormattedOutput containing the title and value of the output.
 fn format_output(
     output: &TxOutput,
     coin_type: mlcp::CoinType,
+    is_change: bool,
 ) -> Result<FormattedOutput, StatusWord> {
     // Note: on nanox and nanosp the screen space is very limited. Moreover, if the name part of
     // a field doesn't fit into one line, it will be shrunk instead of being wrapped to the next
@@ -360,14 +364,25 @@ fn format_output(
     // Same for inputs.
 
     let (name, value) = match output {
-        TxOutput::Transfer(value, destination) => (
-            "Transfer",
-            format!(
-                "Destination: {}\n{}\n",
-                to_address(destination, coin_type)?,
-                format_value(value, coin_type)?
-            ),
-        ),
+        TxOutput::Transfer(value, destination) => {
+            let label = if is_change {
+                if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
+                    "Transfer chg"
+                } else {
+                    "Transfer change"
+                }
+            } else {
+                "Transfer"
+            };
+            (
+                label,
+                format!(
+                    "Destination: {}\n{}\n",
+                    to_address(destination, coin_type)?,
+                    format_value(value, coin_type)?
+                ),
+            )
+        }
 
         TxOutput::LockThenTransfer(value, destination, lock) => {
             let address_short = format!(

@@ -23,9 +23,10 @@ use ledger_device_sdk::{
 };
 
 use mintlayer_messages::{
-    H256, InputAddressPath, OrderAccountCommand, Response, SignTxNextReq, SignTxStartReq,
-    Signature, TransactionVersion, TxInputCommitmentData, TxInputData, TxInputSignatureResponse,
-    TxInputWithAdditionalInfo, TxOutputData, encode_as_compact_to, encode_to,
+    Destination, H256, InputAddressPath, OrderAccountCommand, PublicKey, Response, SignTxNextReq,
+    SignTxStartReq, Signature, TransactionVersion, TxInputCommitmentData, TxInputData,
+    TxInputSignatureResponse, TxInputWithAdditionalInfo, TxOutput, TxOutputData,
+    encode_as_compact_to, encode_to,
 };
 
 use crate::{
@@ -34,10 +35,14 @@ use crate::{
         ui_approve_streaming_review, ui_new_streaming_review, ui_start_streaming_review,
         ui_streaming_review_show_input, ui_streaming_review_show_output,
     },
+    errors::cx_err_to_status,
     handlers::sign_message::schnorr_sign,
     hasher::Hasher,
     mlcp,
-    utils::{CompressedDerivationPathForTxSigning, check_derivation_path_for_tx_signing},
+    utils::{
+        CompressedDerivationPathForTxSigning, check_derivation_path_for_tx_signing,
+        compress_public_key, ensure, ensure_change_output, to_public_key_hash,
+    },
 };
 
 mod summary_collector;
@@ -243,6 +248,61 @@ impl TxOutputsProcessingContext {
             )
         }
     }
+
+    fn validate_change_output(&self, output_data: &TxOutputData) -> Result<(), StatusWord> {
+        if let Some(path) = &output_data.change_path {
+            ensure_change_output(&path.0, self.coin_type())?;
+
+            let expected_pubkey = compress_public_key(
+                &Secp256k1::derive_from_path(&path.0)
+                    .public_key()
+                    .map_err(cx_err_to_status)?,
+            )?;
+
+            let destination = match &output_data.output {
+                TxOutput::Transfer(_, destination) => destination,
+                TxOutput::LockThenTransfer(_, _, _)
+                | TxOutput::Burn(_)
+                | TxOutput::CreateStakePool(_, _)
+                | TxOutput::ProduceBlockFromStake(_, _)
+                | TxOutput::CreateDelegationId(_, _)
+                | TxOutput::DelegateStaking(_, _)
+                | TxOutput::IssueFungibleToken(_)
+                | TxOutput::IssueNft(_, _, _)
+                | TxOutput::DataDeposit(_)
+                | TxOutput::Htlc(_, _)
+                | TxOutput::CreateOrder(_) => {
+                    return Err(StatusWord::WrongChangeOutputType);
+                }
+            };
+
+            match destination {
+                Destination::PublicKeyHash(pubkey_hash) => {
+                    let expected_pubkey_hash = to_public_key_hash(&expected_pubkey)?;
+                    ensure!(
+                        pubkey_hash == &expected_pubkey_hash,
+                        StatusWord::MismatchedChangeOutputDestination
+                    );
+                }
+                Destination::PublicKey(pubkey) => match pubkey {
+                    PublicKey::Secp256k1Schnorr(pubkey) => {
+                        ensure!(
+                            pubkey == &expected_pubkey,
+                            StatusWord::MismatchedChangeOutputDestination
+                        );
+                    }
+                },
+
+                Destination::AnyoneCanSpend
+                | Destination::ScriptHash(_)
+                | Destination::ClassicMultisig(_) => {
+                    return Err(StatusWord::WrongChangeOutputDestination);
+                }
+            };
+        }
+
+        Ok(())
+    }
 }
 
 fn switch_to_signing(
@@ -389,7 +449,7 @@ impl TxProcessingContext {
             // See https://github.com/mintlayer/mintlayer-ledger-app/issues/14.
             // Also see the TODO near `TxSummaryCollector::input_command`.
 
-            // TODO: change outputs should be detected and not presented for review; once this is
+            // TODO: change outputs should be omitted from review (when possible); once this is
             // implemented, the spinner logic may need to be revised.
             // See https://github.com/mintlayer/mintlayer-ledger-app/issues/17.
             Self::ProcessingOutputs(_) | Self::Finished => return,
@@ -472,7 +532,13 @@ fn handle_output(
     mut ctx: Box<TxOutputsProcessingContext>,
     review: &NbglStreamingReview,
 ) -> Result<TxProcessingContext, StatusWord> {
-    if ui_streaming_review_show_output(review, &output_data.output, ctx.metadata.coin_type)? {
+    ctx.validate_change_output(output_data)?;
+    if ui_streaming_review_show_output(
+        review,
+        &output_data.output,
+        ctx.metadata.coin_type,
+        output_data.change_path.is_some(),
+    )? {
         ctx.summary.process_output(&output_data.output)?;
         encode_to(&output_data.output, &mut ctx.tx_hasher);
         ctx.advance_next_output_state(review)

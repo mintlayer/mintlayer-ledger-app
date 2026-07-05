@@ -256,7 +256,8 @@ fn test_sign_tx_next_req() {
             }
             SignTxNextReqTag::ProcessOutput => {
                 let obj = SignTxNextReq::ProcessOutput(Box::new(sample_tx_output_data()));
-                let expected_enc_data = [2, 2, 0, 237, 1];
+                let expected_enc_data =
+                    [2, 2, 0, 237, 1, 1, 12, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0];
 
                 let enc_data = encode(&obj);
                 assert_eq!(enc_data, &expected_enc_data);
@@ -304,7 +305,7 @@ fn test_tx_input_commitment_data() {
 #[test_item]
 fn test_tx_output_data() {
     let obj = sample_tx_output_data();
-    let expected_enc_data = [2, 0, 237, 1];
+    let expected_enc_data = [2, 0, 237, 1, 1, 12, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0];
 
     let enc_data = encode(&obj);
     assert_eq!(enc_data, &expected_enc_data);
@@ -1835,6 +1836,7 @@ fn sample_tx_input_commitment_data() -> TxInputCommitmentData {
 fn sample_tx_output_data() -> TxOutputData {
     TxOutputData {
         output: sample_tx_output(),
+        change_path: Some(sample_bip32_path()),
     }
 }
 

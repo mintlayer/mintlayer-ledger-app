@@ -25,8 +25,9 @@ use mintlayer_messages::{Destination, PublicKey};
 
 use crate::{
     StatusWord,
-    app_ui::utils::{compress_public_key, load_glyph, to_address},
+    app_ui::utils::{load_glyph, to_address},
     mlcp,
+    utils::compress_public_key,
 };
 
 pub fn ui_display_pk<const T: char>(
