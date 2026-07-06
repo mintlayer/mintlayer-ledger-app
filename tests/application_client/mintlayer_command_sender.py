@@ -3,7 +3,9 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Generator, List
 
+import pytest
 import scalecodec  # type: ignore
+from ragger.error import ExceptionRAPDU
 from ragger.backend.interface import RAPDU, BackendInterface
 from ragger.navigator import NavInsID
 from ragger.navigator.navigation_scenario import NavigationScenarioData, UseCase
@@ -34,6 +36,11 @@ class ReviewTransaction:
 @dataclass
 class SignTxStep:
     kind: str
+
+
+class ReviewUntil(IntEnum):
+    End = 0
+    Outputs = 1
 
 
 class GetAppAndVersionP1(IntEnum):
@@ -86,7 +93,9 @@ class Errors(IntEnum):
     SW_WRONG_TX_LENGTH = 0xB002
     SW_WRONG_CONTEXT = 0xB008
     SW_DESERIALIZE_FAIL = 0xB009
+    SW_INVALID_PATH = 0xB010
     SW_MAX_BUFFER_LEN_EXCEEDED = 0xB012
+    SW_MISMATCHED_CHANGE_OUTPUT_DESTINATION = 0xB020
 
 
 def split_message(message: bytes, max_size: int) -> List[bytes]:
@@ -176,7 +185,11 @@ class MintlayerCommandSender:
             yield
 
     # pylint: disable-next=too-many-locals
-    def sign_tx(self, transaction: Transaction) -> Generator[SignTxStep, None, None]:
+    def sign_tx(
+        self,
+        transaction: Transaction,
+        review_until: ReviewUntil = ReviewUntil.End,
+    ) -> Generator[SignTxStep, None, None]:
         # ---- Start req ----
         start_req = sign_tx_start_req_obj.encode(
             {
@@ -243,11 +256,14 @@ class MintlayerCommandSender:
         ):
             yield SignTxStep(kind="start")
 
-            if len(transaction.outputs) == 0:
+            if len(transaction.outputs) == 0 and review_until == ReviewUntil.End:
                 yield SignTxStep(kind="sign")
 
         response = self.get_async_response()
         decode_response_variant(response.data, "TxNext")
+
+        if review_until == ReviewUntil.Outputs:
+            return
 
         # ---- OUTPUTS ----
         print("streaming outputs")
@@ -396,6 +412,33 @@ def fetch_public_key_as_pkh_destination(
     return _public_key_hash_destination(fetch_public_key(client, coin_type, path))
 
 
+def send_output_expect_error(client: MintlayerCommandSender, output: dict, expected_status: int):
+    encoded_out = sign_tx_next_req_obj.encode({"ProcessOutput": output}).data
+    chunks = split_message(encoded_out, MAX_APDU_LEN)
+
+    for chunk in chunks[:-1]:
+        response = client.backend.exchange(
+            cla=CLA,
+            ins=InsType.SIGN_TX,
+            p1=SignTxP1.P1_NEXT,
+            p2=P2.P2_MORE,
+            data=chunk,
+        )
+        assert response.status == 0x9000
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        client.backend.exchange(
+            cla=CLA,
+            ins=InsType.SIGN_TX,
+            p1=SignTxP1.P1_NEXT,
+            p2=P2.P2_LAST,
+            data=chunks[-1],
+        )
+
+    assert e.value.status == expected_status
+    assert len(e.value.data) == 0
+
+
 # pylint: disable-next=too-many-locals,too-many-branches,too-many-statements
 def sign_tx_review(
     client,
@@ -403,6 +446,7 @@ def sign_tx_review(
     navigator,
     scenario_navigator,
     review_transaction: ReviewTransaction,
+    review_until: ReviewUntil = ReviewUntil.End,
 ):
     transaction = review_transaction.transaction
     has_command_input = review_transaction.has_command_input
@@ -428,7 +472,7 @@ def sign_tx_review(
 
     last_page_pattern = r".*\((\d+)/\1\)$"
 
-    for step in client.sign_tx(transaction):
+    for step in client.sign_tx(transaction, review_until):
         print("step kind: ", step.kind)
         if step.kind == "start":
             navigator.navigate_and_compare(
@@ -513,6 +557,9 @@ def sign_tx_review(
                 snap_start_idx=start_idx,
             )
             start_idx += idx_inc
+
+    if review_until == ReviewUntil.Outputs:
+        return
 
     # After review approval, explicitly request every signature.
     signatures = client.get_all_signatures(transaction)

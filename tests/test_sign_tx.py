@@ -1,6 +1,9 @@
 from application_client import MAINNET
 from application_client.mintlayer_command_sender import (
+    Errors,
     MintlayerCommandSender,
+    ReviewUntil,
+    send_output_expect_error,
     fetch_public_key_as_pk_destination,
     fetch_public_key_as_pkh_destination,
     sign_tx_review,
@@ -19,18 +22,7 @@ from application_client.mintlayer_utils import (
 # See https://github.com/mintlayer/mintlayer-ledger-app/issues/19.
 
 
-def _transfer_output(amount, destination, change_path):
-    return {
-        "output": {
-            "Transfer": [
-                {"Coin": amount},
-                destination,
-            ],
-        },
-        "change_path": change_path,
-    }
-
-
+# Test a simple transfer without a change output.
 def test_sign_tx_transfer_no_change(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
@@ -89,6 +81,59 @@ def test_sign_tx_transfer_no_change(backend, scenario_navigator, device, navigat
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
+# Test a simple transfer with a change output whose change_path is None.
+def test_sign_tx_transfer_change_output_without_change_path(
+    backend, scenario_navigator, device, navigator
+):
+    _sign_tx_transfer_with_change_output(
+        backend,
+        scenario_navigator,
+        device,
+        navigator,
+        lambda client, path, amount: _make_transfer_output(
+            amount,
+            fetch_public_key_as_pk_destination(client, MAINNET, path),
+            None,
+        ),
+    )
+
+
+# Test a simple transfer with a change output whose change_path is not None and the destinatrion
+# is the PublicKey one.
+def test_sign_tx_transfer_change_output_public_key(
+    backend, scenario_navigator, device, navigator
+):
+    _sign_tx_transfer_with_change_output(
+        backend,
+        scenario_navigator,
+        device,
+        navigator,
+        lambda client, path, amount: _make_transfer_output(
+            amount,
+            fetch_public_key_as_pk_destination(client, MAINNET, path),
+            path,
+        ),
+    )
+
+
+# Test a simple transfer with a change output whose change_path is not None and the destinatrion
+# is the PublicKeyHash one.
+def test_sign_tx_transfer_change_output_public_key_hash(
+    backend, scenario_navigator, device, navigator
+):
+    _sign_tx_transfer_with_change_output(
+        backend,
+        scenario_navigator,
+        device,
+        navigator,
+        lambda client, path, amount: _make_transfer_output(
+            amount,
+            fetch_public_key_as_pkh_destination(client, MAINNET, path),
+            path,
+        ),
+    )
+
+
 def _sign_tx_transfer_with_change_output(
     backend,
     scenario_navigator,
@@ -123,7 +168,7 @@ def _sign_tx_transfer_with_change_output(
     }
     inp_commitment = {"commitment": additional_info}
 
-    recipient_output = _transfer_output(
+    recipient_output = _make_transfer_output(
         9,
         {
             "PublicKey": {
@@ -153,59 +198,138 @@ def _sign_tx_transfer_with_change_output(
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
-def test_sign_tx_transfer_change_output_without_change_path(
+# Test a simple transfer with a change output whose change_path is not None and is invalid (has
+# an extra element).
+def test_sign_tx_transfer_change_output_invalid_change_path(
     backend, scenario_navigator, device, navigator
 ):
-    _sign_tx_transfer_with_change_output(
-        backend,
+    client = MintlayerCommandSender(backend)
+    h = 1 << 31
+    change_path = [44 + h, 19788 + h, 0 + h, 1, 0]
+
+    _assert_sign_tx_transfer_change_path_fails(
+        client,
         scenario_navigator,
         device,
         navigator,
-        lambda client, path, amount: _transfer_output(
+        lambda amount: _make_transfer_output(
             amount,
-            fetch_public_key_as_pk_destination(client, MAINNET, path),
-            None,
+            fetch_public_key_as_pk_destination(client, MAINNET, change_path),
+            change_path + [0],
         ),
+        Errors.SW_INVALID_PATH,
     )
 
 
-def test_sign_tx_transfer_change_output_public_key(
+# Test a simple transfer with a change output whose change_path is not None, is valid, but
+# doesn't match the actual destination.
+def test_sign_tx_transfer_change_output_mismatched_destination(
     backend, scenario_navigator, device, navigator
 ):
-    _sign_tx_transfer_with_change_output(
-        backend,
+    client = MintlayerCommandSender(backend)
+    h = 1 << 31
+    destination_path = [44 + h, 19788 + h, 0 + h, 1, 0]
+    change_path = [44 + h, 19788 + h, 0 + h, 1, 1]
+
+    _assert_sign_tx_transfer_change_path_fails(
+        client,
         scenario_navigator,
         device,
         navigator,
-        lambda client, path, amount: _transfer_output(
+        lambda amount: _make_transfer_output(
             amount,
-            fetch_public_key_as_pk_destination(client, MAINNET, path),
-            path,
+            fetch_public_key_as_pk_destination(client, MAINNET, destination_path),
+            change_path,
         ),
+        Errors.SW_MISMATCHED_CHANGE_OUTPUT_DESTINATION,
     )
 
 
-def test_sign_tx_transfer_change_output_public_key_hash(
+# Test a simple transfer with a change output whose change_path is not None, is invalid, mathces
+# the actual destination, but is a "receive" path, not a "change" one.
+def test_sign_tx_transfer_change_output_receive_path(
     backend, scenario_navigator, device, navigator
 ):
-    _sign_tx_transfer_with_change_output(
-        backend,
+    client = MintlayerCommandSender(backend)
+    h = 1 << 31
+    receive_path = [44 + h, 19788 + h, 0 + h, 0, 1]
+
+    _assert_sign_tx_transfer_change_path_fails(
+        client,
         scenario_navigator,
         device,
         navigator,
-        lambda client, path, amount: _transfer_output(
+        lambda amount: _make_transfer_output(
             amount,
-            fetch_public_key_as_pkh_destination(client, MAINNET, path),
-            path,
+            fetch_public_key_as_pk_destination(client, MAINNET, receive_path),
+            receive_path,
         ),
+        Errors.SW_INVALID_PATH,
     )
+
+
+def _assert_sign_tx_transfer_change_path_fails(
+    client,
+    scenario_navigator,
+    device,
+    navigator,
+    make_change_output,
+    expected_status,
+):
+    h = 1 << 31
+    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+
+    additional_info = {
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 10},
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
+            ],
+        }
+    }
+    inp = {
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([0] * 32)},
+                    "index": 1,
+                },
+                additional_info,
+            ]
+        },
+    }
+    inp_commitment = {"commitment": additional_info}
+    output = make_change_output(1)
+
+    transaction = Transaction(
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
+    )
+
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=False,
+        review_custom_screen_text=r"Sign\stransfer",
+    )
+    sign_tx_review(
+        client,
+        device,
+        navigator,
+        scenario_navigator,
+        review_tx,
+        ReviewUntil.Outputs,
+    )
+    send_output_expect_error(client, transaction.outputs[0], expected_status)
 
 
 def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
     # The path used for this entire test
-    path: str = "m/44'/19788'/0'/0/0"
+    path: str = "m/44'/19788'/0'/0/0" # FIXME
 
     h = 1 << 31
     inp = {
@@ -744,7 +868,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
 
     acc_inp_commitment = {"commitment": {"None": None}}
 
-    change_output = _transfer_output(
+    change_output = _make_transfer_output(
         99,
         fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
         bip44_change_path,
@@ -817,7 +941,7 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
 
     acc_inp_commitment = {"commitment": {"None": None}}
 
-    change_output = _transfer_output(
+    change_output = _make_transfer_output(
         99,
         fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
         bip44_change_path,
@@ -891,7 +1015,7 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
 
     acc_inp_commitment = {"commitment": {"None": None}}
 
-    change_output = _transfer_output(
+    change_output = _make_transfer_output(
         99,
         fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
         bip44_change_path,
@@ -974,7 +1098,7 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
 
     acc_inp_commitment = {"commitment": {"None": None}}
 
-    change_output = _transfer_output(
+    change_output = _make_transfer_output(
         99,
         fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
         bip44_change_path,
@@ -1053,7 +1177,7 @@ def test_sign_tx_change_token_metadata_uri(
 
     acc_inp_commitment = {"commitment": {"None": None}}
 
-    change_output = _transfer_output(
+    change_output = _make_transfer_output(
         99,
         fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
         bip44_change_path,
@@ -1147,7 +1271,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
         },
     }
 
-    change_output = _transfer_output(
+    change_output = _make_transfer_output(
         100 - 1 - fill_amount,
         fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
         bip44_change_path,
@@ -1260,7 +1384,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
         },
     }
 
-    change_output = _transfer_output(
+    change_output = _make_transfer_output(
         100 - 1 + ask_balance,
         fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
         bip44_change_path,
@@ -1331,7 +1455,7 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
 
     inp_commitment = {"commitment": additional_info}
 
-    change_output = _transfer_output(
+    change_output = _make_transfer_output(
         89,
         fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
         bip44_change_path,
@@ -1631,3 +1755,15 @@ def test_sign_tx_with_large_input_and_commitment(
         review_custom_screen_text=r"Sign\stransfer",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
+
+
+def _make_transfer_output(amount, destination, change_path):
+    return {
+        "output": {
+            "Transfer": [
+                {"Coin": amount},
+                destination,
+            ],
+        },
+        "change_path": change_path,
+    }
