@@ -439,7 +439,7 @@ def send_output_expect_error(client: MintlayerCommandSender, output: dict, expec
     assert len(e.value.data) == 0
 
 
-# pylint: disable-next=too-many-locals,too-many-branches,too-many-statements
+# pylint: disable-next=too-many-locals,too-many-branches,too-many-positional-arguments
 def sign_tx_review(
     client,
     device,

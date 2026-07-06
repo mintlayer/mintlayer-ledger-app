@@ -10,7 +10,9 @@ from application_client.mintlayer_command_sender import (
     ReviewTransaction,
 )
 from application_client.mintlayer_utils import (
+    KeyPurpose,
     Transaction,
+    make_path,
     sign_tx_next_req_obj,
 )
 
@@ -27,8 +29,7 @@ def test_sign_tx_transfer_no_change(backend, scenario_navigator, device, navigat
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
 
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
     additional_info = {
         "Utxo": {
             "Transfer": [
@@ -142,9 +143,8 @@ def _sign_tx_transfer_with_change_output(
     make_change_output,
 ):
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
-    bip44_change_path = [44 + h, 19788 + h, 0 + h, 1, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     additional_info = {
         "Utxo": {
@@ -204,8 +204,7 @@ def test_sign_tx_transfer_change_output_invalid_change_path(
     backend, scenario_navigator, device, navigator
 ):
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    change_path = [44 + h, 19788 + h, 0 + h, 1, 0]
+    change_path = make_path(0, KeyPurpose.Change, 0)
 
     _assert_sign_tx_transfer_change_path_fails(
         client,
@@ -227,9 +226,8 @@ def test_sign_tx_transfer_change_output_mismatched_destination(
     backend, scenario_navigator, device, navigator
 ):
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    destination_path = [44 + h, 19788 + h, 0 + h, 1, 0]
-    change_path = [44 + h, 19788 + h, 0 + h, 1, 1]
+    destination_path = make_path(0, KeyPurpose.Change, 0)
+    change_path = make_path(0, KeyPurpose.Change, 1)
 
     _assert_sign_tx_transfer_change_path_fails(
         client,
@@ -251,8 +249,7 @@ def test_sign_tx_transfer_change_output_receive_path(
     backend, scenario_navigator, device, navigator
 ):
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    receive_path = [44 + h, 19788 + h, 0 + h, 0, 1]
+    receive_path = make_path(0, KeyPurpose.Receive, 1)
 
     _assert_sign_tx_transfer_change_path_fails(
         client,
@@ -276,8 +273,7 @@ def _assert_sign_tx_transfer_change_path_fails(
     make_change_output,
     expected_status,
 ):
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
 
     additional_info = {
         "Utxo": {
@@ -328,12 +324,11 @@ def _assert_sign_tx_transfer_change_path_fails(
 def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    # The path used for this entire test
-    path: str = "m/44'/19788'/0'/0/0" # FIXME
 
-    h = 1 << 31
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [
+            {"path": make_path(0, KeyPurpose.Receive, 0), "multisig_idx": None}
+        ],
         "input": {
             "Account": {
                 "nonce": 1,
@@ -378,8 +373,7 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
 def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
 
     additional_info = {
         "Utxo": {
@@ -437,8 +431,7 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
 def test_sign_tx_delegate_staking(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
 
     additional_info = {
         "Utxo": {
@@ -489,8 +482,7 @@ def test_sign_tx_delegate_staking(backend, scenario_navigator, device, navigator
 def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
 
     additional_info = {
         "Utxo": {
@@ -562,8 +554,7 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
 def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
     additional_info = {
         "Utxo": {
             "Transfer": [
@@ -628,8 +619,7 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
 def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
     additional_info = {
         "Utxo": {
             "Transfer": [
@@ -715,8 +705,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
     And one output to transfer the newly minted tokens.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
 
     # The utxo (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -800,9 +789,8 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     And one output to transfer the newly minted tokens.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
-    bip44_change_path = [44 + h, 19788 + h, 0 + h, 1, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     # The additional data (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -897,9 +885,8 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
     And one output to transfer the change coins.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
-    bip44_change_path = [44 + h, 19788 + h, 0 + h, 1, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     # The additional info (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -970,9 +957,8 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
     And one output to transfer the change coins.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
-    bip44_change_path = [44 + h, 19788 + h, 0 + h, 1, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     # The additional data (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -1044,9 +1030,8 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
     And one output to transfer the change coins.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
-    bip44_change_path = [44 + h, 19788 + h, 0 + h, 1, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     # The additional data (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -1129,9 +1114,8 @@ def test_sign_tx_change_token_metadata_uri(
     And one output to transfer the change coins.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
-    bip44_change_path = [44 + h, 19788 + h, 0 + h, 1, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     # The additional info (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -1207,9 +1191,8 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     And one output to transfer the change coins.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
-    bip44_change_path = [44 + h, 19788 + h, 0 + h, 1, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     # The additional info (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -1319,9 +1302,8 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     And one output to transfer the change coins + ask balance and another output for the give balance.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
-    bip44_change_path = [44 + h, 19788 + h, 0 + h, 1, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     # The additional_data (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -1426,9 +1408,8 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
     And one output to transfer the change coins and the HTLC output.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
-    bip44_change_path = [44 + h, 19788 + h, 0 + h, 1, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     # The additional info (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -1511,8 +1492,7 @@ def test_sign_tx_without_outputs(backend, scenario_navigator, device, navigator)
     And no outputs.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
 
     # The additional info (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -1573,8 +1553,7 @@ def test_sign_tx_without_outputs(backend, scenario_navigator, device, navigator)
 def test_sign_tx_with_large_output(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
     additional_info = {
         "Utxo": {
             "Transfer": [
@@ -1664,8 +1643,7 @@ def test_sign_tx_with_large_input_and_commitment(
 ):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
 
     # Make the additional info big
     metadata_uri = b"abcef" * 100

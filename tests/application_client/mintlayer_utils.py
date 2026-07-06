@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import IntEnum
 from hashlib import blake2b
 from typing import List, Optional
 
@@ -172,6 +173,21 @@ def mintlayer_hash(data: bytes) -> bytes:
 
 def hardened_index(index: int) -> int:
     return index | 1 << 31
+
+
+class KeyPurpose(IntEnum):
+    Receive = 0
+    Change = 1
+
+
+def make_path(account_index: int, key_purpose: KeyPurpose, key_index: int) -> list[int]:
+    return [
+        hardened_index(44),
+        hardened_index(19788),
+        hardened_index(account_index),
+        key_purpose,
+        key_index,
+    ]
 
 
 def parse_derivation_path(derivation_path: str) -> list[int]:
