@@ -142,7 +142,7 @@ pub fn ui_approve_streaming_review(
     )?;
 
     let fields = [Field {
-        name: "Fees:",
+        name: "Fees",
         value: &fees,
     }];
 
@@ -333,10 +333,10 @@ fn format_timestamp(seconds_u64: u64) -> Result<String, StatusWord> {
 
 fn format_lock(lock: &OutputTimeLock) -> Result<String, StatusWord> {
     let s = match lock {
-        OutputTimeLock::UntilHeight(h) => format!("Lock until block height {}", h.0),
-        OutputTimeLock::UntilTime(t) => format!("Lock until {}", format_timestamp(t.0.0)?),
-        OutputTimeLock::ForBlockCount(b) => format!("Lock for {} blocks", b.0),
-        OutputTimeLock::ForSeconds(s) => format!("Lock for {} seconds", s.0),
+        OutputTimeLock::UntilHeight(h) => format!("until block height {}", h.0),
+        OutputTimeLock::UntilTime(t) => format!("until {}", format_timestamp(t.0.0)?),
+        OutputTimeLock::ForBlockCount(b) => format!("for {} blocks", b.0),
+        OutputTimeLock::ForSeconds(s) => format!("for {} seconds", s.0),
     };
     Ok(s)
 }
@@ -377,7 +377,7 @@ fn format_output(
             (
                 label,
                 format!(
-                    "Destination: {}\n{}\n",
+                    "Destination: {}\nAmount: {}",
                     to_address(destination, coin_type)?,
                     format_value(value, coin_type)?
                 ),
@@ -385,24 +385,27 @@ fn format_output(
         }
 
         TxOutput::LockThenTransfer(value, destination, lock) => {
-            let address_short = format!(
-                "Destination: {}\n{}\n{}\n",
+            let description = format!(
+                "Destination: {}\nLock: {}\nAmount: {}",
                 to_address(destination, coin_type)?,
                 format_lock(lock)?,
                 format_value(value, coin_type)?
             );
             if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                ("LockThenXfer", address_short)
+                ("LockThenXfer", description)
             } else {
-                ("Lock then Transfer", address_short)
+                ("Lock then Transfer", description)
             }
         }
 
-        TxOutput::Burn(value) => ("Burn", format_value(value, coin_type)?),
+        TxOutput::Burn(value) => (
+            "Burn",
+            format!("Amount: {}", format_value(value, coin_type)?),
+        ),
 
         TxOutput::CreateStakePool(pool_id, data) => {
-            let address_short = format!(
-                "Pool ID: {}\nStaker key: {}\nDecommission key: {}\nVRF public key: {}\nMargin ratio per thousand: {}\nCost per block: {}\nPledge: {}\n",
+            let description = format!(
+                "Pool ID: {}\nStaker key: {}\nDecommission key: {}\nVRF public key: {}\nMargin ratio per thousand: {}\nCost per block: {}\nPledge: {}",
                 pool_id_to_address(pool_id, coin_type)?,
                 to_address(&data.staker, coin_type)?,
                 to_address(&data.decommission_key, coin_type)?,
@@ -417,7 +420,7 @@ fn format_output(
             } else {
                 "Create staking pool"
             };
-            (name, address_short)
+            (name, description)
         }
 
         TxOutput::ProduceBlockFromStake(destination, _pool_id) => {
@@ -433,8 +436,8 @@ fn format_output(
             )
         }
         TxOutput::CreateDelegationId(destination, pool_id) => {
-            let address_short = format!(
-                "Address: {}\nPoolId: {}",
+            let description = format!(
+                "Address: {}\nPool ID: {}",
                 to_address(destination, coin_type)?,
                 pool_id_to_address(pool_id, coin_type)?
             );
@@ -445,7 +448,7 @@ fn format_output(
                 "Create delegation"
             };
 
-            (name, address_short)
+            (name, description)
         }
 
         TxOutput::DelegateStaking(amount, delegation_id) => {
@@ -458,7 +461,7 @@ fn format_output(
             (
                 name,
                 format!(
-                    "\n{}\n{}",
+                    "Delegation ID: {}\nAmount: {}",
                     delegation_id_to_address(delegation_id, coin_type)?,
                     format_value(&OutputValue::Coin(*amount), coin_type)?,
                 ),
@@ -476,11 +479,11 @@ fn format_output(
             let metadata_uri = make_displayable(&data.metadata_uri);
 
             let total_supply_str = match data.total_supply {
-                TokenTotalSupply::Unlimited => "UNLIMITED".to_string(),
-                TokenTotalSupply::Lockable => "LOCKABLE".to_string(),
+                TokenTotalSupply::Unlimited => "unlimited".to_string(),
+                TokenTotalSupply::Lockable => "lockable".to_string(),
                 TokenTotalSupply::Fixed(amount) => {
                     let formatted_amount = format_atoms(amount);
-                    format!("FIXED {}", formatted_amount)
+                    format!("fixed ({})", formatted_amount)
                 }
             };
             let is_freezable = match data.is_freezable {
@@ -488,7 +491,7 @@ fn format_output(
                 IsTokenFreezable::No => "No",
             };
 
-            let address_short = format!(
+            let description = format!(
                 "Ticker: {}\nAuthority: {}\nMetadata URI: {}\nTotal token supply: {}\nNumber of decimals: {}\nIs freezable: {}",
                 ticker,
                 to_address(&data.authority, coin_type)?,
@@ -503,7 +506,7 @@ fn format_output(
                 "Issue fungible token"
             };
 
-            (name, address_short)
+            (name, description)
         }
 
         TxOutput::IssueNft(_nft_id, data, destination) => {
@@ -518,8 +521,8 @@ fn format_output(
             //    calculated from transaction inputs and if the host cheats or malfunctions, the
             //    transaction will become invalid (note that the id is only present in the output due
             //    to historical reasons and e.g. IssueFungibleToken doesn't contain the token id).
-            let address_short = format!(
-                "Name: {}\nDescription: {}\nCreator: {}\nTicker: {}\nAddress: {}\nIcon URI: {}\nAdditional metadata URI: {}\nMedia URI: {}, Media hash: {}",
+            let description = format!(
+                "Name: {}\nDescription: {}\nCreator: {}\nTicker: {}\nAddress: {}\nIcon URI: {}\nAdditional metadata URI: {}\nMedia URI: {}\nMedia hash: {}",
                 make_displayable(&data.name),
                 make_displayable(&data.description),
                 data.creator
@@ -535,33 +538,36 @@ fn format_output(
                 make_displayable(&data.media_hash),
             );
 
-            ("Issue NFT", address_short)
+            ("Issue NFT", description)
         }
 
-        TxOutput::DataDeposit(data) => ("Data deposit", const_hex::encode(data)),
+        TxOutput::DataDeposit(data) => (
+            "Data deposit",
+            format!("Hex data: {}", const_hex::encode(data)),
+        ),
 
         TxOutput::Htlc(value, data) => {
-            let address_short = format!(
-                "Secret hash: {:x}\nSpend key: {}\nRefund key: {}\nRefund time lock: {}\n{}",
+            let description = format!(
+                "Secret hash: {:x}\nSpend key: {}\nRefund key: {}\nRefund lock: {}\nAmount: {}",
                 const_hex::display(data.secret_hash.0),
                 to_address(&data.spend_key, coin_type)?,
                 to_address(&data.refund_key, coin_type)?,
                 format_lock(&data.refund_timelock)?,
                 format_value(value, coin_type)?
             );
-            ("HTLC", address_short)
+            ("HTLC", description)
         }
 
         TxOutput::CreateOrder(data) => {
             let ask_amount = format_value(&data.ask, coin_type)?;
             let give_amount = format_value(&data.give, coin_type)?;
-            let address_short = format!(
+            let description = format!(
                 "Conclude key: {}\nAsk: {}\nGive: {}",
                 to_address(&data.conclude_key, coin_type)?,
                 ask_amount,
                 give_amount
             );
-            ("Create order", address_short)
+            ("Create order", description)
         }
     };
 
@@ -575,43 +581,43 @@ fn format_input(
     let (name, value) = match input {
         InputCommand::AccountSpending(cmd) => match cmd {
             AccountSpending::DelegationBalance(delegation_id, amount) => {
-                let address_short = format!(
+                let description = format!(
                     "Delegation ID: {}\nAmount: {}",
                     delegation_id_to_address(delegation_id, coin_type)?,
                     format_coin_amount_with_name(*amount, coin_type)
                 );
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                    ("Deleg wdrwl", address_short)
+                    ("Deleg wdrwl", description)
                 } else {
-                    ("Delegation withdrawal", address_short)
+                    ("Delegation withdrawal", description)
                 }
             }
         },
         InputCommand::AccountCommand(cmd) => match cmd {
             AccountCommand::MintTokens(token_id, amount) => {
-                let address_short = format!(
+                let description = format!(
                     "Token ID: {}\nAmount: {}",
                     token_id_to_address(token_id, coin_type)?,
                     format_atoms(*amount)
                 );
-                ("Mint tokens", address_short)
+                ("Mint tokens", description)
             }
             AccountCommand::UnmintTokens(token_id) => {
-                let address_short =
+                let description =
                     format!("Token ID: {}", token_id_to_address(token_id, coin_type)?,);
-                ("Unmint tokens", address_short)
+                ("Unmint tokens", description)
             }
             AccountCommand::LockTokenSupply(token_id) => {
-                let address_short =
+                let description =
                     format!("Token ID: {}", token_id_to_address(token_id, coin_type)?);
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                    ("Lock supply", address_short)
+                    ("Lock supply", description)
                 } else {
-                    ("Lock token supply", address_short)
+                    ("Lock token supply", description)
                 }
             }
             AccountCommand::FreezeToken(token_id, is_unfreezable) => {
-                let address_short = format!(
+                let description = format!(
                     "Token ID: {}\nIs unfreezable: {}",
                     token_id_to_address(token_id, coin_type)?,
                     if *is_unfreezable == IsTokenUnfreezable::Yes {
@@ -620,39 +626,39 @@ fn format_input(
                         "No"
                     }
                 );
-                ("Freeze token", address_short)
+                ("Freeze token", description)
             }
             AccountCommand::UnfreezeToken(token_id) => {
-                let address_short =
+                let description =
                     format!("Token ID: {}", token_id_to_address(token_id, coin_type)?,);
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                    ("Unfrz token", address_short)
+                    ("Unfrz token", description)
                 } else {
-                    ("Unfreeze token", address_short)
+                    ("Unfreeze token", description)
                 }
             }
             AccountCommand::ChangeTokenAuthority(token_id, new_authority) => {
-                let address_short = format!(
+                let description = format!(
                     "Token ID: {}\nNew authority: {}",
                     token_id_to_address(token_id, coin_type)?,
                     to_address(new_authority, coin_type)?
                 );
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                    ("Chg tkn auth", address_short)
+                    ("Chg tkn auth", description)
                 } else {
-                    ("Change token authority", address_short)
+                    ("Change token authority", description)
                 }
             }
             AccountCommand::ChangeTokenMetadataUri(token_id, new_metadata_uri) => {
-                let address_short = format!(
+                let description = format!(
                     "Token ID: {}\nNew metadata URI: {}",
                     token_id_to_address(token_id, coin_type)?,
                     make_displayable(new_metadata_uri)
                 );
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                    ("Chg tkn meta", address_short)
+                    ("Chg tkn meta", description)
                 } else {
-                    ("Change token metadata URI", address_short)
+                    ("Change token metadata URI", description)
                 }
             }
             AccountCommand::ConcludeOrder(_) | AccountCommand::FillOrder(_, _, _) => {
@@ -663,25 +669,25 @@ fn format_input(
             OrderAccountCommand::FillOrder(order_id, fill_amount) => {
                 let fill_value =
                     output_value_with_amount(&additional_info.initially_asked, *fill_amount);
-                let address_short = format!(
+                let description = format!(
                     "Order ID: {}\nFill amount: {}",
                     order_id_to_address(order_id, coin_type)?,
                     format_value(&fill_value, coin_type)?,
                 );
-                ("Fill order", address_short)
+                ("Fill order", description)
             }
             OrderAccountCommand::FreezeOrder(order_id) => {
-                let address_short =
+                let description =
                     format!("Order ID: {}", order_id_to_address(order_id, coin_type)?);
-                ("Freeze order", address_short)
+                ("Freeze order", description)
             }
             OrderAccountCommand::ConcludeOrder(order_id) => {
-                let address_short =
+                let description =
                     format!("Order ID: {}", order_id_to_address(order_id, coin_type)?);
                 if cfg!(any(target_os = "nanosplus", target_os = "nanox")) {
-                    ("Conclude ord", address_short)
+                    ("Conclude ord", description)
                 } else {
-                    ("Conclude order", address_short)
+                    ("Conclude order", description)
                 }
             }
         },
