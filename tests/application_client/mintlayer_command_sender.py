@@ -95,7 +95,7 @@ class Errors(IntEnum):
     SW_DESERIALIZE_FAIL = 0xB009
     SW_INVALID_PATH = 0xB010
     SW_MAX_BUFFER_LEN_EXCEEDED = 0xB012
-    SW_MISMATCHED_CHANGE_OUTPUT_DESTINATION = 0xB020
+    SW_MISMATCHED_CHANGE_OUTPUT_DESTINATION = 0xB01A
 
 
 def split_message(message: bytes, max_size: int) -> List[bytes]:

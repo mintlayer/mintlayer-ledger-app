@@ -99,7 +99,7 @@ def test_sign_tx_transfer_change_output_without_change_path(
     )
 
 
-# Test a simple transfer with a change output whose change_path is not None and the destinatrion
+# Test a simple transfer with a change output whose change_path is not None and the destination
 # is the PublicKey one.
 def test_sign_tx_transfer_change_output_public_key(
     backend, scenario_navigator, device, navigator
@@ -117,7 +117,7 @@ def test_sign_tx_transfer_change_output_public_key(
     )
 
 
-# Test a simple transfer with a change output whose change_path is not None and the destinatrion
+# Test a simple transfer with a change output whose change_path is not None and the destination
 # is the PublicKeyHash one.
 def test_sign_tx_transfer_change_output_public_key_hash(
     backend, scenario_navigator, device, navigator
@@ -243,7 +243,7 @@ def test_sign_tx_transfer_change_output_mismatched_destination(
     )
 
 
-# Test a simple transfer with a change output whose change_path is not None, is invalid, mathces
+# Test a simple transfer with a change output whose change_path is not None, is invalid, matches
 # the actual destination, but is a "receive" path, not a "change" one.
 def test_sign_tx_transfer_change_output_receive_path(
     backend, scenario_navigator, device, navigator

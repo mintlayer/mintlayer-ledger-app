@@ -92,7 +92,7 @@ The application returns standard Ledger status words as well as app-specific and
 | 0xB017 | `TxWithMultipleReviewableInputs`    | Transaction has multiple reviewable inputs     |
 | 0xB018 | `WrongChangeOutputType`             | Wrong change output type                       |
 | 0xB019 | `WrongChangeOutputDestination`      | Wrong change output destination                |
-| 0xB020 | `MismatchedChangeOutputDestination` | Mismatched change output destination           |
+| 0xB01A | `MismatchedChangeOutputDestination` | Mismatched change output destination           |
 | 0xB100 | `EccCarry`                          | ECC Carry                                      |
 | 0xB101 | `EccLocked`                         | ECC Locked                                     |
 | 0xB102 | `EccUnlocked`                       | ECC Unlocked                                   |

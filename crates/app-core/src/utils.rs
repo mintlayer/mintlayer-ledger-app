@@ -34,27 +34,36 @@ const DERIV_PATH_IDX_ACCOUNT_IDX: usize = 2;
 const DERIV_PATH_IDX_ADDR_PURPOSE: usize = 3;
 const DERIV_PATH_IDX_ADDR_IDX: usize = 4;
 
-// Path should be at least [bip44, coin_type, account_index]
+// Path should be at least [bip44', coin_type', account_index']
 const DERIV_PATH_MIN_LEN: usize = 3;
 // For tx signing the path should also contain the purpose and the index.
 const DERIV_PATH_LEN_FOR_TX_SIGNING: usize = 5;
 
-const DERIV_PATH_BIP44_ITEM: u32 = 44 + (1 << 31);
+const HARDENED_DERIVATION_MASK: u32 = 1 << 31;
+const DERIV_PATH_BIP44_ITEM: u32 = 44 | HARDENED_DERIVATION_MASK;
 
+const ADDR_PURPOSE_RECEIVE: u32 = 0;
 const ADDR_PURPOSE_CHANGE: u32 = 1;
 
 pub fn check_derivation_path(path: &[u32], coin_type: mlcp::CoinType) -> Result<(), StatusWord> {
-    if path.len() < DERIV_PATH_MIN_LEN {
-        return Err(StatusWord::InvalidPath);
-    }
+    ensure!(path.len() >= DERIV_PATH_MIN_LEN, StatusWord::InvalidPath);
 
-    if path[DERIV_PATH_IDX_BIP44] != DERIV_PATH_BIP44_ITEM {
-        return Err(StatusWord::InvalidPath);
-    }
+    ensure!(
+        path[DERIV_PATH_IDX_BIP44] == DERIV_PATH_BIP44_ITEM,
+        StatusWord::InvalidPath
+    );
 
-    if path[DERIV_PATH_IDX_COIN_TYPE] != coin_type.bip44_coin_type() {
-        return Err(StatusWord::InvalidPath);
-    }
+    // Note: bip44_coin_type already has the hardened bit set.
+    ensure!(
+        path[DERIV_PATH_IDX_COIN_TYPE] == coin_type.bip44_coin_type(),
+        StatusWord::InvalidPath
+    );
+
+    // Account index must be hardened.
+    ensure!(
+        (path[DERIV_PATH_IDX_ACCOUNT_IDX] & HARDENED_DERIVATION_MASK) != 0,
+        StatusWord::InvalidPath
+    );
 
     Ok(())
 }
@@ -68,6 +77,18 @@ pub fn check_derivation_path_for_tx_signing(
     if path.len() != DERIV_PATH_LEN_FOR_TX_SIGNING {
         return Err(StatusWord::InvalidPath);
     }
+
+    let addr_purpose = path[DERIV_PATH_IDX_ADDR_PURPOSE];
+    ensure!(
+        addr_purpose == ADDR_PURPOSE_RECEIVE || addr_purpose == ADDR_PURPOSE_CHANGE,
+        StatusWord::InvalidPath
+    );
+
+    // Key index must not be hardened.
+    ensure!(
+        (path[DERIV_PATH_IDX_ADDR_IDX] & HARDENED_DERIVATION_MASK) == 0,
+        StatusWord::InvalidPath
+    );
 
     Ok(CompressedDerivationPathForTxSigning {
         account_index: path[DERIV_PATH_IDX_ACCOUNT_IDX],

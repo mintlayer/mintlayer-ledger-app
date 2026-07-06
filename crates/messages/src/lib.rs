@@ -587,7 +587,7 @@ pub enum StatusWord {
     #[display("Wrong change output destination")]
     WrongChangeOutputDestination = 0xB019,
     #[display("Mismatched change output destination")]
-    MismatchedChangeOutputDestination = 0xB020,
+    MismatchedChangeOutputDestination = 0xB01A,
 
     // Ecc Errors
     #[display("ECC Carry")]

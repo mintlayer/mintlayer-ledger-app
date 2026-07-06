@@ -16,10 +16,9 @@ MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon aban
 def test_get_public_key_no_confirm(backend):
     for path in [
         "m/44'/19788'/0'/0/0",
-        "m/44'/19788'/0/0/0",
         "m/44'/19788'/911'/0/0",
-        "m/44'/19788'/255/255/255",
-        "m/44'/19788'/2147483647/0/0/0/0/0/0/0",
+        "m/44'/19788'/255'/255/255",
+        "m/44'/19788'/2147483647'/0/0/0/0/0/0/0",
     ]:
         client = MintlayerCommandSender(backend)
         response = client.get_public_key(MAINNET, parse_derivation_path(path)).data
@@ -34,10 +33,9 @@ def test_get_public_key_no_confirm(backend):
 def test_get_public_key_no_confirm_testnet(backend):
     for path in [
         "m/44'/1'/0'/0/0",
-        "m/44'/1'/0/0/0",
         "m/44'/1'/911'/0/0",
-        "m/44'/1'/255/255/255",
-        "m/44'/1'/2147483647/0/0/0/0/0/0/0",
+        "m/44'/1'/255'/255/255",
+        "m/44'/1'/2147483647'/0/0/0/0/0/0/0",
     ]:
         client = MintlayerCommandSender(backend)
         response = client.get_public_key(TESTNET, parse_derivation_path(path)).data
@@ -47,6 +45,17 @@ def test_get_public_key_no_confirm_testnet(backend):
             CurveChoice.Secp256k1, path=path, mnemonic=MNEMONIC
         )
         assert public_key.hex() == ref_public_key
+
+
+def test_get_public_key_non_hardened_account_index(backend):
+    client = MintlayerCommandSender(backend)
+    path = "m/44'/19788'/0/0/0"
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        client.get_public_key(MAINNET, parse_derivation_path(path))
+
+    assert e.value.status == Errors.SW_INVALID_PATH
+    assert len(e.value.data) == 0
 
 
 # In this test we check that the GET_PUBLIC_KEY works in confirmation mode
