@@ -203,7 +203,7 @@ pub struct TxOutputData {
 
     /// This field specifies that this output is a change output. If set, `output` must be a simple
     /// `Transfer` with a `PublicKey` or `PublicKeyHash` destination corresponding to the specified
-    /// derivation path, which must be of the form  "m/44'/coin_type'/account_idx'/1/change_idx".
+    /// derivation path, which must be of the form "m/44'/coin_type'/account_idx'/1/change_idx".
     pub change_path: Option<Bip32Path>,
 }
 
