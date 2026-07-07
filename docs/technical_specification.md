@@ -55,58 +55,62 @@ Any successful command output described below is prefixed by its corresponding 1
 
 The application returns standard Ledger status words as well as app-specific and ECC cryptographic errors.
 
-| SW     | SW name                        | Description                                    |
-| ------ | ------------------------------ | ---------------------------------------------- |
-| 0x5515 | `DeviceLocked`                 | Device locked                                  |
-| 0x6982 | `NothingReceived`              | Nothing received                               |
-| 0x6985 | `Deny`                         | Rejected by user / User cancelled              |
-| 0x6D00 | `Unknown`                      | Unknown                                        |
-| 0x6E00 | `ClaNotSupported`              | CLA not supported                              |
-| 0x6E01 | `InsNotSupported`              | Instruction not supported                      |
-| 0x6E02 | `WrongP1P2`                    | Wrong P1/P2 parameters                         |
-| 0x6E03 | `WrongApduLength`              | Wrong APDU length                              |
-| 0x9000 | `Ok`                           | Success                                        |
-| 0xB000 | `TxDisplayFail`                | Transaction display failed                     |
-| 0xB001 | `TxLockTimeInvalid`            | Transaction lock time value is invalid         |
-| 0xB002 | `TxWrongLength`                | Transaction wrong length                       |
-| 0xB003 | `HashFail`                     | Hashing failed                                 |
-| 0xB004 | `AddressEncodingFail`          | Address encoding failed                        |
-| 0xB005 | `WrongInstruction`             | Different instruction than expected            |
-| 0xB006 | `KeyDeriveFail`                | Key derivation failed                          |
-| 0xB007 | `OrdersV0NotSupported`         | Orders V0 not supported                        |
-| 0xB008 | `WrongContext`                 | Wrong context (e.g., Next called before Start) |
-| 0xB009 | `DeserializeFail`              | SCALE deserialization failed                   |
-| 0xB00A | `TxInvalidInputUtxo`           | Invalid input UTXO                             |
-| 0xB00B | `TxNumericOperationFail`       | Numeric operation failed                       |
-| 0xB00C | `TxFeeUnderflow`               | Tx fee underflow                               |
-| 0xB00D | `InvalidData`                  | Invalid data                                   |
-| 0xB00E | `NothingToSign`                | Nothing to sign                                |
-| 0xB00F | `TxAlreadyFinished`            | Transaction already finished                   |
-| 0xB010 | `InvalidPath`                  | Invalid BIP32 path                             |
-| 0xB011 | `InvalidUncompressedPublicKey` | Invalid uncompressed public key                |
-| 0xB012 | `MaxBufferLenExceeded`         | Max buffer length exceeded (Chunking limit)    |
-| 0xB013 | `DifferentInputCommitmentHash` | Different input commitment hash                |
-| 0xB014 | `InvalidTimestamp`             | Invalid timestamp                              |
-| 0xB015 | `FillOrderSigRequested`        | Signature for FillOrder input requested        |
-| 0xB016 | `TxWithZeroInputs`             | Transaction has zero inputs                    |
-| 0xB100 | `EccCarry`                     | ECC Carry                                      |
-| 0xB101 | `EccLocked`                    | ECC Locked                                     |
-| 0xB102 | `EccUnlocked`                  | ECC Unlocked                                   |
-| 0xB103 | `EccNotLocked`                 | ECC Not Locked                                 |
-| 0xB104 | `EccNotUnlocked`               | ECC Not Unlocked                               |
-| 0xB105 | `EccInternalError`             | ECC Internal Error                             |
-| 0xB106 | `EccInvalidParameterSize`      | ECC Invalid Parameter Size                     |
-| 0xB107 | `EccInvalidParameterValue`     | ECC Invalid Parameter Value                    |
-| 0xB108 | `EccInvalidParameter`          | ECC Invalid Parameter                          |
-| 0xB109 | `EccNotInvertible`             | ECC Not Invertible                             |
-| 0xB10A | `EccOverflow`                  | ECC Overflow                                   |
-| 0xB10B | `EccMemoryFull`                | ECC Memory Full                                |
-| 0xB10C | `EccNoResidue`                 | ECC No Residue                                 |
-| 0xB10D | `EccPointAtInfinity`           | ECC Point At Infinity                          |
-| 0xB10E | `EccInvalidPoint`              | ECC Invalid Point                              |
-| 0xB10F | `EccInvalidCurve`              | ECC Invalid Curve                              |
-| 0xB110 | `EccGenericError`              | ECC Generic Error                              |
-| 0xE000 | `Panic`                        | Panic                                          |
+| SW     | SW name                             | Description                                    |
+| ------ | ----------------------------------- | ---------------------------------------------- |
+| 0x5515 | `DeviceLocked`                      | Device locked                                  |
+| 0x6982 | `NothingReceived`                   | Nothing received                               |
+| 0x6985 | `Deny`                              | Rejected by user / User cancelled              |
+| 0x6D00 | `Unknown`                           | Unknown                                        |
+| 0x6E00 | `ClaNotSupported`                   | CLA not supported                              |
+| 0x6E01 | `InsNotSupported`                   | Instruction not supported                      |
+| 0x6E02 | `WrongP1P2`                         | Wrong P1/P2 parameters                         |
+| 0x6E03 | `WrongApduLength`                   | Wrong APDU length                              |
+| 0x9000 | `Ok`                                | Success                                        |
+| 0xB000 | `TxDisplayFail`                     | Transaction display failed                     |
+| 0xB001 | `TxLockTimeInvalid`                 | Transaction lock time value is invalid         |
+| 0xB002 | `TxWrongLength`                     | Transaction wrong length                       |
+| 0xB003 | `HashFail`                          | Hashing failed                                 |
+| 0xB004 | `AddressEncodingFail`               | Address encoding failed                        |
+| 0xB005 | `WrongInstruction`                  | Different instruction than expected            |
+| 0xB006 | `KeyDeriveFail`                     | Key derivation failed                          |
+| 0xB007 | `OrdersV0NotSupported`              | Orders V0 not supported                        |
+| 0xB008 | `WrongContext`                      | Wrong context (e.g., Next called before Start) |
+| 0xB009 | `DeserializeFail`                   | SCALE deserialization failed                   |
+| 0xB00A | `TxInvalidInputUtxo`                | Invalid input UTXO                             |
+| 0xB00B | `TxNumericOperationFail`            | Numeric operation failed                       |
+| 0xB00C | `TxFeeUnderflow`                    | Tx fee underflow                               |
+| 0xB00D | `InvalidData`                       | Invalid data                                   |
+| 0xB00E | `NothingToSign`                     | Nothing to sign                                |
+| 0xB00F | `TxAlreadyFinished`                 | Transaction already finished                   |
+| 0xB010 | `InvalidPath`                       | Invalid BIP32 path                             |
+| 0xB011 | `InvalidUncompressedPublicKey`      | Invalid uncompressed public key                |
+| 0xB012 | `MaxBufferLenExceeded`              | Max buffer length exceeded (Chunking limit)    |
+| 0xB013 | `DifferentInputCommitmentHash`      | Different input commitment hash                |
+| 0xB014 | `InvalidTimestamp`                  | Invalid timestamp                              |
+| 0xB015 | `FillOrderSigRequested`             | Signature for FillOrder input requested        |
+| 0xB016 | `TxWithZeroInputs`                  | Transaction has zero inputs                    |
+| 0xB017 | `TxWithMultipleReviewableInputs`    | Transaction has multiple reviewable inputs     |
+| 0xB018 | `WrongChangeOutputType`             | Wrong change output type                       |
+| 0xB019 | `WrongChangeOutputDestination`      | Wrong change output destination                |
+| 0xB01A | `MismatchedChangeOutputDestination` | Mismatched change output destination           |
+| 0xB100 | `EccCarry`                          | ECC Carry                                      |
+| 0xB101 | `EccLocked`                         | ECC Locked                                     |
+| 0xB102 | `EccUnlocked`                       | ECC Unlocked                                   |
+| 0xB103 | `EccNotLocked`                      | ECC Not Locked                                 |
+| 0xB104 | `EccNotUnlocked`                    | ECC Not Unlocked                               |
+| 0xB105 | `EccInternalError`                  | ECC Internal Error                             |
+| 0xB106 | `EccInvalidParameterSize`           | ECC Invalid Parameter Size                     |
+| 0xB107 | `EccInvalidParameterValue`          | ECC Invalid Parameter Value                    |
+| 0xB108 | `EccInvalidParameter`               | ECC Invalid Parameter                          |
+| 0xB109 | `EccNotInvertible`                  | ECC Not Invertible                             |
+| 0xB10A | `EccOverflow`                       | ECC Overflow                                   |
+| 0xB10B | `EccMemoryFull`                     | ECC Memory Full                                |
+| 0xB10C | `EccNoResidue`                      | ECC No Residue                                 |
+| 0xB10D | `EccPointAtInfinity`                | ECC Point At Infinity                          |
+| 0xB10E | `EccInvalidPoint`                   | ECC Invalid Point                              |
+| 0xB10F | `EccInvalidCurve`                   | ECC Invalid Curve                              |
+| 0xB110 | `EccGenericError`                   | ECC Generic Error                              |
+| 0xE000 | `Panic`                             | Panic                                          |
 
 ---
 
@@ -165,8 +169,8 @@ Because transactions can be larger than available APDU buffers and RAM, the pars
 
 | Type  | Name          | Description                                               |
 | ----- | ------------- | --------------------------------------------------------- |
-| `u8`  | `coin`        | `0` = Mainnet, `1` = Testnet, `2` = Regtest, `3` = Signet |
-| `u8`  | `version`     | Transaction version (0 = V1)                            |
+| `u8`  | `coin_type`   | `0` = Mainnet, `1` = Testnet, `2` = Regtest, `3` = Signet |
+| `u8`  | `version`     | Transaction version (0 = V1)                              |
 | `u32` | `num_inputs`  | Total number of inputs in the transaction                 |
 | `u32` | `num_outputs` | Total number of outputs in the transaction                |
 
@@ -221,7 +225,7 @@ Signs a generic message using a BIP-32 derived key.
 
 | Type        | Name        | Description                                   |
 | ----------- | ----------- | --------------------------------------------- |
-| `u8` (Enum) | `coin`      | Coin type (Mainnet, Testnet, Regtest, Signet) |
+| `u8` (Enum) | `coin_type` | Coin type (Mainnet, Testnet, Regtest, Signet) |
 | `u8` (Enum) | `addr_type` | `0` = PublicKey, `1` = PublicKeyHash          |
 | `Vec<u32>`  | `path`      | The BIP32 derivation path to use for signing  |
 

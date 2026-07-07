@@ -1,13 +1,20 @@
 from application_client import MAINNET
 from application_client.mintlayer_command_sender import (
+    Errors,
     MintlayerCommandSender,
+    ReviewUntil,
+    send_output_expect_error,
+    fetch_public_key_as_pk_destination,
+    fetch_public_key_as_pkh_destination,
     sign_tx_review,
     ReviewTransaction,
 )
-from application_client.mintlayer_response_unpacker import (
-    unpack_get_public_key_response,
+from application_client.mintlayer_utils import (
+    KeyPurpose,
+    Transaction,
+    make_path,
+    sign_tx_next_req_obj,
 )
-from application_client.mintlayer_utils import Transaction, sign_tx_next_req_obj
 
 # TODO: implement missing tests:
 # * CreateOrder, DataDeposit, Burn outputs;
@@ -17,33 +24,22 @@ from application_client.mintlayer_utils import Transaction, sign_tx_next_req_obj
 # See https://github.com/mintlayer/mintlayer-ledger-app/issues/19.
 
 
-def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
+# Test a simple transfer without a change output.
+def test_sign_tx_transfer_no_change(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    # The path used for this entire test
-    path: str = "m/44'/19788'/0'/0/0"
 
-    # First we need to get the public key of the device in order to build the transaction
-    rapdu = client.get_public_key(coin=MAINNET, path=path)
-    _, public_key, _, _ = unpack_get_public_key_response(rapdu.data)
-
-    print("pk", len(public_key))
-
-    h = 1 << 31
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
     additional_info = {
         "Utxo": {
             "Transfer": [
                 {"Coin": 10},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -67,11 +63,15 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
                     }
                 },
             ],
-        }
+        },
+        "change_path": None,
     }
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -82,15 +82,253 @@ def test_sign_tx_transfer(backend, scenario_navigator, device, navigator):
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
 
 
+# Test a simple transfer with a change output whose change_path is None.
+def test_sign_tx_transfer_change_output_without_change_path(
+    backend, scenario_navigator, device, navigator
+):
+    _sign_tx_transfer_with_change_output(
+        backend,
+        scenario_navigator,
+        device,
+        navigator,
+        lambda client, path, amount: _make_transfer_output(
+            amount,
+            fetch_public_key_as_pk_destination(client, MAINNET, path),
+            None,
+        ),
+    )
+
+
+# Test a simple transfer with a change output whose change_path is not None and the destination
+# is the PublicKey one.
+def test_sign_tx_transfer_change_output_public_key(
+    backend, scenario_navigator, device, navigator
+):
+    _sign_tx_transfer_with_change_output(
+        backend,
+        scenario_navigator,
+        device,
+        navigator,
+        lambda client, path, amount: _make_transfer_output(
+            amount,
+            fetch_public_key_as_pk_destination(client, MAINNET, path),
+            path,
+        ),
+    )
+
+
+# Test a simple transfer with a change output whose change_path is not None and the destination
+# is the PublicKeyHash one.
+def test_sign_tx_transfer_change_output_public_key_hash(
+    backend, scenario_navigator, device, navigator
+):
+    _sign_tx_transfer_with_change_output(
+        backend,
+        scenario_navigator,
+        device,
+        navigator,
+        lambda client, path, amount: _make_transfer_output(
+            amount,
+            fetch_public_key_as_pkh_destination(client, MAINNET, path),
+            path,
+        ),
+    )
+
+
+def _sign_tx_transfer_with_change_output(
+    backend,
+    scenario_navigator,
+    device,
+    navigator,
+    make_change_output,
+):
+    client = MintlayerCommandSender(backend)
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
+
+    additional_info = {
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 10},
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
+            ],
+        }
+    }
+    inp = {
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([0] * 32)},
+                    "index": 1,
+                },
+                additional_info,
+            ]
+        },
+    }
+    inp_commitment = {"commitment": additional_info}
+
+    recipient_output = _make_transfer_output(
+        9,
+        {
+            "PublicKey": {
+                "key": {
+                    "Secp256k1Schnorr": {
+                        "pubkey_data": bytes([0] * 33),
+                    }
+                }
+            }
+        },
+        None,
+    )
+    change_output = make_change_output(client, bip44_change_path, 1)
+
+    transaction = Transaction(
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[recipient_output, change_output],
+    )
+
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=False,
+        review_custom_screen_text=r"Sign\stransfer",
+    )
+    sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
+
+
+# Test a simple transfer with a change output whose change_path is not None and is invalid (has
+# an extra element).
+def test_sign_tx_transfer_change_output_invalid_change_path(
+    backend, scenario_navigator, device, navigator
+):
+    client = MintlayerCommandSender(backend)
+    change_path = make_path(0, KeyPurpose.Change, 0)
+
+    _assert_sign_tx_transfer_change_path_fails(
+        client,
+        scenario_navigator,
+        device,
+        navigator,
+        lambda amount: _make_transfer_output(
+            amount,
+            fetch_public_key_as_pk_destination(client, MAINNET, change_path),
+            change_path + [0],
+        ),
+        Errors.SW_INVALID_PATH,
+    )
+
+
+# Test a simple transfer with a change output whose change_path is not None, is valid, but
+# doesn't match the actual destination.
+def test_sign_tx_transfer_change_output_mismatched_destination(
+    backend, scenario_navigator, device, navigator
+):
+    client = MintlayerCommandSender(backend)
+    destination_path = make_path(0, KeyPurpose.Change, 0)
+    change_path = make_path(0, KeyPurpose.Change, 1)
+
+    _assert_sign_tx_transfer_change_path_fails(
+        client,
+        scenario_navigator,
+        device,
+        navigator,
+        lambda amount: _make_transfer_output(
+            amount,
+            fetch_public_key_as_pk_destination(client, MAINNET, destination_path),
+            change_path,
+        ),
+        Errors.SW_MISMATCHED_CHANGE_OUTPUT_DESTINATION,
+    )
+
+
+# Test a simple transfer with a change output whose change_path is not None, is invalid, matches
+# the actual destination, but is a "receive" path, not a "change" one.
+def test_sign_tx_transfer_change_output_receive_path(
+    backend, scenario_navigator, device, navigator
+):
+    client = MintlayerCommandSender(backend)
+    receive_path = make_path(0, KeyPurpose.Receive, 1)
+
+    _assert_sign_tx_transfer_change_path_fails(
+        client,
+        scenario_navigator,
+        device,
+        navigator,
+        lambda amount: _make_transfer_output(
+            amount,
+            fetch_public_key_as_pk_destination(client, MAINNET, receive_path),
+            receive_path,
+        ),
+        Errors.SW_INVALID_PATH,
+    )
+
+
+def _assert_sign_tx_transfer_change_path_fails(
+    client,
+    scenario_navigator,
+    device,
+    navigator,
+    make_change_output,
+    expected_status,
+):
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+
+    additional_info = {
+        "Utxo": {
+            "Transfer": [
+                {"Coin": 10},
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
+            ],
+        }
+    }
+    inp = {
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
+        "input": {
+            "Utxo": [
+                {
+                    "id": {"Transaction": bytes([0] * 32)},
+                    "index": 1,
+                },
+                additional_info,
+            ]
+        },
+    }
+    inp_commitment = {"commitment": additional_info}
+    output = make_change_output(1)
+
+    transaction = Transaction(
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
+    )
+
+    review_tx = ReviewTransaction(
+        transaction=transaction,
+        has_command_input=False,
+        review_custom_screen_text=r"Sign\stransfer",
+    )
+    sign_tx_review(
+        client,
+        device,
+        navigator,
+        scenario_navigator,
+        review_tx,
+        ReviewUntil.Outputs,
+    )
+    send_output_expect_error(client, transaction.outputs[0], expected_status)
+
+
 def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    # The path used for this entire test
-    path: str = "m/44'/19788'/0'/0/0"
 
-    h = 1 << 31
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [
+            {"path": make_path(0, KeyPurpose.Receive, 0), "multisig_idx": None}
+        ],
         "input": {
             "Account": {
                 "nonce": 1,
@@ -112,12 +350,16 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
                 },
                 {"UntilHeight": 10},
             ],
-        }
+        },
+        "change_path": None,
     }
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -131,22 +373,18 @@ def test_sign_tx_lock_then_transfer(backend, scenario_navigator, device, navigat
 def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
 
     additional_info = {
         "Utxo": {
             "Transfer": [
                 {"Coin": 10},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -170,12 +408,16 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
                 },
                 [0] * 32,
             ],
-        }
+        },
+        "change_path": None,
     }
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -189,22 +431,18 @@ def test_sign_tx_create_delegation(backend, scenario_navigator, device, navigato
 def test_sign_tx_delegate_staking(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
 
     additional_info = {
         "Utxo": {
             "Transfer": [
                 {"Coin": 10},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -221,12 +459,16 @@ def test_sign_tx_delegate_staking(backend, scenario_navigator, device, navigator
     output = {
         "output": {
             "DelegateStaking": [5, [0] * 32],
-        }
+        },
+        "change_path": None,
     }
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -240,22 +482,18 @@ def test_sign_tx_delegate_staking(backend, scenario_navigator, device, navigator
 def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
 
     additional_info = {
         "Utxo": {
             "Transfer": [
                 {"Coin": 40001},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -294,11 +532,15 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
                     "cost_per_block": 5,
                 },
             ],
-        }
+        },
+        "change_path": None,
     }
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -312,21 +554,17 @@ def test_sign_tx_create_stake_pool(backend, scenario_navigator, device, navigato
 def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
     additional_info = {
         "Utxo": {
             "Transfer": [
                 {"Coin": 10},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -358,12 +596,16 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
                     "is_freezable": {"Yes": None},
                 }
             },
-        }
+        },
+        "change_path": None,
     }
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -377,21 +619,17 @@ def test_sign_tx_issue_fungible_token(backend, scenario_navigator, device, navig
 def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
     additional_info = {
         "Utxo": {
             "Transfer": [
                 {"Coin": 2000},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -439,12 +677,16 @@ def test_sign_tx_issue_nft(backend, scenario_navigator, device, navigator):
                     }
                 },
             ],
-        }
+        },
+        "change_path": None,
     }
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -463,8 +705,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
     And one output to transfer the newly minted tokens.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
 
     # The utxo (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -472,11 +713,7 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -524,11 +761,12 @@ def test_sign_tx_mint_tokens(backend, scenario_navigator, device, navigator):
                     }
                 },
             ],
-        }
+        },
+        "change_path": None,
     }
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[mint_output],
@@ -551,8 +789,8 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
     And one output to transfer the newly minted tokens.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     # The additional data (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -560,11 +798,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -572,11 +806,7 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
         "Utxo": {
             "Transfer": [
                 {"TokenV1": [bytes([0] * 32), 1000]},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -626,21 +856,14 @@ def test_sign_tx_unmint_tokens(backend, scenario_navigator, device, navigator):
 
     acc_inp_commitment = {"commitment": {"None": None}}
 
-    change_output = {
-        "output": {
-            "Transfer": [
-                {"Coin": 99},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
-            ],
-        }
-    }
+    change_output = _make_transfer_output(
+        99,
+        fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
+        bip44_change_path,
+    )
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input, utxo_input2],
         input_commitments=[inp_commitment, acc_inp_commitment, inp_commitment2],
         outputs=[change_output],
@@ -662,8 +885,8 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
     And one output to transfer the change coins.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     # The additional info (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -671,11 +894,7 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -709,21 +928,14 @@ def test_sign_tx_freeze_tokens(backend, scenario_navigator, device, navigator):
 
     acc_inp_commitment = {"commitment": {"None": None}}
 
-    change_output = {
-        "output": {
-            "Transfer": [
-                {"Coin": 99},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
-            ],
-        }
-    }
+    change_output = _make_transfer_output(
+        99,
+        fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
+        bip44_change_path,
+    )
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[change_output],
@@ -745,8 +957,8 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
     And one output to transfer the change coins.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     # The additional data (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -754,11 +966,7 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -793,21 +1001,14 @@ def test_sign_tx_unfreeze_tokens(backend, scenario_navigator, device, navigator)
 
     acc_inp_commitment = {"commitment": {"None": None}}
 
-    change_output = {
-        "output": {
-            "Transfer": [
-                {"Coin": 99},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
-            ],
-        }
-    }
+    change_output = _make_transfer_output(
+        99,
+        fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
+        bip44_change_path,
+    )
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[change_output],
@@ -829,8 +1030,8 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
     And one output to transfer the change coins.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     # The additional data (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -838,11 +1039,7 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -886,21 +1083,14 @@ def test_sign_tx_change_token_authority(backend, scenario_navigator, device, nav
 
     acc_inp_commitment = {"commitment": {"None": None}}
 
-    change_output = {
-        "output": {
-            "Transfer": [
-                {"Coin": 99},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
-            ],
-        }
-    }
+    change_output = _make_transfer_output(
+        99,
+        fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
+        bip44_change_path,
+    )
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[change_output],
@@ -924,8 +1114,8 @@ def test_sign_tx_change_token_metadata_uri(
     And one output to transfer the change coins.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     # The additional info (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -933,11 +1123,7 @@ def test_sign_tx_change_token_metadata_uri(
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -975,21 +1161,14 @@ def test_sign_tx_change_token_metadata_uri(
 
     acc_inp_commitment = {"commitment": {"None": None}}
 
-    change_output = {
-        "output": {
-            "Transfer": [
-                {"Coin": 99},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
-            ],
-        }
-    }
+    change_output = _make_transfer_output(
+        99,
+        fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
+        bip44_change_path,
+    )
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[change_output],
@@ -1012,8 +1191,8 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
     And one output to transfer the change coins.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     # The additional info (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -1021,11 +1200,7 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -1079,18 +1254,11 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
         },
     }
 
-    change_output = {
-        "output": {
-            "Transfer": [
-                {"Coin": 100 - 1 - fill_amount},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
-            ],
-        }
-    }
+    change_output = _make_transfer_output(
+        100 - 1 - fill_amount,
+        fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
+        bip44_change_path,
+    )
 
     fill_output = {
         "output": {
@@ -1107,11 +1275,12 @@ def test_sign_tx_order_fill(backend, scenario_navigator, device, navigator):
                     }
                 },
             ],
-        }
+        },
+        "change_path": None,
     }
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitments=[inp_commitment, fill_order_inp_commitment],
         outputs=[change_output, fill_output],
@@ -1133,8 +1302,8 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     And one output to transfer the change coins + ask balance and another output for the give balance.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     # The additional_data (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -1142,11 +1311,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -1201,18 +1366,11 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
         },
     }
 
-    change_output = {
-        "output": {
-            "Transfer": [
-                {"Coin": 100 - 1 + ask_balance},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
-            ],
-        }
-    }
+    change_output = _make_transfer_output(
+        100 - 1 + ask_balance,
+        fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
+        bip44_change_path,
+    )
 
     conclude_output = {
         "output": {
@@ -1224,11 +1382,12 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
                     }
                 },
             ],
-        }
+        },
+        "change_path": None,
     }
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitments=[inp_commitment, conclude_order_inp_commitment],
         outputs=[change_output, conclude_output],
@@ -1249,8 +1408,8 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
     And one output to transfer the change coins and the HTLC output.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
+    bip44_change_path = make_path(0, KeyPurpose.Change, 0)
 
     # The additional info (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -1258,11 +1417,7 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -1281,18 +1436,11 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
 
     inp_commitment = {"commitment": additional_info}
 
-    change_output = {
-        "output": {
-            "Transfer": [
-                {"Coin": 89},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
-            ],
-        }
-    }
+    change_output = _make_transfer_output(
+        89,
+        fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
+        bip44_change_path,
+    )
 
     htlc_output = {
         "output": {
@@ -1317,11 +1465,12 @@ def test_sign_tx_htlc(backend, scenario_navigator, device, navigator):
                     },
                 },
             ],
-        }
+        },
+        "change_path": None,
     }
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input],
         input_commitments=[inp_commitment],
         outputs=[htlc_output, change_output],
@@ -1343,8 +1492,7 @@ def test_sign_tx_without_outputs(backend, scenario_navigator, device, navigator)
     And no outputs.
     """
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
-    bip44_path = [44 + h, 19788 + h, 0 + h, 0, 0]
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
 
     # The additional info (the previous TxOutput that this UTXO input spends)
     # This represents an output of 100 coins owned by our key
@@ -1352,11 +1500,7 @@ def test_sign_tx_without_outputs(backend, scenario_navigator, device, navigator)
         "Utxo": {
             "Transfer": [
                 {"Coin": 100},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([2] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
@@ -1391,7 +1535,7 @@ def test_sign_tx_without_outputs(backend, scenario_navigator, device, navigator)
     acc_inp_commitment = {"commitment": {"None": None}}
 
     transaction = Transaction(
-        coin=MAINNET,
+        coin_type=MAINNET,
         inputs=[utxo_input, account_input],
         input_commitments=[inp_commitment, acc_inp_commitment],
         outputs=[],
@@ -1409,21 +1553,17 @@ def test_sign_tx_without_outputs(backend, scenario_navigator, device, navigator)
 def test_sign_tx_with_large_output(backend, scenario_navigator, device, navigator):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
     additional_info = {
         "Utxo": {
             "Transfer": [
                 {"Coin": 2000},
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -1474,7 +1614,8 @@ def test_sign_tx_with_large_output(backend, scenario_navigator, device, navigato
                     }
                 },
             ],
-        }
+        },
+        "change_path": None,
     }
 
     # Sanity check
@@ -1482,7 +1623,10 @@ def test_sign_tx_with_large_output(backend, scenario_navigator, device, navigato
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -1499,7 +1643,7 @@ def test_sign_tx_with_large_input_and_commitment(
 ):
     # Use the app interface instead of raw interface
     client = MintlayerCommandSender(backend)
-    h = 1 << 31
+    bip44_path = make_path(0, KeyPurpose.Receive, 0)
 
     # Make the additional info big
     metadata_uri = b"abcef" * 100
@@ -1533,16 +1677,12 @@ def test_sign_tx_with_large_input_and_commitment(
                         }
                     }
                 },
-                {
-                    "PublicKey": {
-                        "key": {"Secp256k1Schnorr": {"pubkey_data": bytes([0] * 33)}}
-                    }
-                },
+                fetch_public_key_as_pk_destination(client, MAINNET, bip44_path),
             ],
         }
     }
     inp = {
-        "addresses": [{"path": [44 + h, 19788 + h, 0 + h, 0, 0], "multisig_idx": None}],
+        "addresses": [{"path": bip44_path, "multisig_idx": None}],
         "input": {
             "Utxo": [
                 {
@@ -1566,7 +1706,8 @@ def test_sign_tx_with_large_input_and_commitment(
                     }
                 },
             ],
-        }
+        },
+        "change_path": None,
     }
 
     # Sanity checks
@@ -1580,7 +1721,10 @@ def test_sign_tx_with_large_input_and_commitment(
 
     # Create the transaction that will be sent to the device for signing
     transaction = Transaction(
-        coin=MAINNET, inputs=[inp], input_commitments=[inp_commitment], outputs=[output]
+        coin_type=MAINNET,
+        inputs=[inp],
+        input_commitments=[inp_commitment],
+        outputs=[output],
     )
 
     review_tx = ReviewTransaction(
@@ -1589,3 +1733,15 @@ def test_sign_tx_with_large_input_and_commitment(
         review_custom_screen_text=r"Sign\stransfer",
     )
     sign_tx_review(client, device, navigator, scenario_navigator, review_tx)
+
+
+def _make_transfer_output(amount, destination, change_path):
+    return {
+        "output": {
+            "Transfer": [
+                {"Coin": amount},
+                destination,
+            ],
+        },
+        "change_path": change_path,
+    }

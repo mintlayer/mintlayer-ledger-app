@@ -8,6 +8,7 @@ from application_client.mintlayer_response_unpacker import (
     unpack_get_public_key_response,
 )
 from application_client.mintlayer_utils import (
+    parse_derivation_path,
     verify_message_signature,
 )
 
@@ -16,12 +17,17 @@ from application_client.mintlayer_utils import (
 def test_sign_message(backend, scenario_navigator):
     path = "m/44'/19788'/0'/0/0"
     message = b"Hello"
-    coin = MAINNET
+    coin_type = MAINNET
     client = MintlayerCommandSender(backend)
 
-    pubkey = get_pub_key(client, coin=coin, path=path)
+    pubkey = get_pub_key(client, coin_type=coin_type, path=path)
 
-    with client.sign_message(coin=coin, addr_type=0, path=path, message=message):
+    with client.sign_message(
+        coin_type=coin_type,
+        addr_type=0,
+        path=parse_derivation_path(path),
+        message=message,
+    ):
         scenario_navigator.review_approve()
 
     sig = unpack_sign_message_response(client.get_async_response().data)
@@ -34,12 +40,17 @@ def test_sign_message(backend, scenario_navigator):
 def test_sign_large_message(backend, scenario_navigator):
     path = "m/44'/19788'/0'/0/0"
     message = b"Hello" * 100
-    coin = MAINNET
+    coin_type = MAINNET
     client = MintlayerCommandSender(backend)
 
-    pubkey = get_pub_key(client, coin=coin, path=path)
+    pubkey = get_pub_key(client, coin_type=coin_type, path=path)
 
-    with client.sign_message(coin=coin, addr_type=0, path=path, message=message):
+    with client.sign_message(
+        coin_type=coin_type,
+        addr_type=0,
+        path=parse_derivation_path(path),
+        message=message,
+    ):
         scenario_navigator.review_approve()
 
     sig = unpack_sign_message_response(client.get_async_response().data)
@@ -52,12 +63,17 @@ def test_sign_large_message(backend, scenario_navigator):
 def test_sign_message_pkh(backend, scenario_navigator):
     path = "m/44'/19788'/0'/0/0"
     message = b"Hello"
-    coin = MAINNET
+    coin_type = MAINNET
     client = MintlayerCommandSender(backend)
 
-    pubkey = get_pub_key(client, coin=coin, path=path)
+    pubkey = get_pub_key(client, coin_type=coin_type, path=path)
 
-    with client.sign_message(coin=coin, addr_type=1, path=path, message=message):
+    with client.sign_message(
+        coin_type=coin_type,
+        addr_type=1,
+        path=parse_derivation_path(path),
+        message=message,
+    ):
         scenario_navigator.review_approve()
 
     sig = unpack_sign_message_response(client.get_async_response().data)
@@ -73,10 +89,15 @@ def test_sign_message_refused(backend, scenario_navigator):
     client = MintlayerCommandSender(backend)
     path: str = "m/44'/19788'/0'/0/0"
     message: bytes = b"Hello"
-    coin = MAINNET
+    coin_type = MAINNET
 
     with pytest.raises(ExceptionRAPDU) as e:
-        with client.sign_message(coin=coin, addr_type=0, path=path, message=message):
+        with client.sign_message(
+            coin_type=coin_type,
+            addr_type=0,
+            path=parse_derivation_path(path),
+            message=message,
+        ):
             scenario_navigator.review_reject()
 
     # Assert that we have received a refusal
@@ -84,7 +105,7 @@ def test_sign_message_refused(backend, scenario_navigator):
     assert len(e.value.data) == 0
 
 
-def get_pub_key(client: MintlayerCommandSender, coin: int, path: str) -> bytes:
-    rapdu = client.get_public_key(coin, path)
+def get_pub_key(client: MintlayerCommandSender, coin_type: int, path: str) -> bytes:
+    rapdu = client.get_public_key(coin_type, parse_derivation_path(path))
     _, pubkey, _, _ = unpack_get_public_key_response(rapdu.data)
     return pubkey

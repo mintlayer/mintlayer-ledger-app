@@ -3,19 +3,19 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Generator, List
 
+import pytest
 import scalecodec  # type: ignore
+from ragger.error import ExceptionRAPDU
 from ragger.backend.interface import RAPDU, BackendInterface
 from ragger.navigator import NavInsID
 from ragger.navigator.navigation_scenario import NavigationScenarioData, UseCase
 
-from .mintlayer_response_unpacker import (
-    unpack_get_public_key_response,
-)
 from .mintlayer_utils import (
     Transaction,
     TxInputSignatureResponse,
     TxInputSignature,
     decode_response_variant,
+    mintlayer_hash,
     sign_tx_start_req_obj,
     sign_tx_next_req_obj,
     verify_tx_signature,
@@ -36,6 +36,11 @@ class ReviewTransaction:
 @dataclass
 class SignTxStep:
     kind: str
+
+
+class ReviewUntil(IntEnum):
+    End = 0
+    Outputs = 1
 
 
 class GetAppAndVersionP1(IntEnum):
@@ -88,7 +93,9 @@ class Errors(IntEnum):
     SW_WRONG_TX_LENGTH = 0xB002
     SW_WRONG_CONTEXT = 0xB008
     SW_DESERIALIZE_FAIL = 0xB009
+    SW_INVALID_PATH = 0xB010
     SW_MAX_BUFFER_LEN_EXCEEDED = 0xB012
+    SW_MISMATCHED_CHANGE_OUTPUT_DESTINATION = 0xB01A
 
 
 def split_message(message: bytes, max_size: int) -> List[bytes]:
@@ -111,19 +118,8 @@ class MintlayerCommandSender:
             data=b"",
         )
 
-    def get_public_key(self, coin: int, path: str) -> RAPDU:
-        data = coin.to_bytes(1, "little") + pack_derivation_path_from_str(path)
-
-        return self.backend.exchange(
-            cla=CLA,
-            ins=InsType.GET_PUBLIC_KEY,
-            p1=GetPublicKeyP1.P1_DO_NOT_CONFIRM,
-            p2=P2.P2_LAST,
-            data=data,
-        )
-
-    def get_public_key_by_ints_path(self, coin: int, path: list[int]) -> RAPDU:
-        data = coin.to_bytes(1, "little") + pack_derivation_path_from_ints(path)
+    def get_public_key(self, coin_type: int, path: list[int]) -> RAPDU:
+        data = coin_type.to_bytes(1, "little") + pack_derivation_path(path)
 
         return self.backend.exchange(
             cla=CLA,
@@ -135,9 +131,9 @@ class MintlayerCommandSender:
 
     @contextmanager
     def get_public_key_with_confirmation(
-        self, coin: int, path: str
+        self, coin_type: int, path: list[int]
     ) -> Generator[None, None, None]:
-        data = coin.to_bytes(1, "little") + pack_derivation_path_from_str(path)
+        data = coin_type.to_bytes(1, "little") + pack_derivation_path(path)
 
         with self.backend.exchange_async(
             cla=CLA,
@@ -150,12 +146,12 @@ class MintlayerCommandSender:
 
     @contextmanager
     def sign_message(
-        self, coin: int, addr_type: int, path: str, message: bytes
+        self, coin_type: int, addr_type: int, path: list[int], message: bytes
     ) -> Generator[None, None, None]:
         data = (
-            coin.to_bytes(1, "little")
+            coin_type.to_bytes(1, "little")
             + addr_type.to_bytes(1, "little")
-            + pack_derivation_path_from_str(path)
+            + pack_derivation_path(path)
         )
 
         response = self.backend.exchange(
@@ -189,11 +185,15 @@ class MintlayerCommandSender:
             yield
 
     # pylint: disable-next=too-many-locals
-    def sign_tx(self, transaction: Transaction) -> Generator[SignTxStep, None, None]:
+    def sign_tx(
+        self,
+        transaction: Transaction,
+        review_until: ReviewUntil = ReviewUntil.End,
+    ) -> Generator[SignTxStep, None, None]:
         # ---- Start req ----
         start_req = sign_tx_start_req_obj.encode(
             {
-                "coin": transaction.coin,
+                "coin_type": transaction.coin_type,
                 "version": 0,
                 "num_inputs": len(transaction.inputs),
                 "num_outputs": len(transaction.outputs),
@@ -256,11 +256,14 @@ class MintlayerCommandSender:
         ):
             yield SignTxStep(kind="start")
 
-            if len(transaction.outputs) == 0:
+            if len(transaction.outputs) == 0 and review_until == ReviewUntil.End:
                 yield SignTxStep(kind="sign")
 
         response = self.get_async_response()
         decode_response_variant(response.data, "TxNext")
+
+        if review_until == ReviewUntil.Outputs:
+            return
 
         # ---- OUTPUTS ----
         print("streaming outputs")
@@ -350,45 +353,100 @@ class MintlayerCommandSender:
         return sigs
 
 
-def hardened_index(index: int) -> int:
-    return index | 1 << 31
-
-
-def parse_derivation_path(derivation_path: str) -> list[int]:
-    split = derivation_path.split("/")
-
-    if split[0] != "m":
-        raise ValueError("Error master expected")
-
-    result = []
-    for value in split[1:]:
-        if value == "":
-            raise ValueError(f'Error missing value in split list "{split}"')
-        if value.endswith("'"):
-            result.append(hardened_index(int(value[:-1])))
-        else:
-            result.append(int(value))
-
-    return result
-
-
-def pack_derivation_path_from_str(path: str) -> bytes:
-    parsed_path = parse_derivation_path(path)
-    return pack_derivation_path_from_ints(parsed_path)
-
-
-def pack_derivation_path_from_ints(path: list[int]) -> bytes:
+def pack_derivation_path(path: list[int]) -> bytes:
     path_obj = scalecodec.base.RuntimeConfiguration().create_scale_object("Bip32Path")
     return path_obj.encode(path).data
 
 
-# pylint: disable-next=too-many-locals,too-many-branches,too-many-statements
+def _compress_public_key(uncompressed_public_key: bytes) -> bytes:
+    assert len(uncompressed_public_key) == 65
+    assert uncompressed_public_key[0] == 0x04
+
+    prefix = 0x02 if uncompressed_public_key[64] % 2 == 0 else 0x03
+    return bytes([prefix]) + uncompressed_public_key[1:33]
+
+
+def _public_key_destination(public_key: bytes) -> dict:
+    compressed_public_key = _compress_public_key(public_key)
+    return {
+        "PublicKey": {
+            "key": {
+                "Secp256k1Schnorr": {
+                    "pubkey_data": compressed_public_key,
+                }
+            }
+        }
+    }
+
+
+def _public_key_hash_destination(public_key: bytes) -> dict:
+    compressed_public_key = _compress_public_key(public_key)
+    encoded_public_key = bytes([0]) + compressed_public_key
+    return {"PublicKeyHash": mintlayer_hash(encoded_public_key)[:20]}
+
+
+def fetch_public_key(
+    client: MintlayerCommandSender, coin_type: int, path: list[int]
+) -> bytes:
+    rapdu = client.get_public_key(coin_type, path)
+    msg = decode_response_variant(rapdu.data, "PublicKey")
+
+    public_key = bytes.fromhex(msg["public_key"][2:])
+    assert len(public_key) == 65
+
+    chain_code = bytes.fromhex(msg["chain_code"][2:])
+    assert len(chain_code) == 32
+
+    return public_key
+
+
+def fetch_public_key_as_pk_destination(
+    client: MintlayerCommandSender, coin_type: int, path: list[int]
+) -> dict:
+    return _public_key_destination(fetch_public_key(client, coin_type, path))
+
+
+def fetch_public_key_as_pkh_destination(
+    client: MintlayerCommandSender, coin_type: int, path: list[int]
+) -> dict:
+    return _public_key_hash_destination(fetch_public_key(client, coin_type, path))
+
+
+def send_output_expect_error(client: MintlayerCommandSender, output: dict, expected_status: int):
+    encoded_out = sign_tx_next_req_obj.encode({"ProcessOutput": output}).data
+    chunks = split_message(encoded_out, MAX_APDU_LEN)
+
+    for chunk in chunks[:-1]:
+        response = client.backend.exchange(
+            cla=CLA,
+            ins=InsType.SIGN_TX,
+            p1=SignTxP1.P1_NEXT,
+            p2=P2.P2_MORE,
+            data=chunk,
+        )
+        assert response.status == 0x9000
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        client.backend.exchange(
+            cla=CLA,
+            ins=InsType.SIGN_TX,
+            p1=SignTxP1.P1_NEXT,
+            p2=P2.P2_LAST,
+            data=chunks[-1],
+        )
+
+    assert e.value.status == expected_status
+    assert len(e.value.data) == 0
+
+
+# pylint: disable-next=too-many-locals,too-many-branches,too-many-positional-arguments
 def sign_tx_review(
     client,
     device,
     navigator,
     scenario_navigator,
     review_transaction: ReviewTransaction,
+    review_until: ReviewUntil = ReviewUntil.End,
 ):
     transaction = review_transaction.transaction
     has_command_input = review_transaction.has_command_input
@@ -397,10 +455,9 @@ def sign_tx_review(
     addr_paths_by_indices = transaction.addr_paths_by_indices()
     pubkeys_by_indices = {}
     for indices, addr_path in addr_paths_by_indices.items():
-        pubkey_rapdu = client.get_public_key_by_ints_path(transaction.coin, addr_path)
-        _, pubkey, _, _ = unpack_get_public_key_response(pubkey_rapdu.data)
-
-        pubkeys_by_indices[indices] = pubkey
+        pubkeys_by_indices[indices] = fetch_public_key(
+            client, transaction.coin_type, addr_path
+        )
 
     # The snapshot index (used to make its name) and the amount by which it should be increased
     # after each step. The increase should be large enough, so that snapshots from later steps
@@ -415,7 +472,7 @@ def sign_tx_review(
 
     last_page_pattern = r".*\((\d+)/\1\)$"
 
-    for step in client.sign_tx(transaction):
+    for step in client.sign_tx(transaction, review_until):
         print("step kind: ", step.kind)
         if step.kind == "start":
             navigator.navigate_and_compare(
@@ -500,6 +557,9 @@ def sign_tx_review(
                 snap_start_idx=start_idx,
             )
             start_idx += idx_inc
+
+    if review_until == ReviewUntil.Outputs:
+        return
 
     # After review approval, explicitly request every signature.
     signatures = client.get_all_signatures(transaction)

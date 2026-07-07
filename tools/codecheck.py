@@ -151,7 +151,11 @@ def check_trailing_whitespaces():
     print("==== Checking for trailing whitespaces:")
 
     # List of files/dirs excluded from the check
-    exclude = ["media", "tests/snapshots"]
+    exclude = [
+        "media",
+        "tests/snapshots",
+        "tests/snapshots-tmp",
+    ]
 
     ok = True
     for path in all_files(exclude):

@@ -30,10 +30,6 @@ test_utils::impl_main!();
 #[cfg(test)]
 mod tests;
 
-// TODO: need tests that ensure encoding stability - encode a certain message or a message part and
-// expect concrete bytes, decode it back, expect the same object.
-// See https://github.com/mintlayer/mintlayer-ledger-app/issues/16.
-
 // TODO: types from mintlayer core primitives should probably not be used as part of the protocol
 // (but note that this will increase the size of the binary slightly - a test attempt at using distinct
 // types increased the binary from ~100Kb to ~106Kb).
@@ -126,35 +122,36 @@ pub enum PingP1 {
     Dummy = 0,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode, PartialEq, Eq)]
 pub struct GetPubKeyReq {
     pub coin_type: CoinType,
     pub path: Bip32Path,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode, PartialEq, Eq)]
 pub struct SignMessageStartReq {
-    pub coin: CoinType,
+    pub coin_type: CoinType,
     pub addr_type: AddrType,
     pub path: Bip32Path,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Encode, Decode, strum::EnumIter)]
 #[repr(u8)]
 pub enum TransactionVersion {
     #[codec(index = 0)]
     V1,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode, PartialEq, Eq)]
 pub struct SignTxStartReq {
-    pub coin: CoinType,
+    pub coin_type: CoinType,
     pub version: TransactionVersion,
     pub num_inputs: u32,
     pub num_outputs: u32,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode, PartialEq, Eq, strum::EnumDiscriminants)]
+#[strum_discriminants(name(SignTxNextReqTag), derive(strum::EnumIter))]
 pub enum SignTxNextReq {
     #[codec(index = 0)]
     ProcessInput(Box<TxInputData>),
@@ -183,36 +180,31 @@ pub enum SignTxNextReq {
 //    and input 1 with key A; in such a case the signature 0 will be valid for input 1 and vice versa.
 //    This does not allow the host to change the reviewed transaction, but it means that the app must
 //    not promise the user that a particular input was signed by the key specified in `addresses`.
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode, PartialEq, Eq)]
 pub struct TxInputData {
     pub addresses: Vec<InputAddressPath>,
     pub input: TxInputWithAdditionalInfo,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode, PartialEq, Eq)]
 pub struct TxInputCommitmentData {
     pub commitment: SighashInputCommitment,
 }
 
-// TODO:
-// 1) In order to be able to detect change outputs, there should be a way of specifying the destination
-//    via a derivation path.
-//    Note: the contents of Destination::PublicKeyHash and Destination::PublicKey should probably be
-//    enums of the form `enum PublicKeyHash { Own(derivation path), Foreign(actual hash) }`.
-// 2) Possible ways of handling change outputs (simplified version of what the cardano app seems to do):
-//  * a) require that all derivation paths (in inputs and in outputs) belong to the same account,
-//       fail if they don't;
-//    b) if an output is a simple Transfer to a change address in the account, omit it from review;
-//       if it's something more complicated, don't omit it from review, but mark is as change output.
-//  * Same as above, but only track (without failing) whether all inputs are signed with keys from the
-//    same account; if so and an output is a simple Transfer to a change address in that same account,
-//    omit the output from review. If the output references a change address but multiple accounts
-//    are referenced by inputs, or if the output is not a simple Transfer, then don't omit it,
-//    but mark it as change.
+// TODO: currently change outputs are always shown during review. Though they are marked as change,
+// it's still redundant to show them in most cases.
+// One possible way of handling change outputs could be: track whether all inputs are signed with
+// keys from the same account; if so and a change output is to an address in that same account, omit
+// the output from review.
 // See https://github.com/mintlayer/mintlayer-ledger-app/issues/17.
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode, PartialEq, Eq)]
 pub struct TxOutputData {
     pub output: TxOutput,
+
+    /// This field specifies that this output is a change output. If set, `output` must be a simple
+    /// `Transfer` with a `PublicKey` or `PublicKeyHash` destination corresponding to the specified
+    /// derivation path, which must be of the form "m/44'/coin_type'/account_idx'/1/change_idx".
+    pub change_path: Option<Bip32Path>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
@@ -223,7 +215,8 @@ pub struct AdditionalOrderInfo {
     pub give_balance: Amount,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, strum::EnumDiscriminants)]
+#[strum_discriminants(name(AdditionalUtxoInfoTag), derive(strum::EnumIter))]
 pub enum AdditionalUtxoInfo {
     #[codec(index = 0)]
     Utxo(TxOutput),
@@ -250,7 +243,8 @@ impl From<AdditionalUtxoInfo> for SighashInputCommitment {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, strum::EnumDiscriminants)]
+#[strum_discriminants(name(TxInputWithAdditionalInfoTag), derive(strum::EnumIter))]
 pub enum TxInputWithAdditionalInfo {
     #[codec(index = 0)]
     Utxo(UtxoOutPoint, AdditionalUtxoInfo),
@@ -300,7 +294,7 @@ impl TxInputWithAdditionalInfo {
     }
 }
 
-#[derive(Encode, Decode, Clone, Copy, Debug, Eq, PartialEq, IntoPrimitive)]
+#[derive(Encode, Decode, Clone, Copy, Debug, Eq, PartialEq, IntoPrimitive, strum::EnumIter)]
 #[repr(u8)]
 pub enum CoinType {
     Mainnet = 0,
@@ -321,14 +315,14 @@ impl From<CoinType> for mlcp::CoinType {
 }
 
 #[repr(u8)]
-#[derive(Encode, Decode, Clone, Copy, IntoPrimitive)]
+#[derive(Encode, Decode, Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, strum::EnumIter)]
 pub enum AddrType {
     PublicKey = 0,
     PublicKeyHash = 1,
 }
 
 /// BIP32 path stored as an array of [`u32`].
-#[derive(Default, Encode, Decode, Clone)]
+#[derive(Default, Encode, Decode, Debug, Clone, PartialEq, Eq)]
 pub struct Bip32Path(pub Vec<u32>);
 
 impl AsRef<[u32]> for Bip32Path {
@@ -338,28 +332,28 @@ impl AsRef<[u32]> for Bip32Path {
 }
 
 /// Address path to be signed for an input
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode, PartialEq, Eq)]
 pub struct InputAddressPath {
     pub path: Bip32Path,
     pub multisig_idx: Option<u32>,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode, PartialEq, Eq)]
 pub struct UncompressedSecp256k1PublicKey(pub [u8; 65]);
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode, PartialEq, Eq)]
 pub struct ChainCode(pub [u8; 32]);
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode, PartialEq, Eq)]
 pub struct PublicKeyResponse {
     pub public_key: UncompressedSecp256k1PublicKey,
     pub chain_code: ChainCode,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode, PartialEq, Eq)]
 pub struct Signature(pub [u8; 64]);
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode, PartialEq, Eq)]
 pub struct TxInputSignatureResponse {
     pub signature: Signature,
     pub input_idx: u32,
@@ -367,12 +361,13 @@ pub struct TxInputSignatureResponse {
     pub has_next: bool,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode, PartialEq, Eq)]
 pub struct MsgSignatureResponse {
     pub signature: Signature,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode, PartialEq, Eq, strum::EnumDiscriminants)]
+#[strum_discriminants(name(ResponseTag), derive(strum::EnumIter))]
 pub enum Response {
     #[codec(index = 0)]
     ExpectingNextChunk,
@@ -392,11 +387,11 @@ pub enum Response {
     Pong,
 }
 
-pub fn encode<T: Encode>(t: T) -> Vec<u8> {
+pub fn encode<T: Encode>(t: &T) -> Vec<u8> {
     t.encode()
 }
 
-pub fn encode_to<T, O>(t: T, output: &mut O)
+pub fn encode_to<T, O>(t: &T, output: &mut O)
 where
     T: Encode,
     O: parity_scale_codec::Output,
@@ -585,6 +580,14 @@ pub enum StatusWord {
     FillOrderSigRequested = 0xB015,
     #[display("Transaction has zero inputs")]
     TxWithZeroInputs = 0xB016,
+    #[display("Transaction has multiple reviewable inputs")]
+    TxWithMultipleReviewableInputs = 0xB017,
+    #[display("Wrong change output type")]
+    WrongChangeOutputType = 0xB018,
+    #[display("Wrong change output destination")]
+    WrongChangeOutputDestination = 0xB019,
+    #[display("Mismatched change output destination")]
+    MismatchedChangeOutputDestination = 0xB01A,
 
     // Ecc Errors
     #[display("ECC Carry")]

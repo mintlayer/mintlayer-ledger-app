@@ -106,7 +106,10 @@ impl ApduTransport {
     /// - If `P2 == P2_DONE`, it finishes accumulation and returns `Ok(Some(RawInstruction))`.
     pub fn receive(&mut self, comm: &mut Comm) -> Result<ReceiveInstructionResult, StatusWord> {
         let header: ApduHeader = comm.next_command();
-        let data = comm.get_data().map_err(sdk_err_to_status)?;
+        let data = comm.get_data().map_err(|err| {
+            self.reset();
+            sdk_err_to_status(err)
+        })?;
 
         // Validation: If we are in the middle of a stream, INS and P1 must match
         if let (Some(curr_ins), Some(curr_p1)) = (self.current_ins, self.current_p1) {
@@ -164,6 +167,17 @@ pub enum Command {
     Ping,
 }
 
+impl Command {
+    pub fn tag(&self) -> CommandTag {
+        match self {
+            Command::GetPubKey { p1, .. } => CommandTag::GetPubKey { p1: *p1 },
+            Command::SignTx { p1, .. } => CommandTag::SignTx { p1: *p1 },
+            Command::SignMessage { p1, .. } => CommandTag::SignMessage { p1: *p1 },
+            Command::Ping => CommandTag::Ping,
+        }
+    }
+}
+
 impl TryFrom<RawInstruction> for Command {
     type Error = StatusWord;
 
@@ -196,33 +210,12 @@ impl TryFrom<RawInstruction> for Command {
     }
 }
 
-fn show_status_and_home_if_needed(cmd: &Command, ctx: &mut AppContext, status: StatusWord) {
-    let (show_status, status_type) = match (cmd, status) {
-        (Command::GetPubKey { p1, .. }, StatusWord::Deny | StatusWord::Ok) if p1.display() => {
-            (true, StatusType::Address)
-        }
-        (Command::SignTx { .. }, StatusWord::Deny | StatusWord::Ok) if ctx.finished() => {
-            (true, StatusType::Transaction)
-        }
-        (Command::SignMessage { .. }, StatusWord::Deny | StatusWord::Ok) if ctx.finished() => {
-            (true, StatusType::Message)
-        }
-        (Command::Ping, StatusWord::Ok) => {
-            ctx.home.show_and_return();
-            return;
-        }
-        (_, _) => (false, StatusType::Transaction), // Default fallback
-    };
-
-    if show_status {
-        let success = status == StatusWord::Ok;
-        NbglReviewStatus::new()
-            .status_type(status_type)
-            .show(success);
-
-        // call home.show_and_return() to show home and setting screen
-        ctx.home.show_and_return();
-    }
+/// Same as `Command` but without the data part.
+pub enum CommandTag {
+    GetPubKey { p1: GetPubKeyP1 },
+    SignTx { p1: SignTxP1 },
+    SignMessage { p1: SignMsgP1 },
+    Ping,
 }
 
 pub enum DataContext {
@@ -268,12 +261,13 @@ pub fn mintlayer_main() {
             Ok(ReceiveInstructionResult::Instruction(raw)) => raw,
             Ok(ReceiveInstructionResult::ExpectingNextChunk) => {
                 // Signal host that we received the chunk and are waiting for more
-                comm.append(&encode(Response::ExpectingNextChunk));
+                comm.append(&encode(&Response::ExpectingNextChunk));
                 comm.reply(Reply(StatusWord::Ok as u16));
                 continue; // Waiting for more chunks, loop around
             }
             Err(sw) => {
                 comm.reply(Reply(sw as u16));
+                show_home_on_error_before_command_handling(&mut app_ctx);
                 continue;
             }
         };
@@ -282,13 +276,16 @@ pub fn mintlayer_main() {
             Ok(cmd) => cmd,
             Err(sw) => {
                 comm.reply(Reply(sw as u16));
+                show_home_on_error_before_command_handling(&mut app_ctx);
                 continue;
             }
         };
 
-        let status = match handle_command(&command, &mut app_ctx) {
+        let command_tag = command.tag();
+
+        let status = match handle_command(command, &mut app_ctx) {
             Ok(response) => {
-                comm.append(&encode(response));
+                comm.append(&encode(&response));
                 comm.reply_ok();
                 StatusWord::Ok
             }
@@ -298,34 +295,19 @@ pub fn mintlayer_main() {
             }
         };
 
-        show_status_and_home_if_needed(&command, &mut app_ctx, status);
+        show_status_and_home_if_needed_after_command_handling(command_tag, &mut app_ctx, status);
     }
 }
 
-// TODO:
-// 1) On all errors, the context should probably be reset.
-// 2) Note that the simple `ctx.data_context = None` doesn't reset the UI, while `show_status_and_home_if_needed`
-//    doesn't reset the UI on any error.
-// See https://github.com/mintlayer/mintlayer-ledger-app/issues/12.
-// Also see the TODO inside the function.
-fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, StatusWord> {
+fn handle_command(cmd: Command, ctx: &mut AppContext) -> Result<Response, StatusWord> {
     match cmd {
         Command::GetPubKey { p1, data } => {
-            // TODO: the context should be reset here, especially if `display` is true.
-            // Note that `show_status_and_home_if_needed` calls `ctx.home.show_and_return()`
-            // on Pings, so:
-            // a) the context should be reset on Command::Ping below as well,
-            // b) since a Ping resets the context, then GetPubKey should do it even if `display`
-            //    is false;
-            // c) Command::SignMessage below should also reset the context when it's done.
-            // In any case, it's better to put UI update (at least on success) in the same place where
-            // the context is changed.
-            let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
+            let req = decode_all(&data).ok_or(StatusWord::DeserializeFail)?;
             handle_get_public_key(req, p1.display()).map(Response::PublicKey)
         }
         Command::SignTx { p1, data } => match p1 {
             SignTxP1::Start => {
-                let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
+                let req = decode_all(&data).ok_or(StatusWord::DeserializeFail)?;
                 ctx.data_context = Some(setup_sign_tx(req)?);
                 Ok(Response::TxSetup)
             }
@@ -335,27 +317,23 @@ fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, Statu
                     _ => return Err(StatusWord::WrongContext),
                 };
 
-                let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
+                let req = decode_all(&data).ok_or(StatusWord::DeserializeFail)?;
 
-                // TODO: it makes sense to drop `data` right after decoding, to free the memory.
+                // `data` can be relatively large here, so we drop it right after decoding,
+                // to free the memory.
+                drop(data);
 
                 tx_ctx.show_spinner();
 
-                match handle_sign_tx(req, tx_ctx, &mut review) {
-                    Ok((response, new_ctx)) => {
-                        ctx.data_context = Some(DataContext::TxContext(new_ctx, review));
-                        Ok(response)
-                    }
-                    Err(sw) => {
-                        ctx.data_context = None;
-                        Err(sw)
-                    }
-                }
+                let (response, new_ctx) = handle_sign_tx(req, tx_ctx, &mut review)?;
+                ctx.data_context = Some(DataContext::TxContext(new_ctx, review));
+
+                Ok(response)
             }
         },
         Command::SignMessage { p1, data } => match p1 {
             SignMsgP1::Start => {
-                let req = decode_all(data).ok_or(StatusWord::DeserializeFail)?;
+                let req = decode_all(&data).ok_or(StatusWord::DeserializeFail)?;
                 ctx.data_context = Some(setup_sign_message(req)?);
                 Ok(Response::MessageSetup)
             }
@@ -364,9 +342,59 @@ fn handle_command(cmd: &Command, ctx: &mut AppContext) -> Result<Response, Statu
                     Some(DataContext::SignMessageContext(ctx)) => ctx,
                     _ => return Err(StatusWord::WrongContext),
                 };
-                handle_sign_message(data, msg_ctx).map(Response::MessageSignature)
+                handle_sign_message(&data, msg_ctx).map(Response::MessageSignature)
             }
         },
         Command::Ping => Ok(Response::Pong),
     }
+}
+
+/// Show status screen and return to the home screen if needed.
+///
+/// This is called after a command has been handled.
+fn show_status_and_home_if_needed_after_command_handling(
+    cmd_tag: CommandTag,
+    ctx: &mut AppContext,
+    status: StatusWord,
+) {
+    let success = status == StatusWord::Ok;
+    let show_status = |status_type| {
+        NbglReviewStatus::new()
+            .status_type(status_type)
+            .show(success);
+    };
+
+    match cmd_tag {
+        CommandTag::GetPubKey { p1 } => {
+            if p1.display() {
+                show_status(StatusType::Address);
+            }
+            ctx.home.show_and_return();
+            ctx.data_context = None;
+        }
+        CommandTag::SignTx { .. } => {
+            if ctx.finished() || !success {
+                show_status(StatusType::Transaction);
+                ctx.home.show_and_return();
+                ctx.data_context = None;
+            }
+        }
+        CommandTag::SignMessage { .. } => {
+            if ctx.finished() || !success {
+                show_status(StatusType::Message);
+                ctx.home.show_and_return();
+                ctx.data_context = None;
+            }
+        }
+        CommandTag::Ping => {
+            ctx.home.show_and_return();
+            ctx.data_context = None;
+        }
+    }
+}
+
+/// This is called on errors that happen before a command could be decoded.
+fn show_home_on_error_before_command_handling(ctx: &mut AppContext) {
+    ctx.home.show_and_return();
+    ctx.data_context = None;
 }

@@ -11,6 +11,7 @@ num-traits = { workspace = true, default-features = false }
 # more informative. But in the Ledger app we never examine or even print those errors, so enabling this
 # feature would only increase the size of the binary and make the app use more stack during decoding.
 parity-scale-codec = { workspace = true, default-features = false, features = ["derive"] }
+strum = { workspace = true, default-features = false, features = ["derive"] }
 
 mintlayer-core-primitives.workspace = true
 

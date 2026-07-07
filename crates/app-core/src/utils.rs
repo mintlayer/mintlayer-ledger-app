@@ -18,9 +18,15 @@
 use alloc::{borrow::Cow, format};
 use core::fmt;
 
-use mintlayer_messages::{Amount, OutputValue, StatusWord};
+use ledger_device_sdk::ecc::ECPublicKey;
 
-use crate::mlcp;
+use mintlayer_core_primitives::PUBLIC_KEY_HASH_SIZE;
+
+use mintlayer_messages::{
+    Amount, OutputValue, PublicKeyHash, Secp256k1PublicKey, StatusWord, encode_to,
+};
+
+use crate::{hasher::Hasher, mlcp};
 
 const DERIV_PATH_IDX_BIP44: usize = 0;
 const DERIV_PATH_IDX_COIN_TYPE: usize = 1;
@@ -28,25 +34,36 @@ const DERIV_PATH_IDX_ACCOUNT_IDX: usize = 2;
 const DERIV_PATH_IDX_ADDR_PURPOSE: usize = 3;
 const DERIV_PATH_IDX_ADDR_IDX: usize = 4;
 
-// Path should be at least [bip44, coin_type, account_index]
+// Path should be at least [bip44', coin_type', account_index']
 const DERIV_PATH_MIN_LEN: usize = 3;
 // For tx signing the path should also contain the purpose and the index.
 const DERIV_PATH_LEN_FOR_TX_SIGNING: usize = 5;
 
-const DERIV_PATH_BIP44_ITEM: u32 = 44 + (1 << 31);
+const HARDENED_DERIVATION_MASK: u32 = 1 << 31;
+const DERIV_PATH_BIP44_ITEM: u32 = 44 | HARDENED_DERIVATION_MASK;
+
+const ADDR_PURPOSE_RECEIVE: u32 = 0;
+const ADDR_PURPOSE_CHANGE: u32 = 1;
 
 pub fn check_derivation_path(path: &[u32], coin_type: mlcp::CoinType) -> Result<(), StatusWord> {
-    if path.len() < DERIV_PATH_MIN_LEN {
-        return Err(StatusWord::InvalidPath);
-    }
+    ensure!(path.len() >= DERIV_PATH_MIN_LEN, StatusWord::InvalidPath);
 
-    if path[DERIV_PATH_IDX_BIP44] != DERIV_PATH_BIP44_ITEM {
-        return Err(StatusWord::InvalidPath);
-    }
+    ensure!(
+        path[DERIV_PATH_IDX_BIP44] == DERIV_PATH_BIP44_ITEM,
+        StatusWord::InvalidPath
+    );
 
-    if path[DERIV_PATH_IDX_COIN_TYPE] != coin_type.bip44_coin_type() {
-        return Err(StatusWord::InvalidPath);
-    }
+    // Note: bip44_coin_type already has the hardened bit set.
+    ensure!(
+        path[DERIV_PATH_IDX_COIN_TYPE] == coin_type.bip44_coin_type(),
+        StatusWord::InvalidPath
+    );
+
+    // Account index must be hardened.
+    ensure!(
+        (path[DERIV_PATH_IDX_ACCOUNT_IDX] & HARDENED_DERIVATION_MASK) != 0,
+        StatusWord::InvalidPath
+    );
 
     Ok(())
 }
@@ -60,6 +77,18 @@ pub fn check_derivation_path_for_tx_signing(
     if path.len() != DERIV_PATH_LEN_FOR_TX_SIGNING {
         return Err(StatusWord::InvalidPath);
     }
+
+    let addr_purpose = path[DERIV_PATH_IDX_ADDR_PURPOSE];
+    ensure!(
+        addr_purpose == ADDR_PURPOSE_RECEIVE || addr_purpose == ADDR_PURPOSE_CHANGE,
+        StatusWord::InvalidPath
+    );
+
+    // Key index must not be hardened.
+    ensure!(
+        (path[DERIV_PATH_IDX_ADDR_IDX] & HARDENED_DERIVATION_MASK) == 0,
+        StatusWord::InvalidPath
+    );
 
     Ok(CompressedDerivationPathForTxSigning {
         account_index: path[DERIV_PATH_IDX_ACCOUNT_IDX],
@@ -84,6 +113,51 @@ impl CompressedDerivationPathForTxSigning {
             self.addr_index,
         ]
     }
+}
+
+pub fn ensure_change_output(path: &[u32], coin_type: mlcp::CoinType) -> Result<(), StatusWord> {
+    let parsed_path = check_derivation_path_for_tx_signing(path, coin_type)?;
+    if parsed_path.addr_purpose != ADDR_PURPOSE_CHANGE {
+        Err(StatusWord::InvalidPath)
+    } else {
+        Ok(())
+    }
+}
+
+pub fn compress_public_key<const T: char>(
+    public_key: &ECPublicKey<65, T>,
+) -> Result<Secp256k1PublicKey, StatusWord> {
+    let uncompressed_key = &public_key.pubkey;
+    if uncompressed_key[0] != 0x04 {
+        return Err(StatusWord::InvalidUncompressedPublicKey);
+    }
+
+    let mut compressed_key = [0u8; 33];
+
+    let y_coordinate = &uncompressed_key[33..65];
+    let prefix = if y_coordinate[31].is_multiple_of(2) {
+        0x02
+    } else {
+        0x03
+    };
+
+    compressed_key[0] = prefix;
+
+    let x_coordinate = &uncompressed_key[1..33];
+    compressed_key[1..].copy_from_slice(x_coordinate);
+
+    Ok(Secp256k1PublicKey(compressed_key))
+}
+
+pub fn to_public_key_hash(pk: &Secp256k1PublicKey) -> Result<PublicKeyHash, StatusWord> {
+    let mut hasher = Hasher::new();
+
+    encode_to(&mlcp::PublicKey::Secp256k1Schnorr(*pk), &mut hasher);
+
+    let full_hash = hasher.finalize()?;
+    let pkh: [u8; PUBLIC_KEY_HASH_SIZE] = cut_array(full_hash.as_fixed_bytes());
+
+    Ok(PublicKeyHash(pkh))
 }
 
 /// Cut an array of Copy types to a smaller size.
@@ -156,6 +230,15 @@ pub fn output_value_with_amount(value: &OutputValue, amount: Amount) -> OutputVa
         OutputValue::TokenV1(token_id, _) => OutputValue::TokenV1(*token_id, amount),
     }
 }
+
+/// Exit early if the given condition is not satisfied.
+macro_rules! ensure {
+    ($cond:expr, $err:expr $(,)?) => {
+        ::core::primitive::bool::then($cond, || ()).ok_or_else(|| $err)?
+    };
+}
+
+pub(crate) use ensure;
 
 #[cfg(test)]
 mod tests {

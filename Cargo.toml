@@ -15,11 +15,12 @@ bech32 = { version = "0.11", default-features = false }
 chrono = { version = "0.4", default-features = false }
 const-hex = { version = "1.19", default-features = false }
 derive_more = { version = "2.1", default-features = false }
-image = "0.25"
+itertools = { version = "0.15", default-features = false }
 ledger_device_sdk = "1.35"
 ledger_secure_sdk_sys = "1.16"
 num_enum = { version = "0.7", default-features = false }
 num-traits = { version = "0.2", default-features = false }
+strum = { version = "0.27", default-features = false }
 # Note: the testmacro crate is published by Ledger and its source code comes from the `testmacro`
 # dir inside the sdk repo, i.e. https://github.com/LedgerHQ/ledger-device-rust-sdk/tree/cad196841dbd72c037cfa01bec81a4a3ae57a04e/testmacro
 # (though the published version is a bit older).
@@ -50,9 +51,6 @@ package = "mintlayer-core-primitives"
 ledger_device_sdk.workspace = true
 
 mintlayer-app-core.workspace = true
-
-[build-dependencies]
-image.workspace = true
 
 [[bin]]
 # Note: we only have this section to disable tests, but Cargo insists that "name" should also

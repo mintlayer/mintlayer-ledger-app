@@ -87,7 +87,7 @@ def test_sign_tx_invalid_coin(backend, scenario_navigator, device, navigator):
     num_outputs = 1
     start_req = sign_tx_start_req_obj.encode(
         {
-            "coin": invalid_coin,
+            "coin_type": invalid_coin,
             "version": 0,
             "num_inputs": num_inputs,
             "num_outputs": num_outputs,
@@ -115,7 +115,7 @@ def test_sign_tx_invalid_context(backend, scenario_navigator, device, navigator)
     num_outputs = 2
     start_req = sign_tx_start_req_obj.encode(
         {
-            "coin": MAINNET,
+            "coin_type": MAINNET,
             "version": 0,
             "num_inputs": num_inputs,
             "num_outputs": num_outputs,
@@ -154,7 +154,8 @@ def test_sign_tx_invalid_context(backend, scenario_navigator, device, navigator)
                                     }
                                 },
                             ],
-                        }
+                        },
+                        "change_path": None,
                     }
                 }
             ).data,
@@ -167,7 +168,7 @@ def test_sign_tx_invalid_input(backend, scenario_navigator, device, navigator):
     num_outputs = 2
     start_req = sign_tx_start_req_obj.encode(
         {
-            "coin": MAINNET,
+            "coin_type": MAINNET,
             "version": 0,
             "num_inputs": num_inputs,
             "num_outputs": num_outputs,
@@ -202,7 +203,7 @@ def test_sign_tx_too_large_data(backend, scenario_navigator, device, navigator):
     num_outputs = 2
     start_req = sign_tx_start_req_obj.encode(
         {
-            "coin": MAINNET,
+            "coin_type": MAINNET,
             "version": 0,
             "num_inputs": num_inputs,
             "num_outputs": num_outputs,

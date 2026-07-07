@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import IntEnum
 from hashlib import blake2b
 from typing import List, Optional
 
@@ -72,7 +73,7 @@ class TxInputSignature:
 
 @dataclass
 class Transaction:
-    coin: int
+    coin_type: int
     # A list of TxInputData objects.
     inputs: List[dict]
     # A list of TxInputCommitmentData objects.
@@ -168,6 +169,43 @@ def decode_response_variant(response: bytes, expected_variant: str) -> dict:
 
 def mintlayer_hash(data: bytes) -> bytes:
     return blake2b(data, digest_size=64).digest()[:32]
+
+
+def hardened_index(index: int) -> int:
+    return index | 1 << 31
+
+
+class KeyPurpose(IntEnum):
+    Receive = 0
+    Change = 1
+
+
+def make_path(account_index: int, key_purpose: KeyPurpose, key_index: int) -> list[int]:
+    return [
+        hardened_index(44),
+        hardened_index(19788),
+        hardened_index(account_index),
+        key_purpose,
+        key_index,
+    ]
+
+
+def parse_derivation_path(derivation_path: str) -> list[int]:
+    split = derivation_path.split("/")
+
+    if split[0] != "m":
+        raise ValueError("Error master expected")
+
+    result = []
+    for value in split[1:]:
+        if value == "":
+            raise ValueError(f'Error missing value in split list "{split}"')
+        if value.endswith("'"):
+            result.append(hardened_index(int(value[:-1])))
+        else:
+            result.append(int(value))
+
+    return result
 
 
 MESSAGE_MAGIC_PREFIX = b"===MINTLAYER MESSAGE BEGIN===\n"
