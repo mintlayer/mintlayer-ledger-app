@@ -16,8 +16,8 @@ chrono = { version = "0.4", default-features = false }
 const-hex = { version = "1.19", default-features = false }
 derive_more = { version = "2.1", default-features = false }
 itertools = { version = "0.15", default-features = false }
-ledger_device_sdk = "1.35"
-ledger_secure_sdk_sys = "1.16"
+ledger_device_sdk = "1.36.1"
+ledger_secure_sdk_sys = "1.16.3"
 num_enum = { version = "0.7", default-features = false }
 num-traits = { version = "0.2", default-features = false }
 strum = { version = "0.27", default-features = false }

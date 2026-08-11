@@ -1299,7 +1299,8 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     Test signing a transaction with two inputs:
     1. A standard UTXO input to pay for tx fees.
     2. An OrderAccountCommand input to conclude an order.
-    And one output to transfer the change coins + ask balance and another output for the give balance.
+    And one output to transfer the change coins plus the filled amount (where the latter
+    is initial_ask minus ask_balance) and another output for the give balance.
     """
     client = MintlayerCommandSender(backend)
     bip44_path = make_path(0, KeyPurpose.Receive, 0)
@@ -1332,7 +1333,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
 
     initial_ask = 100
     initial_give = 1000
-    ask_balance = 10
+    ask_balance = 90
     give_balance = 900
 
     token_id = bytes([1] * 32)
@@ -1367,7 +1368,7 @@ def test_sign_tx_order_conclude(backend, scenario_navigator, device, navigator):
     }
 
     change_output = _make_transfer_output(
-        100 - 1 + ask_balance,
+        100 - 1 + initial_ask - ask_balance,
         fetch_public_key_as_pk_destination(client, MAINNET, bip44_change_path),
         bip44_change_path,
     )

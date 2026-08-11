@@ -183,6 +183,7 @@ impl TxSummaryCollector {
                 self.tx_type = merge_tx_type(self.tx_type, TxType::CreateOrder);
                 let (coin_or_token_id, amount) =
                     into_coin_or_token_id_and_amount(&order_data.give)?;
+                // Add the give amount as a "pseudo-output" (it goes into the order account).
                 self.increase_output_totals(coin_or_token_id, amount)?;
             }
         }
@@ -293,13 +294,26 @@ impl TxSummaryCollector {
                         self.tx_type = merge_tx_type(self.tx_type, TxType::FillOrder);
                     }
                     OrderAccountCommand::ConcludeOrder(_) => {
-                        let (coin_or_token_id, _) =
+                        let (asked_coin_or_token_id, initially_asked) =
                             into_coin_or_token_id_and_amount(&additional_info.initially_asked)?;
-                        self.increase_input_totals(coin_or_token_id, additional_info.ask_balance)?;
-
-                        let (coin_or_token_id, _) =
+                        let (given_coin_or_token_id, _) =
                             into_coin_or_token_id_and_amount(&additional_info.initially_given)?;
-                        self.increase_input_totals(coin_or_token_id, additional_info.give_balance)?;
+
+                        let filled_atoms = initially_asked
+                            .into_atoms()
+                            .checked_sub(additional_info.ask_balance.into_atoms())
+                            .ok_or(StatusWord::TxNumericOperationFail)?;
+                        let filled_amount = Amount::from_atoms(filled_atoms);
+                        // Add the filled amount as a "pseudo-input", so that actual transfer outputs
+                        // can consume it.
+                        self.increase_input_totals(asked_coin_or_token_id, filled_amount)?;
+
+                        // Add the unspent given amount as a "pseudo-input", so that actual transfer outputs
+                        // can consume it.
+                        self.increase_input_totals(
+                            given_coin_or_token_id,
+                            additional_info.give_balance,
+                        )?;
 
                         self.tx_type = merge_tx_type(self.tx_type, TxType::ConcludeOrder);
                     }
@@ -938,8 +952,9 @@ mod tests {
         let ask_balance = mlcp::Amount::from_atoms(30);
         let give_balance = mlcp::Amount::from_atoms(60);
         let token_id = mlcp::Id::new(mlcp::H256::zero());
+        let initially_asked_amount = mlcp::Amount::from_atoms(100);
         let additional_info = AdditionalOrderInfo {
-            initially_asked: mlcp::OutputValue::Coin(mlcp::Amount::from_atoms(100)),
+            initially_asked: mlcp::OutputValue::Coin(initially_asked_amount),
             initially_given: mlcp::OutputValue::TokenV1(token_id, mlcp::Amount::from_atoms(200)),
             ask_balance,
             give_balance,
@@ -950,10 +965,14 @@ mod tests {
         );
         collector.process_input(&inp).unwrap();
         assert_eq!(collector.tx_type(), Some(TxType::ConcludeOrder));
-        // Conclude order increases inputs by ask_balance and give_balance
+
+        let filled_amount = mlcp::Amount::from_atoms(
+            initially_asked_amount.into_atoms() - ask_balance.into_atoms(),
+        );
+        // Conclude order increases inputs by filled_amount and give_balance
         assert_eq!(
             collector.total_inputs().get(&CoinOrTokenId::Coin),
-            Some(&ask_balance)
+            Some(&filled_amount)
         );
         assert_eq!(
             collector
